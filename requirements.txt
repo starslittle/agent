@@ -1,0 +1,29 @@
+# Core frameworks & integrations
+llama-index-core
+llama-index-llms-dashscope
+llama-index-embeddings-huggingface
+llama-index-vector-stores-chroma
+llama-index-readers-file
+llama-index-readers-notion
+llama-index-experimental
+
+# LangChain
+langchain
+langchain-dashscope
+langchain-community
+langchain-tavily
+
+# Vector store & parsing
+chromadb
+unstructured[local-inference]
+
+# Data handling
+pandas
+tabulate
+matplotlib
+requests
+python-dotenv
+
+# Web API (optional, for later FastAPI gateway)
+fastapi
+uvicorn[standard]

@@ -1,0 +1,137 @@
+# ===================================================================
+#      .gitignore for a Python AI / Agent Project
+# ===================================================================
+
+# -------------------------------------------------------------------
+# 1. Secrets and Environment Files (MOST IMPORTANT!)
+#    Never commit sensitive information like API keys.
+# -------------------------------------------------------------------
+.env
+*.env
+.env.*
+secrets.ini
+credentials.json
+
+
+# -------------------------------------------------------------------
+# 2. Python Specific
+#    Ignore caches, virtual environments, and compiled files.
+# -------------------------------------------------------------------
+# Byte-compiled / optimized / C extensions
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+# (Common names for virtual environment folders)
+venv/
+.venv/
+env/
+.env/
+env.bak/
+venv.bak/
+
+
+# -------------------------------------------------------------------
+# 3. AI / ML / RAG Specific
+#    Ignore large data, models, and indexes.
+# -------------------------------------------------------------------
+# LlamaIndex / RAG persistent storage
+# This is where your vector index is stored. It can be large and is generated code.
+storage/
+
+# Local Vector DB persistence (e.g., ChromaDB)
+chroma/
+.chroma/
+
+# Large data files and datasets
+# It's better to provide a script to download data.
+data/
+*.csv
+*.jsonl
+*.parquet
+
+# Model files (checkpoints, etc.)
+models/
+*.h5
+*.pth
+*.pt
+*.safetensors
+*.onnx
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+
+# -------------------------------------------------------------------
+# 4. IDE and Editor Directories
+#    Configuration files for VSCode, PyCharm, etc.
+# -------------------------------------------------------------------
+.vscode/
+# Note: You might want to track .vscode/settings.json or .vscode/launch.json
+# to share configurations with your team. If so, use this:
+# !.vscode/settings.json
+# !.vscode/launch.json
+
+.idea/
+.project
+.pydevproject
+.sublime-project
+.sublime-workspace
+
+
+# -------------------------------------------------------------------
+# 5. Operating System Files
+# -------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+
+# -------------------------------------------------------------------
+# 6. Log and Temporary Files
+# -------------------------------------------------------------------
+logs/
+*.log
+*.log.*
+*.tmp
+*.temp
+
+
+# -------------------------------------------------------------------
+# 7. Testing Artifacts
+# -------------------------------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
