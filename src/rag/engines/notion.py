@@ -70,13 +70,15 @@ class NotionEngine:
             logger.warning("未设置 NOTION_API_KEY，跳过 Notion 引擎构建。")
             return None
         try:
-            chroma_client = chromadb.PersistentClient(path=self.config.CHROMA_DB_DIR)
+            # 将 Notion 向量库存放到独立子目录
+            chroma_dir = getattr(self.config, "CHROMA_NOTION_DIR", self.config.CHROMA_DB_DIR)
+            chroma_client = chromadb.PersistentClient(path=chroma_dir)
             chroma_collection = chroma_client.get_or_create_collection(self.config.NOTION_COLLECTION_NAME)
             vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
             storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
             index: Optional[VectorStoreIndex] = None
-            if chroma_collection.count() > 0 and Path(self.config.CHROMA_DB_DIR).exists():
+            if chroma_collection.count() > 0 and Path(chroma_dir).exists():
                 index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
             else:
                 logger.info("未发现 Notion 索引，调用 Notion API 拉取数据并创建…")

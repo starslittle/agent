@@ -24,6 +24,14 @@ from rag.engines.pandas_engine import PandasEngine
 # 基础路径（项目根）
 BASE_DIR = Path(__file__).resolve().parents[2]
 
+# 兜底加载根目录 .env，确保在读取环境变量前完成加载
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(dotenv_path=str(BASE_DIR / ".env"))
+except Exception:
+    pass
+
 
 def _format_uuid_with_hyphens(uuid_str: str) -> str:
     s = (uuid_str or "").strip()
@@ -71,10 +79,23 @@ class RAGConfig:
 
     # 路径配置（绝对路径）
     DATA_DIR: str = str(BASE_DIR / "data" / "raw")
+    # 旧字段（兼容）
     CHROMA_DB_DIR: str = str(BASE_DIR / "storage" / "chroma")
+    # 新字段：将不同引擎的向量库分目录存放
+    CHROMA_BASE_DIR: str = str(BASE_DIR / "storage" / "chroma")
+    CHROMA_LOCAL_DIR: str = str(BASE_DIR / "storage" / "chroma" / "local")
+    CHROMA_NOTION_DIR: str = str(BASE_DIR / "storage" / "chroma" / "notion")
     LOCAL_COLLECTION_NAME: str = "local"
     NOTION_COLLECTION_NAME: str = "notion"
-    CSV_FILE_PATH: str = str(BASE_DIR / "data" / "sales_data.csv")
+    # 允许通过环境变量 CSV_FILE_PATH 指定 CSV 路径；默认指向 data/raw 目录
+    CSV_FILE_PATH: str = os.environ.get(
+        "CSV_FILE_PATH",
+        str(BASE_DIR / "data" / "sales_data.csv"),
+    )
+    CSV_DIR_PATH: str = os.environ.get(
+        "CSV_DIR_PATH",
+        str(BASE_DIR / "data" / "raw"),
+    )
 
     # Notion 配置
     ENABLE_NOTION: bool = os.environ.get("ENABLE_NOTION", "0").lower() in ("1", "true", "yes")
