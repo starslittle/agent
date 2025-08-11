@@ -1,0 +1,24 @@
+experiment: default_local_eval
+
+engine: local  # local | notion
+
+dataset_path: data/eval/qa_dev.jsonl
+
+retrieval:
+  top_k: 8
+  mmr: true
+  rerank: true
+
+metrics:
+  - answer_relevancy
+  - faithfulness
+  - context_precision
+  - context_recall
+
+eval_llm:
+  provider: dashscope
+  model: qwen-plus
+
+output_dir: reports/eval_runs
+
+

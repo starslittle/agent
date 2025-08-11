@@ -8,6 +8,10 @@ from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.core.base.base_query_engine import BaseQueryEngine
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.vector_stores.chroma import ChromaVectorStore
+try:
+    from llama_index.postprocessor import SentenceTransformerRerank
+except Exception:
+    SentenceTransformerRerank = None  # type: ignore
 
 try:
     from llama_index.readers.notion import NotionPageReader, NotionDatabaseReader  # type: ignore
@@ -108,9 +112,18 @@ class NotionEngine:
                 index = VectorStoreIndex(nodes, storage_context=storage_context, show_progress=True)
 
             if index:
+                rerankers = []
+                if SentenceTransformerRerank is not None:
+                    try:
+                        rerankers.append(SentenceTransformerRerank(model="BAAI/bge-reranker-large", top_n=3))
+                    except Exception:
+                        pass
                 return index.as_query_engine(
                     response_mode="compact",
                     similarity_top_k=self.config.SIMILARITY_TOP_K,
+                    vector_store_query_mode="mmr",
+                    alpha=0.5,
+                    node_postprocessors=rerankers or None,
                 )
             return None
         except Exception as e:

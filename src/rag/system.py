@@ -73,9 +73,10 @@ class RAGConfig:
     EMBED_MODEL_NAME: str = "BAAI/bge-small-zh-v1.5"
 
     # RAG 系统配置
-    CHUNK_SIZE: int = 512
-    CHUNK_OVERLAP: int = 20
-    SIMILARITY_TOP_K: int = 3
+    # 更适合中文的默认切分与召回参数
+    CHUNK_SIZE: int = 400
+    CHUNK_OVERLAP: int = 80
+    SIMILARITY_TOP_K: int = 8
 
     # 路径配置（绝对路径）
     DATA_DIR: str = str(BASE_DIR / "data" / "raw")

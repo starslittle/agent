@@ -8,6 +8,10 @@ from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.base.base_query_engine import BaseQueryEngine
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.readers.file import UnstructuredReader
+try:
+    from llama_index.postprocessor import SentenceTransformerRerank
+except Exception:  # 兼容旧版本
+    SentenceTransformerRerank = None  # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +34,7 @@ class LocalEngine:
     def _load_documents(self):
         # 兼容不同版本的 LlamaIndex，直接使用 file_extractor 更稳妥
         file_extractor = {
-            ".pdf": UnstructuredReader(),
+            ".pdf": UnstructuredReader(ocr_languages=["chi_sim", "eng"], strategy="hi_res"),
         }
         return SimpleDirectoryReader(input_dir=self.config.DATA_DIR, file_extractor=file_extractor).load_data()
 
@@ -57,9 +61,19 @@ class LocalEngine:
                 index = VectorStoreIndex(nodes, storage_context=storage_context, show_progress=True)
 
             if index:
+                # 中文优化：MMR + 可选交叉重排
+                rerankers = []
+                if SentenceTransformerRerank is not None:
+                    try:
+                        rerankers.append(SentenceTransformerRerank(model="BAAI/bge-reranker-large", top_n=3))
+                    except Exception:
+                        pass
                 return index.as_query_engine(
                     response_mode="compact",
                     similarity_top_k=self.config.SIMILARITY_TOP_K,
+                    vector_store_query_mode="mmr",
+                    alpha=0.5,
+                    node_postprocessors=rerankers or None,
                 )
             return None
         except Exception as e:

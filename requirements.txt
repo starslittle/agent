@@ -12,6 +12,9 @@ langchain
 langchain-dashscope
 langchain-community
 langchain-tavily
+ragas
+datasets
+pyyaml
 
 # Vector store & parsing
 chromadb

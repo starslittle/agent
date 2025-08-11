@@ -3,7 +3,8 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 from langchain_community.chat_models import ChatTongyi
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain import hub
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_tavily import TavilySearch
 # 允许将 `src` 作为包根加入模块搜索路径
@@ -22,6 +23,7 @@ from agent_app.tools import (
     query_pandas_data,
     init_local_rag,
     query_local_kb,
+    deep_research,
 )
 
 load_dotenv()  # 加载根目录 .env
@@ -66,8 +68,9 @@ def main():
         ("user", "{input}"),
         ("placeholder", "{agent_scratchpad}"),
     ])
-    agent = create_tool_calling_agent(llm, tools, prompt)
-    # 开启流式输出
+    # ReAct Agent：使用官方 hub 提示（react-chat），避免占位符不匹配
+    react_prompt = hub.pull("hwchase17/react-chat")
+    agent = create_react_agent(llm, tools, react_prompt)
     executor = AgentExecutor(agent=agent, tools=tools, verbose=True, stream_runnable=True)
     print("\nAgent 已准备就绪。输入 'exit' 退出。")
     chat_history = []
