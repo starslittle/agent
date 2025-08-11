@@ -27,3 +27,8 @@ python-dotenv
 # Web API (optional, for later FastAPI gateway)
 fastapi
 uvicorn[standard]
+ 
+# Runtime compatibility pins
+# Fixes: AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+# Many TF/tf-keras stacks still expect protobuf 3.x APIs.
+protobuf==3.20.3

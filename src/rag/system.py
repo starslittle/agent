@@ -8,29 +8,17 @@ import chromadb
 import requests
 import pandas as pd
 
-from llama_index.core import (
-    VectorStoreIndex,
-    SimpleDirectoryReader,
-    Settings,
-    StorageContext,
-)
-from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core import Settings
 from llama_index.core.base.base_query_engine import BaseQueryEngine
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
-from llama_index.core.readers import ReaderConfig
 
 from llama_index.llms.dashscope import DashScope
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.vector_stores.chroma import ChromaVectorStore
-from llama_index.readers.file import UnstructuredReader
-try:
-    from llama_index.readers.notion import NotionPageReader, NotionDatabaseReader  # type: ignore
-    HAS_DB_READER = True
-except Exception:
-    from llama_index.readers.notion import NotionPageReader  # type: ignore
-    NotionDatabaseReader = None  # type: ignore
-    HAS_DB_READER = False
-from llama_index.experimental.query_engine import PandasQueryEngine
+
+# 新增：引擎模块
+from rag.engines.local import LocalEngine
+from rag.engines.notion import NotionEngine
+from rag.engines.pandas_engine import PandasEngine
 
 
 # 基础路径（项目根）
@@ -129,94 +117,15 @@ class RAGSystem:
 
     def _build_local_rag_engine(self):
         logger.info("--- 构建/加载 本地文档 RAG 引擎 ---")
-        chroma_client = chromadb.PersistentClient(path=self.config.CHROMA_DB_DIR)
-        chroma_collection = chroma_client.get_or_create_collection(self.config.LOCAL_COLLECTION_NAME)
-        vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-        storage_context = StorageContext.from_defaults(vector_store=vector_store)
-
-        index: Optional[VectorStoreIndex] = None
-        if chroma_collection.count() > 0 and Path(self.config.CHROMA_DB_DIR).exists():
-            logger.info("检测到现有本地集合，直接加载索引…")
-            index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
-        else:
-            if not self._check_data_directory():
-                logger.warning("本地数据目录为空，跳过本地 RAG 构建。")
-                return
-            documents = self._load_documents()
-            if not documents:
-                return
-            nodes = SentenceSplitter().get_nodes_from_documents(documents)
-            index = VectorStoreIndex(nodes, storage_context=storage_context, show_progress=True)
-        if index:
-            self.rag_query_engine = index.as_query_engine(
-                response_mode="compact",
-                similarity_top_k=self.config.SIMILARITY_TOP_K,
-            )
+        self.rag_query_engine = LocalEngine(self.config).build()
 
     def _build_notion_engine(self):
-        if not self.config.ENABLE_NOTION:
-            logger.info("未启用 Notion 集成，跳过构建 Notion 引擎。")
-            return
-        if not self.config.NOTION_API_KEY:
-            logger.warning("未设置 NOTION_API_KEY，跳过 Notion 引擎构建。")
-            return
         logger.info("--- 构建/加载 Notion RAG 引擎 ---")
-        try:
-            chroma_client = chromadb.PersistentClient(path=self.config.CHROMA_DB_DIR)
-            chroma_collection = chroma_client.get_or_create_collection(self.config.NOTION_COLLECTION_NAME)
-            vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-            storage_context = StorageContext.from_defaults(vector_store=vector_store)
-
-            index: Optional[VectorStoreIndex] = None
-            if chroma_collection.count() > 0 and Path(self.config.CHROMA_DB_DIR).exists():
-                logger.info("检测到现有 Notion 集合，直接加载索引…")
-                index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
-            else:
-                logger.info("未发现 Notion 索引，调用 Notion API 拉取数据并创建…")
-                documents = []
-                if self.config.NOTION_PAGE_IDS:
-                    page_reader = NotionPageReader(integration_token=self.config.NOTION_API_KEY)
-                    documents.extend(page_reader.load_data(page_ids=self.config.NOTION_PAGE_IDS) or [])
-                if self.config.NOTION_DATABASE_ID:
-                    if HAS_DB_READER and NotionDatabaseReader is not None:
-                        db_reader = NotionDatabaseReader(integration_token=self.config.NOTION_API_KEY)
-                        documents.extend(db_reader.load_data(database_id=_format_uuid_with_hyphens(self.config.NOTION_DATABASE_ID)) or [])
-                    else:
-                        # 兼容没有 NotionDatabaseReader 的版本：直接用官方 API 查询数据库下页面，再用 NotionPageReader 拉取
-                        page_ids = _fetch_page_ids_from_database(self.config.NOTION_API_KEY, self.config.NOTION_DATABASE_ID)
-                        if page_ids:
-                            page_reader = NotionPageReader(integration_token=self.config.NOTION_API_KEY)
-                            documents.extend(page_reader.load_data(page_ids=page_ids) or [])
-                        else:
-                            logger.warning("无法通过数据库ID获取页面列表，可能是权限/ID 无效或数据库为空。")
-                if not documents:
-                    logger.warning("未从 Notion 拉取到任何文档，跳过 Notion 引擎创建。")
-                    return
-                nodes = SentenceSplitter().get_nodes_from_documents(documents)
-                index = VectorStoreIndex(nodes, storage_context=storage_context, show_progress=True)
-            if index:
-                self.notion_query_engine = index.as_query_engine(
-                    response_mode="compact",
-                    similarity_top_k=self.config.SIMILARITY_TOP_K,
-                )
-        except Exception as e:
-            logger.error(f"构建 Notion 引擎时出错: {e}")
-            import traceback
-            traceback.print_exc()
+        self.notion_query_engine = NotionEngine(self.config).build()
 
     def _build_pandas_engine(self):
-        if not Path(self.config.CSV_FILE_PATH).exists():
-            logger.info("CSV 文件不存在，跳过 Pandas 引擎。")
-            return
-        try:
-            df = pd.read_csv(self.config.CSV_FILE_PATH)
-            self.pandas_query_engine = PandasQueryEngine(
-                df=df,
-                verbose=True,
-                instructional_prompt="请严格根据指令生成Python代码来回答问题。",
-            )
-        except Exception as e:
-            logger.error(f"创建 Pandas 引擎时出错: {e}")
+        logger.info("--- 构建/加载 Pandas 数据查询引擎 ---")
+        self.pandas_query_engine = PandasEngine(self.config).build()
 
     def _setup_tools(self):
         self.tools = []
@@ -283,10 +192,11 @@ class RAGSystem:
 
     def get_query_engine(self, source: str = "notion") -> Optional[BaseQueryEngine]:
         source = (source or "notion").lower()
-        if source == "notion":
+        # 兼容旧名称与工具名称
+        if source in ("notion", "notion_knowledge_base"):
             return self.notion_query_engine
-        if source == "local":
+        if source in ("local", "document_analyzer"):
             return self.rag_query_engine
-        if source == "pandas":
+        if source in ("pandas", "sales_data_analyzer"):
             return self.pandas_query_engine
         return None

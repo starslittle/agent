@@ -27,7 +27,21 @@ def main():
     llm = ChatTongyi(model="qwen-turbo", temperature=0.2, dashscope_api_key=os.getenv("DASHSCOPE_API_KEY", ""))
     tools = [TavilySearch(max_results=1), get_current_date, get_seniverse_weather, verify_notion_access, init_notion_rag, query_notion_kb]
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a helpful assistant with access to web search (Tavily), current date, Chinese weather, Notion access verifier and Notion RAG tools. Prefer tools for factual queries."),
+        (
+            "system",
+            """
+            你是一个中文助理，具备以下工具：
+            - TavilySearch：网页搜索
+            - get_current_date：当前日期（中国格式）
+            - get_seniverse_weather：中国天气
+            - verify_notion_access / init_notion_rag / query_notion_kb：Notion 访问与检索
+
+            使用规则（必须遵守）：
+            1) 凡是涉及“今天/现在/日期/星期/几号/几月/当前时间”等与时间日期相关的问题，必须调用工具 get_current_date 获取结果，不得凭记忆或模型知识回答。
+            2) 事实性问题优先使用工具；无法从工具获得答案时再基于常识推理，但要说明不确定性。
+            3) 回答使用简体中文。
+            """.strip(),
+        ),
         MessagesPlaceholder(variable_name="chat_history"),
         ("user", "{input}"),
         ("placeholder", "{agent_scratchpad}"),
