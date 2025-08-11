@@ -34,7 +34,8 @@
         const userInput = document.getElementById('user-input');
         const sendButton = document.getElementById('send-button');
 
-        const API_URL = 'http://localhost:8000/query'; // 你的FastAPI后端地址
+        // 优先同源（FastAPI 在 8000 端口时），否则回退到 http://localhost:8000/query
+        const API_URL = (window.location.port === '8000') ? '/query' : 'http://localhost:8000/query';
 
         // 添加消息到聊天窗口
         function addMessage(text, sender) {
@@ -70,14 +71,20 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    // 尝试读取后端错误信息
+                    let msg = `HTTP error! status: ${response.status}`;
+                    try {
+                        const err = await response.json();
+                        if (err && (err.detail || err.message)) msg += ` - ${err.detail || err.message}`;
+                    } catch (_) {}
+                    throw new Error(msg);
                 }
 
                 const data = await response.json();
                 
                 // 移除加载状态，并显示Agent的回答
                 chatContainer.removeChild(loadingDiv);
-                addMessage(data.answer, 'agent');
+                addMessage(data.answer || data.output || '（无内容）', 'agent');
 
             } catch (error) {
                 console.error('Error fetching data:', error);
