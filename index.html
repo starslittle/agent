@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Agent Chat</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background-color: #f4f4f9; }
+        #chat-container { border: 1px solid #ccc; padding: 20px; height: 500px; overflow-y: scroll; background-color: white; border-radius: 8px; margin-bottom: 20px; }
+        .message { margin-bottom: 15px; padding: 10px; border-radius: 8px; line-height: 1.5; }
+        .user-message { background-color: #e1f5fe; text-align: right; }
+        .agent-message { background-color: #f1f8e9; }
+        #input-container { display: flex; }
+        #user-input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 8px 0 0 8px; }
+        #send-button { padding: 10px 20px; border: none; background-color: #4CAF50; color: white; cursor: pointer; border-radius: 0 8px 8px 0; }
+        .loading { text-align: center; color: #888; }
+    </style>
+</head>
+<body>
+
+    <h1>Chat with My Awesome Agent</h1>
+
+    <div id="chat-container">
+        <!-- 聊天记录会在这里动态添加 -->
+    </div>
+
+    <div id="input-container">
+        <input type="text" id="user-input" placeholder="Type your message here...">
+        <button id="send-button">Send</button>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+
+        const API_URL = 'http://localhost:8000/query'; // 你的FastAPI后端地址
+
+        // 添加消息到聊天窗口
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', `${sender}-message`);
+            messageDiv.innerText = text;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight; // 自动滚动到底部
+        }
+
+        // 发送消息到后端
+        async function sendMessage() {
+            const query = userInput.value.trim();
+            if (!query) return;
+
+            addMessage(query, 'user');
+            userInput.value = '';
+
+            // 显示加载状态
+            const loadingDiv = document.createElement('div');
+            loadingDiv.classList.add('message', 'agent-message', 'loading');
+            loadingDiv.innerText = 'Agent is thinking...';
+            chatContainer.appendChild(loadingDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: query }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // 移除加载状态，并显示Agent的回答
+                chatContainer.removeChild(loadingDiv);
+                addMessage(data.answer, 'agent');
+
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                chatContainer.removeChild(loadingDiv);
+                addMessage('Sorry, something went wrong. Please check the console.', 'agent');
+            }
+        }
+
+        // 绑定事件
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+    </script>
+</body>
+</html>

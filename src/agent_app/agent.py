@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 from langchain_community.chat_models import ChatTongyi
-from langchain.agents import AgentExecutor, create_react_agent
+from langchain.agents import AgentExecutor, create_react_agent, create_tool_calling_agent
 from langchain import hub
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_tavily import TavilySearch
@@ -42,6 +42,7 @@ def main():
         query_pandas_data,
         init_local_rag,
         query_local_kb,
+        deep_research,
     ]
     prompt = ChatPromptTemplate.from_messages([
         (
@@ -68,16 +69,33 @@ def main():
         ("user", "{input}"),
         ("placeholder", "{agent_scratchpad}"),
     ])
-    # ReAct Agent：使用官方 hub 提示（react-chat），避免占位符不匹配
+    # 构建两套代理：函数调用（稳定）与 ReAct（探索式）
+    tc_agent = create_tool_calling_agent(llm, tools, prompt)
+    tc_executor = AgentExecutor(agent=tc_agent, tools=tools, verbose=True, stream_runnable=True, handle_parsing_errors=True)
+
     react_prompt = hub.pull("hwchase17/react-chat")
-    agent = create_react_agent(llm, tools, react_prompt)
-    executor = AgentExecutor(agent=agent, tools=tools, verbose=True, stream_runnable=True)
+    react_agent = create_react_agent(llm, tools, react_prompt)
+    react_executor = AgentExecutor(agent=react_agent, tools=tools, verbose=True, stream_runnable=True, handle_parsing_errors=True)
+
+    def choose_mode(user_text: str) -> str:
+        s = (user_text or "").lower()
+        if s.startswith("react:"):
+            return "react"
+        if s.startswith("tc:") or s.startswith("tool:"):
+            return "tc"
+        keywords = ["深度检索", "调研", "研究", "综述", "路线", "对比", "方案", "why", "how"]
+        if any(k in user_text for k in keywords):
+            return "react"
+        return "tc"
     print("\nAgent 已准备就绪。输入 'exit' 退出。")
     chat_history = []
     while True:
         q = input("你: ").strip()
         if q.lower() == "exit":
             break
+        # 选择代理模式
+        mode = choose_mode(q)
+        executor = react_executor if mode == "react" else tc_executor
         # 流式输出
         print("智能体:", end="", flush=True)
         final_text = ""

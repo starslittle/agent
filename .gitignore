@@ -67,7 +67,12 @@ chroma/
 
 # Large data files and datasets
 # It's better to provide a script to download data.
+# 忽略原始数据与评估数据，但保留配置与代码
 data/
+!data/eval/
+data/eval/*.jsonl
+reports/
+reports/**
 *.csv
 *.jsonl
 *.parquet
