@@ -20,8 +20,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
   const autosize = () => {
     const el = taRef.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+    // 单行基础高度，随内容增高
+    const base = 24; // 单行高度(px)
+    const max = 160;
+    el.style.height = "0px";
+    const next = Math.min(Math.max(el.scrollHeight, base), max);
+    el.style.height = `${next}px`;
   };
 
   useEffect(() => {
@@ -67,7 +71,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
       </div>
 
       {/* 对话框 */}
-      <div className="flex items-end gap-2 p-3 bg-white rounded-2xl border border-gray-200 shadow-sm">
+      <div className="flex items-center gap-2 py-2 px-2 bg-white rounded-2xl border border-gray-200 shadow-sm">
         {/* 上传图片按钮 */}
         <button
           type="button"
@@ -95,7 +99,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
           onInput={autosize}
           rows={1}
           placeholder="输入消息... Enter 发送，Shift+Enter 换行"
-          className="flex-1 max-h-40 overflow-y-auto resize-none border-0 shadow-none focus-visible:ring-0 bg-transparent px-0 text-sm leading-5 text-gray-800 placeholder:text-gray-400"
+          className="flex-1 max-h-40 overflow-y-auto border-0 shadow-none focus-visible:ring-0 bg-transparent px-0 text-sm leading-5 text-gray-800 min-h-[24px]"
           aria-label="聊天输入"
         />
 
