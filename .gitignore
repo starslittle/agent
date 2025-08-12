@@ -34,6 +34,9 @@ downloads/
 eggs/
 .eggs/
 lib/
+# 允许跟踪前端源码中的 lib 目录
+!frontend/src/lib/
+!frontend/src/lib/**
 lib64/
 parts/
 sdist/
