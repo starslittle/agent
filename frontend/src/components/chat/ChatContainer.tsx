@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import ChatMessage, { ChatRole } from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import { Button } from "@/components/ui/button";
+import { postQuery } from "@/lib/api";
 
 interface Message {
   id: string;
@@ -33,13 +34,7 @@ export const ChatContainer: React.FC = () => {
 
   useEffect(() => () => clearStream(), []);
 
-  const mockGenerate = useCallback((prompt: string, deep: boolean) => {
-    const base = `这是对你问题的回应：${prompt}\n\n- 我将以条列方式给出要点\n- 支持 Markdown，如 **加粗**、代码块等\n\n感谢使用「奇点AI」！`;
-    const deepPrefix = deep ? "(深度思考已启用) " : "";
-    return deepPrefix + base;
-  }, []);
-
-  const handleSend = useCallback((text: string, deep: boolean) => {
+  const handleSend = useCallback(async (text: string, deep: boolean) => {
     clearStream();
     const userMsg: Message = { id: uid(), role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
@@ -47,42 +42,23 @@ export const ChatContainer: React.FC = () => {
     const thinkingId = uid();
     setMessages((prev) => [...prev, { id: thinkingId, role: "assistant", content: "", thinking: true }]);
 
-    const startStream = () => {
+    try {
+      // 真实调用后端 API
+      const res = await postQuery({ query: text });
+      const answer = res.answer || res.output || "";
       setMessages((prev) => prev.filter((m) => m.id !== thinkingId).concat({
         id: uid(),
         role: "assistant",
-        content: "",
+        content: answer,
       }));
-
-      const full = mockGenerate(text, deep);
-      const tokens = full.split(/(\s+)/);
-
-      streamRef.current = window.setInterval(() => {
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (!last || last.role !== "assistant") return prev;
-
-          const nextToken = tokens.shift();
-          if (nextToken === undefined) {
-            clearStream();
-            return prev;
-          }
-          const updated = { ...last, content: (last.content || "") + nextToken };
-          return [...prev.slice(0, -1), updated];
-        });
-
-        if (tokens.length === 0) {
-          clearStream();
-        }
-      }, 35);
-    };
-
-    if (deep) {
-      setTimeout(startStream, 900);
-    } else {
-      setTimeout(startStream, 200);
+    } catch (err: any) {
+      setMessages((prev) => prev.filter((m) => m.id !== thinkingId).concat({
+        id: uid(),
+        role: "assistant",
+        content: `请求失败：${err?.message || String(err)}`,
+      }));
     }
-  }, [mockGenerate]);
+  }, []);
 
   return (
     <section className="w-full max-w-3xl mx-auto">

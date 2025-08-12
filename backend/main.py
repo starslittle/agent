@@ -6,6 +6,7 @@ import uvicorn
 import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -78,13 +79,31 @@ def query(req: QueryRequest):
     return QueryResponse(agent_name=agent_name, answer=output, output=output)
 
 
+@app.get("/healthz")
+def healthz():
+    return {
+        "status": "ok",
+        "agents": list(AGENT_REGISTRY.keys()),
+        "default_agent": DEFAULT_AGENT_NAME,
+    }
+
+
 @app.get("/")
 def serve_index():
-    # index.html 位于项目根目录
+    # 优先返回构建后的前端页面，其次回退到仓库根 index.html（若存在）
+    dist_index = (ROOT.parent / "frontend" / "dist" / "index.html").resolve()
+    if dist_index.exists():
+        return FileResponse(dist_index)
     index_path = (ROOT.parent / "index.html").resolve()
-    if not index_path.exists():
-        raise HTTPException(status_code=404, detail="index.html 未找到")
-    return FileResponse(index_path)
+    if index_path.exists():
+        return FileResponse(index_path)
+    raise HTTPException(status_code=404, detail="前端页面未找到：请先在 frontend 目录执行构建")
+
+
+# 生产环境：如果存在前端构建产物，则挂载为静态站点（保留 /query 等 API 路由）
+DIST_DIR = (ROOT.parent / "frontend" / "dist").resolve()
+if DIST_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(DIST_DIR), html=True), name="static")
 
 
 if __name__ == "__main__":
