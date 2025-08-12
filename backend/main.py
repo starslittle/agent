@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from .agent_factory import create_agent_from_config
 from libs.rag_core import query as rag_core_query
+from libs.rag_core import query_fortune
 
 
 ROOT = Path(__file__).resolve().parent
@@ -86,7 +87,11 @@ def query_v1(req: QueryRequest):
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="query 不能为空")
     try:
-        answer = rag_core_query(req.query, agent_name=req.agent_name)
+        # 命理 agent 特殊路由到双阶段检索
+        if (req.agent_name or "") == "fortune_agent":
+            answer = query_fortune(req.query)
+        else:
+            answer = rag_core_query(req.query, agent_name=req.agent_name)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"RAG 查询失败: {e}")
     # 使用传入的 agent_name 回显；未提供则由 rag_core 内部默认决策

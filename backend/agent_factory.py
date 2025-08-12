@@ -98,7 +98,13 @@ def load_prompt_template(path: str) -> ChatPromptTemplate:
         "Notes: Use 'Action:' not 'Action：'. Use 'Action Input:' not 'Action Input：'.\n"
         "Do not add any extra keys or text before/after these lines."
     )
-    text = text + react_format_rules
+    # 注入工具占位符，满足 create_react_agent 对 {tools}/{tool_names} 的要求
+    tools_hint = (
+        "\n\nAvailable tools (use exactly one name in Action):\n"
+        "{tools}\n\n"
+        "You can only choose from: {tool_names}\n"
+    )
+    text = text + tools_hint + react_format_rules
     # 兼容不同版本 LangChain：将 agent_scratchpad 作为字符串插入 human 消息
     prompt = ChatPromptTemplate.from_messages([
         ("system", text),

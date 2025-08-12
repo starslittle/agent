@@ -16,4 +16,10 @@
 - 后端：`uvicorn backend.main:app`；
 - 前端：`npm run dev`；
 
+命理库入库（最小流程）：
+```
+pip install python-docx langchain-community chromadb sentence-transformers
+python apps/workers/ingest_fortune.py
+```
+
 

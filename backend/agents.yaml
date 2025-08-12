@@ -29,3 +29,17 @@ agents:
       prompt_template_path: "./prompts/general_prompt.txt"
 
 
+  - name: "fortune_agent"
+    description: "命理/术数知识库问答，优先基于本地命理资料库进行检索，再生成解释。"
+    is_default: false
+    config:
+      llm: "qwen-turbo"
+      tools: ["get_current_date"]
+      # 使用专用向量库与集合名（由入库脚本写入）
+      rag_db_path: "./storage/chroma/fortune"
+      collection_name: "fortune"
+      top_k: 10
+      rerank: true
+      prompt_template_path: "./prompts/fortune_prompt.txt"
+
+

@@ -6,5 +6,6 @@
 """
 
 from .pipelines import query  # noqa: F401
+from .pipelines_fortune import query_fortune  # noqa: F401
 
 
