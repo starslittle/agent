@@ -238,8 +238,8 @@ def create_agent_from_config(config: Dict[str, Any]) -> AgentExecutor:
         tools=tools,
         verbose=True,
         handle_parsing_errors="Final Answer: {text}",
-        max_iterations=3,
-        max_execution_time=40,
+        max_iterations=8,
+        max_execution_time=60,
     )
     return executor
 

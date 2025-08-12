@@ -24,7 +24,7 @@ agents:
     description: "面向开放式调研/综述任务的代理，倾向使用深度检索与网络搜索。"
     is_default: false
     config:
-      llm: "qwen-plus"
+      llm: "qwen-turbo"
       tools: ["deep_research", "tavily_search_results_json"]
       prompt_template_path: "./prompts/general_prompt.txt"
 
