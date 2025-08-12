@@ -17,19 +17,19 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
   const isUser = role === "user";
   return (
     <article className="w-full flex items-start gap-3">
-      <Avatar className="mt-1">
-        {isUser ? (
-          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-medium">我</AvatarFallback>
-        ) : (
+      {/* 用户消息：头像在右侧；助手消息：头像在左侧 */}
+      {!isUser && (
+        <Avatar className="mt-1">
           <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-white">
             <Bot size={20} />
           </AvatarFallback>
-        )}
-      </Avatar>
+        </Avatar>
+      )}
+
       <div
         className={
           isUser
-            ? "rounded-2xl px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white max-w-[80%] ml-auto"
+            ? "rounded-2xl px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white max-w-[80%] ml-auto order-1"
             : "rounded-2xl px-4 py-3 bg-white border border-gray-200 text-gray-800 max-w-[80%] shadow-sm"
         }
       >
@@ -44,6 +44,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
           </div>
         )}
       </div>
+      {isUser && (
+        <Avatar className="mt-1 order-2 ml-3">
+          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-medium">我</AvatarFallback>
+        </Avatar>
+      )}
     </article>
   );
 };

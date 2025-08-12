@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .agent_factory import create_agent_from_config
+from libs.rag_core import query as rag_core_query
 
 
 ROOT = Path(__file__).resolve().parent
@@ -77,6 +78,19 @@ def query(req: QueryRequest):
     result = executor.invoke({"input": req.query})
     output = result.get("output") if isinstance(result, dict) else str(result)
     return QueryResponse(agent_name=agent_name, answer=output, output=output)
+
+
+# 新接口：标准化 API 前缀，并通过 libs.rag_core 访问底层能力
+@app.post("/api/v1/query", response_model=QueryResponse)
+def query_v1(req: QueryRequest):
+    if not req.query.strip():
+        raise HTTPException(status_code=400, detail="query 不能为空")
+    try:
+        answer = rag_core_query(req.query, agent_name=req.agent_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"RAG 查询失败: {e}")
+    # 使用传入的 agent_name 回显；未提供则由 rag_core 内部默认决策
+    return QueryResponse(agent_name=req.agent_name or (DEFAULT_AGENT_NAME or ""), answer=str(answer), output=str(answer))
 
 
 @app.get("/healthz")

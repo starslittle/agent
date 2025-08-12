@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => ({
       "/query": {
         target: "http://localhost:8000",
         changeOrigin: true,
-      },
+      },  
     },
   },
   plugins: [
