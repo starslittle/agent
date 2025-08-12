@@ -24,6 +24,7 @@ export const ChatContainer: React.FC = () => {
   }]);
 
   const streamRef = useRef<number | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   const clearStream = () => {
     if (streamRef.current) {
@@ -34,6 +35,13 @@ export const ChatContainer: React.FC = () => {
 
   useEffect(() => () => clearStream(), []);
 
+  // 消息变更时滚动到底部，保持对话区在框内滚动
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
   const handleSend = useCallback(async (text: string, deep: boolean) => {
     clearStream();
     const userMsg: Message = { id: uid(), role: "user", content: text };
@@ -43,8 +51,8 @@ export const ChatContainer: React.FC = () => {
     setMessages((prev) => [...prev, { id: thinkingId, role: "assistant", content: "", thinking: true }]);
 
     try {
-      // 真实调用后端 API
-      const res = await postQuery({ query: text });
+      // 真实调用后端 API；深度思考 → 使用 research_agent，否则使用默认 agent
+      const res = await postQuery({ query: text, agent_name: deep ? "research_agent" : undefined });
       const answer = res.answer || res.output || "";
       setMessages((prev) => prev.filter((m) => m.id !== thinkingId).concat({
         id: uid(),
@@ -65,16 +73,19 @@ export const ChatContainer: React.FC = () => {
       <header className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-tr from-primary to-accent bg-clip-text text-transparent">奇点AI · 智能体对话</h1>
         <div className="hidden sm:flex gap-2">
-          <Button variant="glow" className="animate-glow">全局设置</Button>
+          <Button variant="default" className="animate-glow">全局设置</Button>
         </div>
       </header>
 
-      <main className="min-h-[50vh] flex flex-col gap-6 mb-8">
-        {messages.map((m) => (
-          <div key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-            <ChatMessage role={m.role} content={m.content} thinking={m.thinking} />
-          </div>
-        ))}
+      <main className="mb-8">
+        {/* 对话区限制在固定高度的可滚动容器内 */}
+        <div ref={listRef} className="h-[60vh] overflow-y-auto flex flex-col gap-6 pr-2">
+          {messages.map((m) => (
+            <div key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+              <ChatMessage role={m.role} content={m.content} thinking={m.thinking} />
+            </div>
+          ))}
+        </div>
       </main>
 
       <footer className="sticky bottom-4">
