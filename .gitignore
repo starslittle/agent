@@ -140,3 +140,10 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
+
+
+# -------------------------------------------------------------------
+# 8. Frontend Artifacts
+# -------------------------------------------------------------------
+frontend/node_modules/
+frontend/dist/
