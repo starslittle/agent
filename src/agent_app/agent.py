@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from dotenv import load_dotenv
+from src.core.settings import settings
 from langchain_community.chat_models import ChatTongyi
 from langchain.agents import AgentExecutor, create_react_agent, create_tool_calling_agent
 from langchain import hub
@@ -26,11 +26,10 @@ from agent_app.tools import (
     deep_research,
 )
 
-load_dotenv()  # 加载根目录 .env
 
 
 def main():
-    llm = ChatTongyi(model="qwen-turbo", temperature=0.2, dashscope_api_key=os.getenv("DASHSCOPE_API_KEY", ""))
+    llm = ChatTongyi(model="qwen-turbo-2025-07-15", temperature=0.2, dashscope_api_key=settings.DASHSCOPE_API_KEY)
     tools = [
         TavilySearch(max_results=1),
         get_current_date,

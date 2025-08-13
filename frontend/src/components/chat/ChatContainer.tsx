@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import ChatMessage, { ChatRole } from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import { Button } from "@/components/ui/button";
-import { postQuery } from "@/lib/api";
+import { postQuery, postQueryStream } from "@/lib/api";
 
 interface Message {
   id: string;
@@ -48,27 +48,88 @@ export const ChatContainer: React.FC = () => {
     const userMsg: Message = { id: uid(), role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
 
-    const thinkingId = uid();
-    setMessages((prev) => [...prev, { id: thinkingId, role: "assistant", content: "", thinking: true }]);
+    const assistantId = uid();
+    setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "", thinking: true }]);
 
     try {
       // 优先命理模式，其次深度思考（调研），否则默认
       const agentName = fortune ? "fortune_agent" : (deep ? "research_agent" : undefined);
-      const res = await postQuery({ query: text, agent_name: agentName });
+      
+      // 构建历史上下文：排除当前用户消息和thinking消息，只取之前的对话
+      const chatHistory = messages
+        .filter(m => !m.thinking) // 过滤掉思考中的消息
+        .map(m => ({ role: m.role, content: m.content }));
+      
+      const payload = { 
+        query: text, 
+        agent_name: agentName,
+        chat_history: chatHistory.length > 0 ? chatHistory : null
+      };
+
+      // 优先使用流式输出，失败时回退到普通模式
+      let useStream = true;
+
+      if (useStream) {
+        try {
+          console.log("尝试流式请求:", payload);
+          // 流式输出模式 - 使用 ref 来避免闭包问题
+          const streamContentRef = { current: "" };
+          
+          await postQueryStream(
+            payload,
+            (delta: string) => {
+              console.log("收到增量:", delta);
+              streamContentRef.current += delta;
+              setMessages((prev) => 
+                prev.map((m) => 
+                  m.id === assistantId 
+                    ? { ...m, content: streamContentRef.current, thinking: false }
+                    : m
+                )
+              );
+            }
+          );
+          console.log("流式请求完成");
+          if (streamContentRef.current && streamContentRef.current.length > 0) {
+            return; // 已有内容，直接结束
+          }
+          // 若没有收到任何增量，回退到普通请求以填充内容
+          console.warn("流式无增量，回退到普通模式获取最终答案");
+          const res = await postQuery(payload);
+          const answer = res.answer || res.output || "";
+          setMessages((prev) => prev.map((m) => 
+            m.id === assistantId 
+              ? { ...m, content: answer, thinking: false }
+              : m
+          ));
+          return;
+        } catch (streamError) {
+          console.warn("流式输出失败，回退到普通模式:", streamError);
+          useStream = false;
+        }
+      }
+
+      // 回退到普通模式
+      const res = await postQuery(payload);
       const answer = res.answer || res.output || "";
-      setMessages((prev) => prev.filter((m) => m.id !== thinkingId).concat({
-        id: uid(),
-        role: "assistant",
-        content: answer,
-      }));
-    } catch (err: any) {
-      setMessages((prev) => prev.filter((m) => m.id !== thinkingId).concat({
-        id: uid(),
-        role: "assistant",
-        content: `请求失败：${err?.message || String(err)}`,
-      }));
+      setMessages((prev) => prev.map((m) => 
+        m.id === assistantId 
+          ? { ...m, content: answer, thinking: false }
+          : m
+      ));
+
+    } catch (err: unknown) {
+      setMessages((prev) => prev.map((m) => 
+        m.id === assistantId 
+          ? { 
+              ...m, 
+              content: `请求失败：${(err as Error)?.message || String(err)}`, 
+              thinking: false 
+            }
+          : m
+      ));
     }
-  }, []);
+  }, [messages]);
 
   return (
     <section className="w-full max-w-3xl mx-auto">

@@ -1,20 +1,11 @@
 from typing import Optional
 
 from langchain_core.tools import tool
-from dotenv import load_dotenv
+from src.core.settings import settings
 
-from pathlib import Path
-import sys
-
-# 懒加载 RAGSystem，避免循环导入
-ROOT = Path(__file__).resolve().parents[2]
-src_path = ROOT / "src"
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
-from rag.system import RAGSystem, RAGConfig  # noqa: E402
+from src.rag.system import RAGSystem, RAGConfig  # type: ignore
 
 
-load_dotenv()
 
 _rag: Optional[RAGSystem] = None
 
@@ -35,7 +26,7 @@ def _init_rag_impl(force: bool = False, refresh: bool = False) -> str:
     if refresh and not force:
         # 增量刷新
         try:
-            from rag.engines.local import LocalEngine
+            from src.rag.engines.local import LocalEngine  # type: ignore
 
             LocalEngine(cfg).refresh()
         except Exception:

@@ -8,6 +8,7 @@ import yaml
 from datasets import load_dataset, Dataset
 from langchain_community.chat_models import ChatTongyi
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
+from src.core.settings import settings
 
 # 允许从项目根导入 src 下模块
 import sys
@@ -16,7 +17,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from rag.system import RAGSystem, RAGConfig  # noqa: E402
+from src.rag.system import RAGSystem, RAGConfig  # noqa: E402
 
 
 def load_config(cfg_path: str) -> Dict[str, Any]:
@@ -113,17 +114,10 @@ def run_eval(cfg_path: str):
     )
 
     # 使用达摩盘/通义千问作为评估 LLM，避免 ragas 默认走 OpenAI
-    llm = ChatTongyi(
-        model="qwen-plus",
-        temperature=0.2,
-        dashscope_api_key=os.getenv("DASHSCOPE_API_KEY", ""),
-    )
+    llm = ChatTongyi(model="qwen-turbo-2025-07-15", temperature=0.2, dashscope_api_key=settings.DASHSCOPE_API_KEY)
 
     # 评估用中文向量模型，避免 ragas 默认走 OpenAIEmbeddings
-    hf_embeddings = HuggingFaceBgeEmbeddings(
-        model_name=os.getenv("EVAL_EMBED_MODEL", "BAAI/bge-small-zh-v1.5"),
-        encode_kwargs={"normalize_embeddings": True},
-    )
+    hf_embeddings = HuggingFaceBgeEmbeddings(model_name=settings.EVAL_EMBED_MODEL, encode_kwargs={"normalize_embeddings": True})
 
     results = evaluate(
         dataset=eval_dataset,

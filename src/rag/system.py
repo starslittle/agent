@@ -16,21 +16,15 @@ from llama_index.llms.dashscope import DashScope
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 # 新增：引擎模块
-from rag.engines.local import LocalEngine
-from rag.engines.notion import NotionEngine
-from rag.engines.pandas_engine import PandasEngine
+from .engines.local import LocalEngine
+from .engines.notion import NotionEngine
+from .engines.pandas_engine import PandasEngine
 
 
 # 基础路径（项目根）
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-# 兜底加载根目录 .env，确保在读取环境变量前完成加载
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv(dotenv_path=str(BASE_DIR / ".env"))
-except Exception:
-    pass
+from src.core.settings import settings
 
 
 def _format_uuid_with_hyphens(uuid_str: str) -> str:
@@ -68,8 +62,8 @@ def _fetch_page_ids_from_database(notion_api_key: str, database_id: str) -> List
 
 class RAGConfig:
     # API 和模型配置
-    DASHSCOPE_API_KEY: str = os.environ.get("DASHSCOPE_API_KEY", "")
-    LLM_MODEL_NAME: str = "qwen-plus"
+    DASHSCOPE_API_KEY: str = settings.DASHSCOPE_API_KEY
+    LLM_MODEL_NAME: str = "qwen-turbo-2025-04-28"
     EMBED_MODEL_NAME: str = "BAAI/bge-small-zh-v1.5"
 
     # RAG 系统配置
@@ -89,24 +83,14 @@ class RAGConfig:
     LOCAL_COLLECTION_NAME: str = "local"
     NOTION_COLLECTION_NAME: str = "notion"
     # 允许通过环境变量 CSV_FILE_PATH 指定 CSV 路径；默认指向 data/raw 目录
-    CSV_FILE_PATH: str = os.environ.get(
-        "CSV_FILE_PATH",
-        str(BASE_DIR / "data" / "sales_data.csv"),
-    )
-    CSV_DIR_PATH: str = os.environ.get(
-        "CSV_DIR_PATH",
-        str(BASE_DIR / "data" / "raw"),
-    )
+    CSV_FILE_PATH: str = settings.CSV_FILE_PATH or str(BASE_DIR / "data" / "sales_data.csv")
+    CSV_DIR_PATH: str = settings.CSV_DIR_PATH or str(BASE_DIR / "data" / "raw")
 
     # Notion 配置
-    ENABLE_NOTION: bool = os.environ.get("ENABLE_NOTION", "0").lower() in ("1", "true", "yes")
-    NOTION_API_KEY: str = os.environ.get("NOTION_API_KEY", "")
-    NOTION_PAGE_IDS: List[str] = (
-        [pid.strip() for pid in os.environ.get("NOTION_PAGE_IDS", "").split(",") if pid.strip()]
-        if os.environ.get("NOTION_PAGE_IDS")
-        else []
-    )
-    NOTION_DATABASE_ID: str = os.environ.get("NOTION_DATABASE_ID", "")
+    ENABLE_NOTION: bool = bool(settings.ENABLE_NOTION)
+    NOTION_API_KEY: str = settings.NOTION_API_KEY
+    NOTION_PAGE_IDS: List[str] = list(settings.NOTION_PAGE_IDS or [])
+    NOTION_DATABASE_ID: str = settings.NOTION_DATABASE_ID
 
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)

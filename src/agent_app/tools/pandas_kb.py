@@ -2,20 +2,11 @@ import os
 from typing import Optional
 
 from langchain_core.tools import tool
-from dotenv import load_dotenv
+from src.core.settings import settings
 
-from pathlib import Path
-import sys
-
-# 懒加载 RAGSystem，避免循环导入
-ROOT = Path(__file__).resolve().parents[2]
-src_path = ROOT / "src"
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
-from rag.system import RAGSystem, RAGConfig  # noqa: E402
+from src.rag.system import RAGSystem, RAGConfig  # type: ignore
 
 
-load_dotenv()
 
 _rag: Optional[RAGSystem] = None
 
@@ -24,10 +15,10 @@ def _init_rag_impl() -> str:
     global _rag
     cfg = RAGConfig()
     # 允许通过环境变量覆盖 CSV 路径
-    if os.getenv("CSV_FILE_PATH"):
-        cfg.CSV_FILE_PATH = os.getenv("CSV_FILE_PATH")  # type: ignore
-    if os.getenv("CSV_DIR_PATH"):
-        cfg.CSV_DIR_PATH = os.getenv("CSV_DIR_PATH")  # type: ignore
+    if settings.CSV_FILE_PATH:
+        cfg.CSV_FILE_PATH = settings.CSV_FILE_PATH  # type: ignore
+    if settings.CSV_DIR_PATH:
+        cfg.CSV_DIR_PATH = settings.CSV_DIR_PATH  # type: ignore
     _rag = RAGSystem(cfg)
     _rag.startup()
     return "Pandas RAG 初始化完成"

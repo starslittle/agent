@@ -3,15 +3,13 @@ from typing import List
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
 from langchain_community.chat_models import ChatTongyi
-from dotenv import load_dotenv
-import os
+from src.core.settings import settings
 
 
-load_dotenv()
 
 
-def _synthesize_with_llm(prompt: str, model: str = "qwen-plus") -> str:
-    llm = ChatTongyi(model=model, temperature=0.2, dashscope_api_key=os.getenv("DASHSCOPE_API_KEY", ""))
+def _synthesize_with_llm(prompt: str, model: str = "qwen-turbo-2025-07-15") -> str:
+    llm = ChatTongyi(model=model, temperature=0.2, dashscope_api_key=settings.DASHSCOPE_API_KEY)
     return llm.invoke(prompt).content  # type: ignore
 
 
@@ -36,10 +34,24 @@ def deep_research(topic: str, rounds: int = 2, max_results: int = 3) -> str:
                 results = t.invoke({"query": q})  # type: ignore
             except Exception:
                 results = []
-            for item in results or []:
-                title = item.get("title") or ""
-                content = item.get("content") or ""
-                url = item.get("url") or ""
+            # 兼容不同返回结构：可能是 list[dict] / {results: list} / list[str]
+            try:
+                if isinstance(results, dict) and "results" in results:
+                    results_iter = results.get("results") or []
+                else:
+                    results_iter = results or []
+            except Exception:
+                results_iter = []
+            for item in results_iter:
+                if isinstance(item, dict):
+                    title = item.get("title") or ""
+                    content = item.get("content") or item.get("snippet") or ""
+                    url = item.get("url") or item.get("link") or ""
+                else:
+                    s = str(item)
+                    title = s[:60]
+                    content = s
+                    url = ""
                 notes.append(f"- {title}\n  摘要: {content}\n  链接: {url}")
         # 基于当前笔记，让 LLM 生成下一轮子问题
         prompt = (

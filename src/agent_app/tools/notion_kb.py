@@ -1,19 +1,12 @@
 import os
 import requests
 from langchain_core.tools import tool
-from dotenv import load_dotenv
+from src.core.settings import settings
 from typing import Optional
 
-# 懒加载 RAGSystem，避免循环导入
-from pathlib import Path
-import sys
-ROOT = Path(__file__).resolve().parents[2]
-src_path = ROOT / "src"
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
-from rag.system import RAGSystem, RAGConfig  # noqa: E402
+# 直接使用 namespace package 导入（uvicorn 使用 src.api.main:app 时可用）
+from src.rag.system import RAGSystem, RAGConfig  # type: ignore
 
-load_dotenv()
 
 _rag: Optional[RAGSystem] = None
 
@@ -22,8 +15,8 @@ def _init_notion_rag_impl(page_ids_csv: str = "", database_id: str = "") -> str:
     global _rag
     cfg = RAGConfig()
     cfg.ENABLE_NOTION = True
-    if os.getenv("NOTION_API_KEY"):
-        cfg.NOTION_API_KEY = os.getenv("NOTION_API_KEY")
+    if settings.NOTION_API_KEY:
+        cfg.NOTION_API_KEY = settings.NOTION_API_KEY
     if page_ids_csv:
         cfg.NOTION_PAGE_IDS = [x.strip() for x in page_ids_csv.split(",") if x.strip()]
     if database_id:
@@ -71,7 +64,7 @@ def verify_notion_access(query: str = "", page_or_db_id: str = "") -> str:
     验证 Notion 访问：可按关键词搜索或校验指定页面/数据库 ID 是否可读。
     需要在 .env 设置 NOTION_API_KEY。
     """
-    notion_key = os.getenv("NOTION_API_KEY", "")
+    notion_key = settings.NOTION_API_KEY or ""
     if not notion_key:
         return "错误：未配置 NOTION_API_KEY。"
     headers = {

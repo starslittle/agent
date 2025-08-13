@@ -1,6 +1,6 @@
-import os
 import requests
 from langchain_core.tools import tool
+from src.core.settings import settings
 
 @tool
 def get_seniverse_weather(location: str) -> str:
@@ -8,7 +8,7 @@ def get_seniverse_weather(location: str) -> str:
     查询中国城市当前天气。参数示例："杭州"、"北京"。
     需要在 .env 设置 SENIVERSE_API_KEY。
     """
-    api_key = os.getenv("SENIVERSE_API_KEY", "")
+    api_key = settings.SENIVERSE_API_KEY or ""
     if not api_key:
         return "错误：未配置 SENIVERSE_API_KEY。"
     # 现在接口：当前天气 + 未来三日预报，便于拿最高/最低温
