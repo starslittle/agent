@@ -14,6 +14,8 @@ agents:
       llm: "qwen-turbo-2025-07-15"
       tools: ["deep_research", "tavily_search_results_json"]
       prompt_template_path: "./prompts/general_prompt.txt"
+      max_iterations: 15
+      max_execution_time: 180
 
   - name: "fortune_agent"
     description: "命理/术数知识库问答，优先基于本地命理资料库进行检索，再生成解释。"
@@ -26,6 +28,8 @@ agents:
       top_k: 10
       rerank: true
       prompt_template_path: "./prompts/fortune_prompt.txt"
+      max_iterations: 12
+      max_execution_time: 120
 
   - name: "general_rag_agent"
     description: "通用RAG问答代理，支持日期/天气、本地PDF/CSV、Notion 以及 Tavily 搜索（ReAct）。"
@@ -47,5 +51,7 @@ agents:
         ]
       rag_db_path: "./storage/chroma/local"
       prompt_template_path: "./prompts/general_prompt.txt"
+      max_iterations: 20
+      max_execution_time: 300
 
 

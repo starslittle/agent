@@ -17,6 +17,8 @@ from langchain_community.vectorstores import Chroma  # type: ignore
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings  # type: ignore
 from langchain_community.retrievers import BM25Retriever  # type: ignore
 from langchain_core.documents import Document  # type: ignore
+from langchain.schema.agent import AgentFinish
+from langchain_core.exceptions import OutputParserException
 
 from ..rag.hybrid_retriever import HybridRetriever, CrossEncoderReranker
 from ..agent_app.tools import (
@@ -34,6 +36,39 @@ from ..agent_app.tools import (
 
 API_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = API_DIR.parents[1]
+
+
+def _handle_parsing_error(error: OutputParserException) -> AgentFinish:
+    """自定义解析错误处理器，向前端返回更友好的信息。"""
+    error_text = str(error)
+    # 提取LLM的原始输出，这是最关键的信息
+    llm_output = getattr(error, 'llm_output', '')
+
+    # 检查是否是“答案和动作并存”的常见错误
+    if "Parsing LLM output produced both a final answer and a parse-able action" in error_text:
+        # 尝试从原始文本中智能提取 Final Answer
+        # Final Answer 通常是日志的最后一部分
+        try:
+            # 健壮地分割字符串，防止 "Final Answer:" 不存在时出错
+            parts = llm_output.split("Final Answer:")
+            if len(parts) > 1:
+                final_answer = parts[-1].strip()
+                if final_answer:
+                    # 如果成功提取，就用它作为最终输出
+                    return AgentFinish(return_values={"output": final_answer}, log=error_text)
+        except Exception:
+            # 如果解析失败，则回退到下面的通用错误消息
+            pass
+        
+        # 如果无法提取，返回一个更友好的通用提示
+        response = "模型返回了模糊的响应（同时包含答案和操作），无法自动解析。请您尝试简化问题或调整提问方式。"
+    
+    else:
+        # 对于其他未知解析错误，只显示错误摘要，避免暴露过多内部细节
+        response = f"模型输出格式无法解析，请稍后重试。"
+    
+    # 对于无法自动恢复的错误，包装成 AgentFinish 对象，确保链能正常结束
+    return AgentFinish(return_values={"output": response}, log=error_text)
 
 
 def load_prompt_template(path: str) -> ChatPromptTemplate:
@@ -264,13 +299,18 @@ def create_agent_from_config(config: Dict[str, Any], streaming_override: bool | 
         prompt = load_prompt_template(prompt_path)
 
     agent = create_react_agent(llm, tools, prompt)
+    
+    # 从配置中读取迭代次数和执行时间限制，如果没有配置则使用默认值
+    max_iterations = config.get("max_iterations", 8)
+    max_execution_time = config.get("max_execution_time", 60)
+    
     executor = AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=True,
-        handle_parsing_errors="Final Answer: {text}",
-        max_iterations=8,
-        max_execution_time=60,
+        handle_parsing_errors=_handle_parsing_error,
+        max_iterations=max_iterations,
+        max_execution_time=max_execution_time,
         stream_runnable=use_streaming,
     )
     return executor

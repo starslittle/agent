@@ -43,6 +43,10 @@ class Settings(BaseSettings):
 
     # 服务端口（供本地开发使用）
     PORT: int = 8000
+    
+    # Agent执行限制（默认值）
+    DEFAULT_MAX_ITERATIONS: int = 8
+    DEFAULT_MAX_EXECUTION_TIME: int = 60
 
     # 兼容：允许通过逗号分隔或 JSON 数组提供列表
     @staticmethod
