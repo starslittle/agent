@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .agent_factory import create_agent_from_config
+from .intent_router import classify_and_route
 from src.rag.pipelines import query as rag_core_query
 from src.rag.pipelines import query_fortune
 
@@ -100,16 +101,90 @@ def load_agents():
         DEFAULT_AGENT_NAME = list(AGENT_REGISTRY.keys())[0]
     _AGENTS_INITIALIZED = True
 
+    # 初始化 Redis（可选）
+    try:
+        from redis import asyncio as aioredis  # type: ignore
+        if settings.REDIS_URL:
+            app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            print(f"[REDIS] connected: {settings.REDIS_URL}")
+        else:
+            app.state.redis = None
+            print("[REDIS] disabled (REDIS_URL not set)")
+    except Exception as _re:
+        app.state.redis = None
+        print(f"[REDIS] init failed: {_re}")
+
 
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest):
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="query 不能为空")
-    agent_name = req.agent_name or DEFAULT_AGENT_NAME
+    
+    # Redis 缓存（命中则直接返回），仅在开启时生效
+    cache_key = None
+    try:
+        ttl = int(getattr(settings, "REDIS_TTL", 0))
+        rds = getattr(app.state, "redis", None)
+        if ttl and ttl > 0 and rds is not None:
+            cache_key = f"qa:{(req.agent_name or 'default')}:{hash(req.query)}"
+            cached = None
+            try:
+                import asyncio
+                cached = asyncio.get_event_loop().run_until_complete(rds.get(cache_key))  # sync path safeguard
+            except Exception:
+                cached = None
+            if cached:
+                return QueryResponse(agent_name=req.agent_name or (DEFAULT_AGENT_NAME or ""), answer=cached, output=cached)
+    except Exception:
+        cache_key = None
+
+    # 根据前端按钮控制选择Agent模式
+    if not req.agent_name or req.agent_name == "default":
+        # 默认模式：简单聊天，固定使用default_llm_agent（无ReAct，无路由）
+        agent_name = "default_llm_agent"
+        print(f"[MODE] 简单聊天模式")
+        
+    elif req.agent_name in ["fortune", "fortune_agent"]:
+        # 命理模式：启用命理智能路由
+        try:
+            routing_result = classify_and_route(req.query, mode_hint="fortune")
+            agent_name = routing_result["agent_name"]
+            print(f"[MODE] 命理智能路由: {req.query[:30]}... -> {agent_name}")
+        except Exception as e:
+            print(f"[WARNING] 命理模式路由失败，回退到简单聊天: {e}")
+            agent_name = "default_llm_agent"
+            
+    elif req.agent_name in ["research", "research_agent"]:
+        # 深度思考模式：启用研究智能路由
+        try:
+            routing_result = classify_and_route(req.query, mode_hint="research")
+            agent_name = routing_result["agent_name"]
+            print(f"[MODE] 深度思考路由: {req.query[:30]}... -> {agent_name}")
+        except Exception as e:
+            print(f"[WARNING] 深度思考模式路由失败，回退到简单聊天: {e}")
+            agent_name = "default_llm_agent"
+            
+    elif req.agent_name == "auto":
+        # 全局智能路由模式（可选功能）
+        try:
+            routing_result = classify_and_route(req.query)
+            agent_name = routing_result["agent_name"]
+            print(f"[MODE] 全局智能路由: {req.query[:30]}... -> {agent_name}")
+        except Exception as e:
+            print(f"[WARNING] 全局智能路由失败，使用默认Agent: {e}")
+            agent_name = "default_llm_agent"
+    else:
+        # 用户明确指定的Agent名称（直接使用，不经过路由）
+        agent_name = req.agent_name
+        print(f"[MODE] 直接指定Agent: {agent_name}")
+    
+    # 确保agent存在
     if not agent_name or agent_name not in AGENT_REGISTRY:
         raise HTTPException(status_code=404, detail=f"未找到指定 agent: {agent_name}")
+    
     executor = AGENT_REGISTRY.get(agent_name + "_stream") or AGENT_REGISTRY[agent_name]
     invoke_params = {"input": req.query, "context": ""}
+    
     if req.chat_history:
         history = []
         for msg in req.chat_history:
@@ -120,6 +195,7 @@ def query(req: QueryRequest):
             elif role == "assistant":
                 history.append(("ai", content))
         invoke_params["chat_history"] = history
+    
     try:
         result = executor.invoke(invoke_params)
         raw = result.get("output") if isinstance(result, dict) else str(result)
@@ -141,6 +217,13 @@ def query(req: QueryRequest):
         return "\n".join(cleaned).strip()
 
     output = _post_clean(str(raw))
+    # 写入缓存
+    try:
+        if cache_key and rds is not None and output:
+            import asyncio
+            asyncio.get_event_loop().run_until_complete(rds.setex(cache_key, int(settings.REDIS_TTL), output))
+    except Exception:
+        pass
     return QueryResponse(agent_name=agent_name, answer=output, output=output)
 
 
@@ -155,6 +238,12 @@ async def stream_agent_response(executor, invoke_params: Dict) -> AsyncGenerator
         print("[DEBUG] 使用 executor.stream 方法")
         chunk_count = 0
         accumulated_output = ""
+        # 允许把大段文本再细分为更小的片段，以增加chunk总数
+        from src.core.settings import settings as _g_settings
+        try:
+            _chunk_size = int(getattr(_g_settings, "STREAM_CHUNK_SIZE", 0))
+        except Exception:
+            _chunk_size = 0
         # 本地清洗函数（与非流式一致）
         def _post_clean(text: str) -> str:
             lines = [ln.rstrip() for ln in (text or "").splitlines()]
@@ -179,12 +268,24 @@ async def stream_agent_response(executor, invoke_params: Dict) -> AsyncGenerator
                             new_content = current_output[len(accumulated_output):]
                             accumulated_output = current_output
                             if new_content:
-                                print(f"[DEBUG] 发送增量: {repr(new_content)}")
-                                yield json.dumps({"type": "delta", "data": new_content}, ensure_ascii=False) + "\n"
+                                if _chunk_size and _chunk_size > 0:
+                                    for i in range(0, len(new_content), _chunk_size):
+                                        piece = new_content[i:i+_chunk_size]
+                                        print(f"[DEBUG] 发送增量: {repr(piece)}")
+                                        yield json.dumps({"type": "delta", "data": piece}, ensure_ascii=False) + "\n"
+                                else:
+                                    print(f"[DEBUG] 发送增量: {repr(new_content)}")
+                                    yield json.dumps({"type": "delta", "data": new_content}, ensure_ascii=False) + "\n"
                         else:
                             accumulated_output = current_output
-                            print(f"[DEBUG] 发送完整输出: {repr(current_output)}")
-                            yield json.dumps({"type": "delta", "data": current_output}, ensure_ascii=False) + "\n"
+                            if _chunk_size and _chunk_size > 0:
+                                for i in range(0, len(current_output), _chunk_size):
+                                    piece = current_output[i:i+_chunk_size]
+                                    print(f"[DEBUG] 发送完整输出子块: {repr(piece)}")
+                                    yield json.dumps({"type": "delta", "data": piece}, ensure_ascii=False) + "\n"
+                            else:
+                                print(f"[DEBUG] 发送完整输出: {repr(current_output)}")
+                                yield json.dumps({"type": "delta", "data": current_output}, ensure_ascii=False) + "\n"
         except Exception as stream_err:
             # 流式失败兜底：尝试非流式一次
             print(f"[WARNING] 流式过程中出错，回退非流式: {stream_err}")
@@ -298,11 +399,54 @@ async def stream_agent_response(executor, invoke_params: Dict) -> AsyncGenerator
 async def query_stream(req: QueryRequest):
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="query 不能为空")
-    agent_name = req.agent_name or DEFAULT_AGENT_NAME
+    
+    # 根据前端按钮控制选择Agent模式（与/query接口保持一致）
+    if not req.agent_name or req.agent_name == "default":
+        # 默认模式：简单聊天，固定使用default_llm_agent（无ReAct，无路由）
+        agent_name = "default_llm_agent"
+        print(f"[MODE] 简单聊天模式（流式）")
+        
+    elif req.agent_name == "fortune":
+        # 命理模式：启用命理智能路由
+        try:
+            routing_result = classify_and_route(req.query, mode_hint="fortune")
+            agent_name = routing_result["agent_name"]
+            print(f"[MODE] 命理智能路由（流式）: {req.query[:30]}... -> {agent_name}")
+        except Exception as e:
+            print(f"[WARNING] 命理模式路由失败，回退到简单聊天: {e}")
+            agent_name = "default_llm_agent"
+            
+    elif req.agent_name == "research":
+        # 深度思考模式：启用研究智能路由
+        try:
+            routing_result = classify_and_route(req.query, mode_hint="research")
+            agent_name = routing_result["agent_name"]
+            print(f"[MODE] 深度思考路由（流式）: {req.query[:30]}... -> {agent_name}")
+        except Exception as e:
+            print(f"[WARNING] 深度思考模式路由失败，回退到简单聊天: {e}")
+            agent_name = "default_llm_agent"
+            
+    elif req.agent_name == "auto":
+        # 全局智能路由模式（可选功能）
+        try:
+            routing_result = classify_and_route(req.query)
+            agent_name = routing_result["agent_name"]
+            print(f"[MODE] 全局智能路由（流式）: {req.query[:30]}... -> {agent_name}")
+        except Exception as e:
+            print(f"[WARNING] 全局智能路由失败，使用默认Agent: {e}")
+            agent_name = "default_llm_agent"
+    else:
+        # 用户明确指定的Agent名称（直接使用，不经过路由）
+        agent_name = req.agent_name
+        print(f"[MODE] 直接指定Agent（流式）: {agent_name}")
+    
+    # 确保agent存在
     if not agent_name or agent_name not in AGENT_REGISTRY:
         raise HTTPException(status_code=404, detail=f"未找到指定 agent: {agent_name}")
+    
     executor = AGENT_REGISTRY[agent_name]
     invoke_params = {"input": req.query, "context": ""}
+    
     if req.chat_history:
         history = []
         for msg in req.chat_history:
@@ -313,6 +457,7 @@ async def query_stream(req: QueryRequest):
             elif role == "assistant":
                 history.append(("ai", content))
         invoke_params["chat_history"] = history
+        
     return StreamingResponse(
         stream_agent_response(executor, invoke_params),
         media_type="application/x-ndjson",
@@ -361,6 +506,29 @@ def healthz():
         "agents": list(AGENT_REGISTRY.keys()),
         "default_agent": DEFAULT_AGENT_NAME,
     }
+
+
+@app.post("/debug/intent")
+def debug_intent(req: QueryRequest):
+    """调试接口：查看智能路由的决策过程"""
+    if not req.query.strip():
+        raise HTTPException(status_code=400, detail="query 不能为空")
+    
+    try:
+        routing_result = classify_and_route(req.query)
+        return {
+            "user_input": req.query,
+            "routing_result": routing_result,
+            "available_agents": list(AGENT_REGISTRY.keys()),
+            "timestamp": "2025-01-27"
+        }
+    except Exception as e:
+        return {
+            "user_input": req.query,
+            "error": str(e),
+            "fallback_agent": DEFAULT_AGENT_NAME,
+            "timestamp": "2025-01-27"
+        }
 
 
 @app.get("/")

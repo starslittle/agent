@@ -14,11 +14,10 @@ from src.core.settings import settings
 from langchain_community.tools.tavily_search import TavilySearchResults  # type: ignore
 from langchain.tools.retriever import create_retriever_tool  # type: ignore
 from langchain_community.vectorstores import Chroma  # type: ignore
+from langchain_community.vectorstores.pgvector import PGVector  # type: ignore
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings  # type: ignore
 from langchain_community.retrievers import BM25Retriever  # type: ignore
 from langchain_core.documents import Document  # type: ignore
-from langchain.schema.agent import AgentFinish
-from langchain_core.exceptions import OutputParserException
 
 from ..rag.hybrid_retriever import HybridRetriever, CrossEncoderReranker
 from ..agent_app.tools import (
@@ -38,37 +37,57 @@ API_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = API_DIR.parents[1]
 
 
-def _handle_parsing_error(error: OutputParserException) -> AgentFinish:
+def _handle_parsing_error(error) -> str:
     """自定义解析错误处理器，向前端返回更友好的信息。"""
     error_text = str(error)
     # 提取LLM的原始输出，这是最关键的信息
     llm_output = getattr(error, 'llm_output', '')
 
-    # 检查是否是“答案和动作并存”的常见错误
+    # 检查是否是"答案和动作并存"的常见错误
     if "Parsing LLM output produced both a final answer and a parse-able action" in error_text:
         # 尝试从原始文本中智能提取 Final Answer
-        # Final Answer 通常是日志的最后一部分
         try:
-            # 健壮地分割字符串，防止 "Final Answer:" 不存在时出错
             parts = llm_output.split("Final Answer:")
             if len(parts) > 1:
                 final_answer = parts[-1].strip()
                 if final_answer:
-                    # 如果成功提取，就用它作为最终输出
-                    return AgentFinish(return_values={"output": final_answer}, log=error_text)
+                    return f"Final Answer: {final_answer}"
         except Exception:
-            # 如果解析失败，则回退到下面的通用错误消息
             pass
         
-        # 如果无法提取，返回一个更友好的通用提示
         response = "模型返回了模糊的响应（同时包含答案和操作），无法自动解析。请您尝试简化问题或调整提问方式。"
     
+    # 检查是否是"Could not parse LLM output"错误（最常见的情况）
+    elif "Could not parse LLM output:" in error_text:
+        # 尝试从错误信息中提取LLM的原始输出
+        try:
+            # 错误格式通常是: "Could not parse LLM output: `实际输出内容`"
+            if "`" in error_text:
+                # 提取反引号之间的内容
+                start = error_text.find("`") + 1
+                end = error_text.rfind("`")
+                if start > 0 and end > start:
+                    raw_output = error_text[start:end].strip()
+                    if raw_output:
+                        # 直接使用LLM的原始输出作为最终答案
+                        return f"Final Answer: {raw_output}"
+            
+            # 如果无法从错误信息中提取，尝试从llm_output中获取
+            if llm_output and llm_output.strip():
+                return f"Final Answer: {llm_output.strip()}"
+                
+        except Exception:
+            pass
+        
+        # 如果都失败了，返回友好提示
+        response = "模型输出格式异常，但内容可能有效。请重新尝试或换个问法。"
+    
     else:
-        # 对于其他未知解析错误，只显示错误摘要，避免暴露过多内部细节
+        # 对于其他未知解析错误
         response = f"模型输出格式无法解析，请稍后重试。"
     
-    # 对于无法自动恢复的错误，包装成 AgentFinish 对象，确保链能正常结束
-    return AgentFinish(return_values={"output": response}, log=error_text)
+    # 返回格式化的错误消息，LangChain 会自动包装成 AgentFinish
+    return f"Final Answer: {response}"
 
 
 def load_prompt_template(path: str) -> ChatPromptTemplate:
@@ -153,7 +172,6 @@ def load_tool(name: str):
 
 
 def create_retriever(config: Dict[str, Any]):
-    persist_dir = config.get("rag_db_path", "./storage/chroma/local")
     collection_name = config.get("collection_name", "local")
     top_k = int(config.get("top_k", 8))
 
@@ -161,24 +179,52 @@ def create_retriever(config: Dict[str, Any]):
         model_name="BAAI/bge-small-zh-v1.5",
         encode_kwargs={"normalize_embeddings": True},
     )
-    vectordb = Chroma(
-        embedding_function=embeddings,
-        persist_directory=persist_dir,
-        collection_name=collection_name,
-    )
+    
+    vectordb = None  # 先声明一个空变量
+    
+    # --- 环境自适应的数据库选择逻辑 ---
+    # 如果环境是 'production'，则使用 PGVector
+    if settings.ENVIRONMENT == "production":
+        print("生产环境，正在连接到 PostgreSQL...")
+        if not settings.DATABASE_URL:
+            raise ValueError("生产环境下 DATABASE_URL 未设置")
+        vectordb = PGVector(
+            connection_string=settings.DATABASE_URL,
+            embedding_function=embeddings,
+            collection_name=collection_name,
+        )
+    # 否则 (默认是开发环境)，使用本地 ChromaDB
+    else:
+        print("开发环境，正在连接到本地 ChromaDB...")
+        persist_dir = config.get("rag_db_path", "./storage/chroma/local")
+        vectordb = Chroma(
+            embedding_function=embeddings,
+            persist_directory=persist_dir,
+            collection_name=collection_name,
+        )
+    # --- 环境自适应逻辑结束 ---
+
     vector_retriever = vectordb.as_retriever(
         search_type="mmr", search_kwargs={"k": top_k, "lambda_mult": 0.5}
     )
 
     bm25: BM25Retriever | None = None
     try:
-        sample_docs = [
-            Document(page_content=t[0]) for t in vectordb.get(include=["documents"])[:200]  # type: ignore
-        ]
+        # 根据不同数据库类型获取样本文档
+        sample_docs = []
+        if settings.ENVIRONMENT == "production":
+            # PGVector 使用 similarity_search 获取文档
+            sample_docs = vectordb.similarity_search(query=" ", k=200)
+        else:
+            # ChromaDB 使用 .get() 方法
+            results = vectordb.get(include=["documents"], limit=200)
+            sample_docs = [Document(page_content=doc) for doc in results.get("documents", [])]
+
         if sample_docs:
             bm25 = BM25Retriever.from_documents(sample_docs)
             bm25.k = top_k
-    except Exception:
+    except Exception as e:
+        print(f"[Warning] BM25Retriever 初始化失败: {e}")
         bm25 = None
 
     reranker: CrossEncoderReranker | None = None
@@ -300,9 +346,9 @@ def create_agent_from_config(config: Dict[str, Any], streaming_override: bool | 
 
     agent = create_react_agent(llm, tools, prompt)
     
-    # 从配置中读取迭代次数和执行时间限制，如果没有配置则使用默认值
-    max_iterations = config.get("max_iterations", 8)
-    max_execution_time = config.get("max_execution_time", 60)
+    # 从配置中读取迭代次数和执行时间限制；若未配置，则使用全局 settings 中的默认值
+    max_iterations = int(config.get("max_iterations", getattr(settings, "DEFAULT_MAX_ITERATIONS", 16)))
+    max_execution_time = int(config.get("max_execution_time", getattr(settings, "DEFAULT_MAX_EXECUTION_TIME", 60)))
     
     executor = AgentExecutor(
         agent=agent,

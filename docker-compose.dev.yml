@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - ENVIRONMENT=development
+    volumes:
+      - ./src:/app/src
+      - ./configs:/app/configs
+      - ./prompts:/app/prompts
+      - ./index.html:/app/index.html
+      - ./frontend/dist:/app/frontend/dist
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    restart: unless-stopped

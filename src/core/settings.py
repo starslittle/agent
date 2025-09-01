@@ -44,9 +44,20 @@ class Settings(BaseSettings):
     # 服务端口（供本地开发使用）
     PORT: int = 8000
     
-    # Agent执行限制（默认值）
-    DEFAULT_MAX_ITERATIONS: int = 8
-    DEFAULT_MAX_EXECUTION_TIME: int = 60
+    # 数据库配置
+    DATABASE_URL: str = ""
+    ENVIRONMENT: str = "development"
+    
+    # 流式分片配置（字符数）。数值越小，chunk 次数越多；0 表示不拆分
+    STREAM_CHUNK_SIZE: int = 24
+
+    # Redis 配置
+    REDIS_URL: str = ""
+    REDIS_TTL: int = 120  # /query 结果缓存默认 120 秒，0 表示禁用
+    
+    # Agent执行限制（默认值，可被 .env 覆盖）
+    DEFAULT_MAX_ITERATIONS: int = 20
+    DEFAULT_MAX_EXECUTION_TIME: int = 90
 
     # 兼容：允许通过逗号分隔或 JSON 数组提供列表
     @staticmethod

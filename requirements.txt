@@ -31,6 +31,16 @@ python-dotenv
 fastapi
 uvicorn[standard]
  
+# For PostgreSQL connection and vector support
+psycopg2-binary
+langchain-postgres
+
+# For BM25 retriever support
+rank_bm25
+
+# Redis client
+redis
+
 # Runtime compatibility pins
 # Fixes: AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
 # Many TF/tf-keras stacks still expect protobuf 3.x APIs.
