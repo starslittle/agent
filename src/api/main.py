@@ -155,11 +155,18 @@ def query(req: QueryRequest):
             agent_name = "default_llm_agent"
             
     elif req.agent_name in ["research", "research_agent"]:
-        # 深度思考模式：启用研究智能路由
+        # 深度思考模式：先对问候/短文本短路回退到简单聊天；否则再受限域路由
         try:
-            routing_result = classify_and_route(req.query, mode_hint="research")
-            agent_name = routing_result["agent_name"]
-            print(f"[MODE] 深度思考路由: {req.query[:30]}... -> {agent_name}")
+            from .intent_router import get_intent_router
+            _router = get_intent_router()
+            intent = _router.classify_intent(req.query)
+            if intent == "chat":
+                agent_name = "default_llm_agent"
+                print(f"[MODE] 深度思考->回退聊天: {req.query[:30]}...")
+            else:
+                routing_result = classify_and_route(req.query, mode_hint="research")
+                agent_name = routing_result["agent_name"]
+                print(f"[MODE] 深度思考路由: {req.query[:30]}... -> {agent_name}")
         except Exception as e:
             print(f"[WARNING] 深度思考模式路由失败，回退到简单聊天: {e}")
             agent_name = "default_llm_agent"
@@ -417,11 +424,18 @@ async def query_stream(req: QueryRequest):
             agent_name = "default_llm_agent"
             
     elif req.agent_name == "research":
-        # 深度思考模式：启用研究智能路由
+        # 深度思考模式（流式）：问候/短文本短路回退；否则再受限域路由
         try:
-            routing_result = classify_and_route(req.query, mode_hint="research")
-            agent_name = routing_result["agent_name"]
-            print(f"[MODE] 深度思考路由（流式）: {req.query[:30]}... -> {agent_name}")
+            from .intent_router import get_intent_router
+            _router = get_intent_router()
+            intent = _router.classify_intent(req.query)
+            if intent == "chat":
+                agent_name = "default_llm_agent"
+                print(f"[MODE] 深度思考->回退聊天（流式）: {req.query[:30]}...")
+            else:
+                routing_result = classify_and_route(req.query, mode_hint="research")
+                agent_name = routing_result["agent_name"]
+                print(f"[MODE] 深度思考路由（流式）: {req.query[:30]}... -> {agent_name}")
         except Exception as e:
             print(f"[WARNING] 深度思考模式路由失败，回退到简单聊天: {e}")
             agent_name = "default_llm_agent"
@@ -531,6 +545,11 @@ def debug_intent(req: QueryRequest):
         }
 
 
+DIST_DIR = (PROJECT_ROOT / "frontend" / "dist").resolve()
+if DIST_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(DIST_DIR), html=True), name="static")
+
+
 @app.get("/")
 def serve_index():
     dist_index = (PROJECT_ROOT / "frontend" / "dist" / "index.html").resolve()
@@ -540,11 +559,6 @@ def serve_index():
     if index_path.exists():
         return FileResponse(index_path)
     raise HTTPException(status_code=404, detail="前端页面未找到：请先在 frontend 目录执行构建")
-
-
-DIST_DIR = (PROJECT_ROOT / "frontend" / "dist").resolve()
-if DIST_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(DIST_DIR), html=True), name="static")
 
 
 if __name__ == "__main__":

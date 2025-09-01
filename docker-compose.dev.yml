@@ -1,14 +1,14 @@
 services:
   app:
     build: .
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
     environment:
       - ENVIRONMENT=development
     volumes:
       - ./src:/app/src
       - ./configs:/app/configs
       - ./prompts:/app/prompts
-      - ./index.html:/app/index.html
+      # - ./index.html:/app/index.html
       - ./frontend/dist:/app/frontend/dist
     ports:
       - "8000:8000"

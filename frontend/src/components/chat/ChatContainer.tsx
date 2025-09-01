@@ -132,7 +132,7 @@ export const ChatContainer: React.FC = () => {
   }, [messages]);
 
   return (
-    <section className="w-full max-w-3xl mx-auto">
+    <section className="w-full max-w-5xl mx-auto">
       <header className="mb-6 flex items-center justify-between gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-tr from-primary to-accent bg-clip-text text-transparent">奇点AI · 智能体对话</h1>
         <div className="flex items-center gap-2"><Button variant="default" className="hidden sm:inline-flex">全局设置</Button></div>

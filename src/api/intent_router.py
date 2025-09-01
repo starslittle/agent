@@ -70,6 +70,14 @@ class IntentRouter:
             "谢谢", "不客气", "没关系", "好的", "嗯", "哦", "是的",
             "你是谁", "介绍", "功能", "能做什么", "怎么用"
         }
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        """去掉空白与常见标点，仅保留中英文与数字，便于稳健判定问候。"""
+        import re
+        s = (text or "").strip()
+        # 仅保留中文、英文、数字
+        return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]", "", s)
     
     def classify_intent(self, user_input: str) -> Literal["chat", "task"]:
         """
@@ -86,13 +94,14 @@ class IntentRouter:
         
         user_input = user_input.strip()
         
-        # 第一优先级：简单问候和常见聊天，直接返回chat（避免不必要的LLM调用）
-        simple_greetings = ["你好", "hi", "hello", "嗨", "您好"]
-        if user_input.lower() in [g.lower() for g in simple_greetings]:
+        # 第一优先级：简单问候与极短文本，直接返回 chat（避免不必要的LLM 调用）
+        norm = self._normalize_text(user_input)
+        simple_greetings = ["你好", "您好", "嗨", "hi", "hello"]
+        if norm.lower() in [g.lower() for g in simple_greetings]:
             return "chat"
         
-        # 第二优先级：包含聊天关键词且长度较短（小于20字符），直接判断为chat
-        if len(user_input) <= 20 and any(keyword in user_input.lower() for keyword in self.chat_keywords):
+        # 第二优先级：包含聊天关键词且长度较短（小于20字符），直接判断为 chat
+        if len(norm) <= 20 and any(keyword in user_input.lower() for keyword in self.chat_keywords):
             return "chat"
         
         # 第三优先级：明确的任务关键词，直接判断为task
