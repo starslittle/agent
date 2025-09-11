@@ -1,14 +1,40 @@
-version: "3.9"
 services:
   app:
     build: .
     container_name: qidian-agent
     ports:
       - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://my_agent:tangtao0123456@postgres:5432/agent_db?options=-cclient_encoding%3DUTF8
+      - HF_ENDPOINT=https://hf-mirror.com
+    dns:
+      - 223.5.5.5
+    volumes:
+      - ./src:/app/src
+      - ./configs:/app/configs
+      - ./prompts:/app/prompts
+      - ./data:/app/data
+      - ./storage:/app/storage
+      - ./frontend/dist:/app/frontend/dist
     env_file:
       - .env
     depends_on:
       - redis
+      - postgres
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: qidian-postgres
+    environment:
+      POSTGRES_DB: agent_db
+      POSTGRES_USER: my_agent
+      POSTGRES_PASSWORD: tangtao0123456
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/init_pgvector.sql
     restart: unless-stopped
 
   redis:
@@ -17,3 +43,6 @@ services:
     ports:
       - "6379:6379"
     restart: unless-stopped
+
+volumes:
+  postgres_data:

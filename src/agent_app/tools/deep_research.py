@@ -8,7 +8,7 @@ from src.core.settings import settings
 
 
 
-def _synthesize_with_llm(prompt: str, model: str = "qwen-turbo-2025-07-15") -> str:
+def _synthesize_with_llm(prompt: str, model: str = "qwen-plus-2025-07-14") -> str:
     llm = ChatTongyi(model=model, temperature=0.2, dashscope_api_key=settings.DASHSCOPE_API_KEY)
     return llm.invoke(prompt).content  # type: ignore
 

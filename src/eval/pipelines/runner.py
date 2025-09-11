@@ -114,7 +114,7 @@ def run_eval(cfg_path: str):
     )
 
     # 使用达摩盘/通义千问作为评估 LLM，避免 ragas 默认走 OpenAI
-    llm = ChatTongyi(model="qwen-turbo-2025-07-15", temperature=0.2, dashscope_api_key=settings.DASHSCOPE_API_KEY)
+    llm = ChatTongyi(model="qwen-plus-2025-07-14", temperature=0.2, dashscope_api_key=settings.DASHSCOPE_API_KEY)
 
     # 评估用中文向量模型，避免 ragas 默认走 OpenAIEmbeddings
     hf_embeddings = HuggingFaceBgeEmbeddings(model_name=settings.EVAL_EMBED_MODEL, encode_kwargs={"normalize_embeddings": True})

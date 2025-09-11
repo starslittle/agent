@@ -20,6 +20,15 @@ pyyaml
 chromadb
 unstructured[local-inference]
 
+# PDF processing (choose one or more)
+PyPDF2
+pdfplumber
+pymupdf
+
+# DOCX processing
+python-docx
+docx2txt
+
 # Data handling
 pandas
 tabulate

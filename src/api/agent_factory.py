@@ -13,7 +13,6 @@ from langchain_core.runnables import RunnableLambda  # type: ignore
 from src.core.settings import settings
 from langchain_community.tools.tavily_search import TavilySearchResults  # type: ignore
 from langchain.tools.retriever import create_retriever_tool  # type: ignore
-from langchain_community.vectorstores import Chroma  # type: ignore
 from langchain_community.vectorstores.pgvector import PGVector  # type: ignore
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings  # type: ignore
 from langchain_community.retrievers import BM25Retriever  # type: ignore
@@ -171,8 +170,8 @@ def load_tool(name: str):
     raise ValueError(f"未知工具: {name}")
 
 
-def create_retriever(config: Dict[str, Any]):
-    collection_name = config.get("collection_name", "local")
+def create_retriever(config: Dict[str, Any], metadata_filter: Dict[str, Any] = None):
+    collection_name = config.get("collection_name", "rag_documents")  # 统一使用 rag_documents 集合
     top_k = int(config.get("top_k", 8))
 
     embeddings = HuggingFaceBgeEmbeddings(
@@ -180,49 +179,41 @@ def create_retriever(config: Dict[str, Any]):
         encode_kwargs={"normalize_embeddings": True},
     )
     
-    vectordb = None  # 先声明一个空变量
+    # --- 统一使用 PGVector ---
+    print(f"正在连接到 PostgreSQL (collection: {collection_name})...")
+    if not settings.DATABASE_URL:
+        raise ValueError("DATABASE_URL 未设置，请检查环境配置")
     
-    # --- 环境自适应的数据库选择逻辑 ---
-    # 如果环境是 'production'，则使用 PGVector
-    if settings.ENVIRONMENT == "production":
-        print("生产环境，正在连接到 PostgreSQL...")
-        if not settings.DATABASE_URL:
-            raise ValueError("生产环境下 DATABASE_URL 未设置")
-        vectordb = PGVector(
-            connection_string=settings.DATABASE_URL,
-            embedding_function=embeddings,
-            collection_name=collection_name,
-        )
-    # 否则 (默认是开发环境)，使用本地 ChromaDB
-    else:
-        print("开发环境，正在连接到本地 ChromaDB...")
-        persist_dir = config.get("rag_db_path", "./storage/chroma/local")
-        vectordb = Chroma(
-            embedding_function=embeddings,
-            persist_directory=persist_dir,
-            collection_name=collection_name,
-        )
-    # --- 环境自适应逻辑结束 ---
+    print("Effective DATABASE_URL =", settings.DATABASE_URL)
+    vectordb = PGVector(
+        connection_string=settings.DATABASE_URL,
+        embedding_function=embeddings,
+        collection_name=collection_name,
+    )
+    
+    # 构建搜索参数，支持元数据过滤
+    search_kwargs = {"k": top_k, "lambda_mult": 0.5}
+    if metadata_filter:
+        search_kwargs["filter"] = metadata_filter
+        print(f"应用元数据过滤: {metadata_filter}")
 
     vector_retriever = vectordb.as_retriever(
-        search_type="mmr", search_kwargs={"k": top_k, "lambda_mult": 0.5}
+        search_type="mmr", search_kwargs=search_kwargs
     )
 
     bm25: BM25Retriever | None = None
     try:
-        # 根据不同数据库类型获取样本文档
-        sample_docs = []
-        if settings.ENVIRONMENT == "production":
-            # PGVector 使用 similarity_search 获取文档
-            sample_docs = vectordb.similarity_search(query=" ", k=200)
-        else:
-            # ChromaDB 使用 .get() 方法
-            results = vectordb.get(include=["documents"], limit=200)
-            sample_docs = [Document(page_content=doc) for doc in results.get("documents", [])]
+        # 从 PGVector 获取样本文档用于 BM25Retriever 初始化
+        sample_search_kwargs = {"k": 200}
+        if metadata_filter:
+            sample_search_kwargs["filter"] = metadata_filter
+            
+        sample_docs = vectordb.similarity_search(query=" ", **sample_search_kwargs)
 
         if sample_docs:
             bm25 = BM25Retriever.from_documents(sample_docs)
             bm25.k = top_k
+            print(f"BM25Retriever 初始化成功，使用 {len(sample_docs)} 个文档")
     except Exception as e:
         print(f"[Warning] BM25Retriever 初始化失败: {e}")
         bm25 = None
@@ -252,7 +243,7 @@ def create_retriever(config: Dict[str, Any]):
 
 
 def create_agent_from_config(config: Dict[str, Any], streaming_override: bool | None = None) -> AgentExecutor:
-    model_name = (config.get("llm") or "qwen-turbo-2025-07-15").strip()
+    model_name = (config.get("llm") or "qwen-plus-2025-07-14").strip()
     api_key = settings.DASHSCOPE_API_KEY or ""
     if not api_key:
         print("[WARNING] DASHSCOPE_API_KEY 未设置，禁用流式模式（Agent 将使用非流式）")
