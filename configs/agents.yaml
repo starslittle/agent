@@ -28,8 +28,8 @@ agents:
       top_k: 10
       rerank: true
       prompt_template_path: "./prompts/fortune_general_prompt.txt"
-      max_iterations: 12
-      max_execution_time: 120
+      max_iterations: 24
+      max_execution_time: 600
 
   - name: "general_rag_agent"
     description: "通用RAG问答代理，支持日期/天气、本地PDF/CSV、Notion 以及 Tavily 搜索（ReAct）。"
