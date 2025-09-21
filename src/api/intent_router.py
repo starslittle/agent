@@ -53,7 +53,7 @@ class IntentRouter:
     def __init__(self):
         """初始化路由器"""
         self.llm = ChatTongyi(
-            model="qwen-plus-2025-07-14",
+            model="qwen-plus-2025-07-28",
             temperature=0.1,  # 使用较低的温度确保判断的一致性
             dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
         )

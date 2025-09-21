@@ -29,7 +29,7 @@ from agent_app.tools import (
 
 
 def main():
-    llm = ChatTongyi(model="qwen-plus-2025-07-14", temperature=0.2, dashscope_api_key=settings.DASHSCOPE_API_KEY)
+    llm = ChatTongyi(model="qwen-plus-2025-07-28", temperature=0.2, dashscope_api_key=settings.DASHSCOPE_API_KEY)
     tools = [
         TavilySearch(max_results=1),
         get_current_date,

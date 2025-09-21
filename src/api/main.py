@@ -312,7 +312,7 @@ async def stream_agent_response(executor, invoke_params: Dict) -> AsyncGenerator
                     user_prompt = f"{user_prompt}\n\n[背景]\n{context_text}"
 
                 responses = Generation.call(
-                    model="qwen-plus-2025-07-14",
+                    model="qwen-plus-2025-07-28",
                     input={
                         "messages": [
                             {"role": "system", "content": system_prompt},

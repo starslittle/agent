@@ -27,9 +27,9 @@ class Settings(BaseSettings):
     SENIVERSE_API_KEY: str = ""
 
     # RAG / 模型相关（默认值与现有代码保持一致）
-    LLM_MODEL_NAME: str = "qwen-plus-2025-07-14"
+    LLM_MODEL_NAME: str = "qwen-plus-2025-07-28"
     EMBED_MODEL_NAME: str = "BAAI/bge-small-zh-v1.5"
-    FORTUNE_LLM_MODEL: str = "qwen-plus-2025-07-14"
+    FORTUNE_LLM_MODEL: str = "qwen-plus-2025-07-28"
     EVAL_EMBED_MODEL: str = "BAAI/bge-small-zh-v1.5"
 
     # 数据路径（可选覆盖）

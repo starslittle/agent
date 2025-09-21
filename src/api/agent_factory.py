@@ -243,7 +243,7 @@ def create_retriever(config: Dict[str, Any], metadata_filter: Dict[str, Any] = N
 
 
 def create_agent_from_config(config: Dict[str, Any], streaming_override: bool | None = None) -> AgentExecutor:
-    model_name = (config.get("llm") or "qwen-plus-2025-07-14").strip()
+    model_name = (config.get("llm") or "qwen-plus-2025-07-28").strip()
     api_key = settings.DASHSCOPE_API_KEY or ""
     if not api_key:
         print("[WARNING] DASHSCOPE_API_KEY 未设置，禁用流式模式（Agent 将使用非流式）")
