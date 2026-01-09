@@ -114,13 +114,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                   return <p className="mb-2 last:mb-0">{children}</p>;
                 },
                 ul({ children }: any) {
-                  return <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>;
+                  return <ul className="list-disc list-outside ml-5 mb-2 space-y-1">{children}</ul>;
                 },
                 ol({ children }: any) {
-                  return <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>;
+                  return <ol className="list-decimal list-outside ml-5 mb-2 space-y-1">{children}</ol>;
                 },
                 li({ children }: any) {
-                  return <li className="ml-2">{children}</li>;
+                  return <li>{children}</li>;
                 },
                 a({ href, children }: any) {
                   return (

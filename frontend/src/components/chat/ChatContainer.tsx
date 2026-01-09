@@ -36,6 +36,17 @@ export const ChatContainer: React.FC = () => {
     });
   }, [messages]);
 
+  const [isGenerating, setIsGenerating] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleStop = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsGenerating(false);
+    }
+  }, []);
+
   const handleSend = useCallback(async (text: string, deep: boolean, fortune: boolean) => {
     const userMsg: Message = { id: uid(), role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
@@ -43,6 +54,15 @@ export const ChatContainer: React.FC = () => {
     const assistantId = uid();
     // 初始状态：thinking 为 true，content 为空
     setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "", thinking: true }]);
+
+    // 如果有之前的请求，取消它
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setIsGenerating(true);
 
     try {
       const agentName = fortune ? "fortune_agent" : (deep ? "research_agent" : undefined);
@@ -78,7 +98,8 @@ export const ChatContainer: React.FC = () => {
               return m;
             })
           );
-        }
+        },
+        controller.signal
       );
       
       if (!accumulatedContent) {
@@ -86,6 +107,14 @@ export const ChatContainer: React.FC = () => {
       }
 
     } catch (err: unknown) {
+      // 如果是用户手动停止，不做错误处理，只确保 thinking 结束
+      if ((err as Error).name === "AbortError") {
+        setMessages((prev) => prev.map((m) => 
+          m.id === assistantId ? { ...m, thinking: false } : m
+        ));
+        return;
+      }
+
       console.error("对话失败:", err);
       setMessages((prev) => prev.map((m) => 
         m.id === assistantId 
@@ -96,6 +125,9 @@ export const ChatContainer: React.FC = () => {
             }
           : m
       ));
+    } finally {
+      setIsGenerating(false);
+      abortControllerRef.current = null;
     }
   }, [messages]);
 
@@ -116,7 +148,7 @@ export const ChatContainer: React.FC = () => {
       </main>
 
       <footer className="sticky bottom-4">
-        <ChatInput onSend={handleSend} />
+        <ChatInput onSend={handleSend} loading={isGenerating} onStop={handleStop} />
         <p className="mt-3 text-xs text-gray-500 text-center">思考过程仅作内部推理提示，不展示隐私性内容。</p>
       </footer>
     </section>

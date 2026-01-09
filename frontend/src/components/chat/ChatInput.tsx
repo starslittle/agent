@@ -3,17 +3,20 @@ import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Plus, Send } from "lucide-react";
+import { Plus, Send, Square } from "lucide-react";
 
 interface ChatInputProps {
   onSend: (text: string, deepThinking: boolean, fortuneMode: boolean) => void;
+  loading?: boolean;
+  onStop?: () => void;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
+export const ChatInput: React.FC<ChatInputProps> = ({ onSend, loading, onStop }) => {
   const [value, setValue] = useState("");
   const [deep, setDeep] = useState(false);
   const [fortune, setFortune] = useState(false);
-  const [sending, setSending] = useState(false);
+  // local sending state still useful for debounce/prevent double click
+  const [sending, setSending] = useState(false); 
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -127,13 +130,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
           aria-label="聊天输入"
         />
 
-        {/* 发送按钮 */}
+        {/* 发送/停止按钮 */}
         <button
-          disabled={sending || (!value.trim() && !file)}
-          onClick={handleSend}
-          className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 flex items-center justify-center transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!loading && (sending || (!value.trim() && !file))}
+          onClick={loading ? onStop : handleSend}
+          className={cn(
+            "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed",
+            "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+          )}
+          title={loading ? "停止生成" : "发送消息"}
         >
-          <Send size={18} className="text-white" />
+          {loading ? (
+            <Square size={14} className="text-white fill-white" />
+          ) : (
+            <Send size={18} className="text-white" />
+          )}
         </button>
       </div>
 
