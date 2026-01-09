@@ -148,7 +148,17 @@ def load_prompt_template(path: str) -> ChatPromptTemplate:
 def load_tool(name: str):
     key = name.strip().lower()
     if key in {"tavily", "tavily_search_results_json"}:
-        return TavilySearchResults(max_results=5)
+        try:
+            return TavilySearchResults(max_results=5)
+        except Exception as e:
+            print(f"[WARNING] 初始化 Tavily 失败，使用占位工具代替: {e}")
+            from langchain_core.tools import tool
+            @tool
+            def tavily_placeholder(query: str) -> str:
+                """Tavily 搜索不可用时的占位工具。"""
+                return "搜索功能暂时不可用 (TAVILY_API_KEY 未配置)"
+            return tavily_placeholder
+
     if key == "get_current_date":
         return get_current_date
     if key == "get_seniverse_weather":

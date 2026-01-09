@@ -39,80 +39,73 @@ export interface StreamChunk {
   message?: string;
 }
 
-export async function postQueryStream(
+// SSE 流式输出函数
+export async function postQueryStreamSSE(
   payload: QueryPayload,
   onDelta: (delta: string) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  console.log("开始流式请求:", payload);
   const base = getApiBase();
   
-  const res = await fetch(`${base}/query_stream`, {
+  const res = await fetch(`${base}/query_stream_sse`, {
     method: "POST",
     headers: { 
       "Content-Type": "application/json",
-      "Accept": "application/x-ndjson"
+      "Accept": "text/event-stream"
     },
     body: JSON.stringify(payload),
     signal,
   });
 
-  console.log("流式响应状态:", res.status);
-  console.log("流式响应头:", [...res.headers.entries()]);
-
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`流式请求失败(${res.status}): ${txt || res.statusText}`);
+    throw new Error(`SSE 请求失败(${res.status}): ${txt || res.statusText}`);
   }
 
   const body = res.body;
-  if (!body) {
-    throw new Error("无法获取响应流");
-  }
+  if (!body) throw new Error("无法获取响应流");
+  
   const reader = body.getReader();
-
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
-  let chunkCount = 0;
 
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) {
-        console.log("流式读取完成，总块数:", chunkCount);
-        break;
-      }
+      if (done) break;
 
-      const text = decoder.decode(value, { stream: true });
-      buffer += text;
-      // 控制台打印可能导致性能问题，保留但可注释
-      // console.log("收到原始数据:", text);
-      
+      const chunk = decoder.decode(value, { stream: true });
+      buffer += chunk;
+
+      // 🔥 改为逐行解析：不再强依赖 \n\n
       const lines = buffer.split("\n");
-      buffer = lines.pop() || ""; // 保留最后一个不完整的行
+      
+      // 保留最后一行（可能不完整）
+      buffer = lines.pop() || "";
 
       for (const line of lines) {
-        if (!line.trim()) continue;
-        
-        chunkCount++;
-        console.log(`处理第${chunkCount}行:`, line);
-        
-        try {
-          const chunk: StreamChunk = JSON.parse(line);
-          // console.log("解析结果:", chunk);
+        const trimmed = line.trim();
+        // 忽略空行、注释、event: 行
+        if (!trimmed || trimmed.startsWith(":") || trimmed.startsWith("event:")) continue;
+
+        if (trimmed.startsWith("data: ")) {
+          const jsonStr = trimmed.slice(6); // 去掉 "data: "
           
-          if (chunk.type === "delta" && chunk.data) {
-            // console.log("调用onDelta:", chunk.data);
-            onDelta(chunk.data);
-          } else if (chunk.type === "error") {
-            throw new Error(chunk.message || "流式处理出错");
-          } else if (chunk.type === "done") {
-            // console.log("收到完成信号");
-            return; // 正常结束
+          if (jsonStr === "[DONE]") return;
+
+          try {
+            const data: StreamChunk = JSON.parse(jsonStr);
+            
+            if (data.type === "delta" && data.data) {
+              onDelta(data.data);
+            } else if (data.type === "error") {
+              console.error("[API] 服务器错误:", data.message);
+            } else if (data.type === "done") {
+              return;
+            }
+          } catch (e) {
+            // 跳过不完整的JSON（极少见）
           }
-        } catch (parseError) {
-          console.warn("解析流式响应失败:", line, parseError);
-          // 不抛出错误，继续处理其他行
         }
       }
     }

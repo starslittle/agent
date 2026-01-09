@@ -10,7 +10,7 @@ def get_seniverse_weather(location: str) -> str:
     """
     api_key = settings.SENIVERSE_API_KEY or ""
     if not api_key:
-        return "错误：未配置 SENIVERSE_API_KEY。"
+        return "错误：未配置 SENIVERSE_API_KEY (天气查询功能暂时不可用)。"
     # 现在接口：当前天气 + 未来三日预报，便于拿最高/最低温
     now_url = "https://api.seniverse.com/v3/weather/now.json"
     daily_url = "https://api.seniverse.com/v3/weather/daily.json"

@@ -31,7 +31,7 @@ services:
       POSTGRES_USER: my_agent
       POSTGRES_PASSWORD: tangtao0123456
     ports:
-      - "5432:5432"
+      - "5437:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/init_pgvector.sql
@@ -41,7 +41,7 @@ services:
     image: redis:7
     container_name: qidian-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     restart: unless-stopped
 
 volumes:

@@ -10,9 +10,21 @@ export default defineConfig(({ mode }) => ({
     port: 5173,
     proxy: {
       "/query": {
-        target: "http://localhost:8000",
+        target: "http://localhost:8002",
         changeOrigin: true,
-      },  
+      },
+      "/query_stream": {
+        target: "http://localhost:8002",
+        changeOrigin: true,
+      },
+      "/api": {
+        target: "http://localhost:8002",
+        changeOrigin: true,
+      },
+      "/healthz": {
+        target: "http://localhost:8002",
+        changeOrigin: true,
+      },
     },
   },
   plugins: [
