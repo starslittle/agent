@@ -126,7 +126,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, loading, onStop })
           onInput={autosize}
           rows={1}
           placeholder="输入消息... Enter 发送，Shift+Enter 换行"
-          className="flex-1 max-h-40 overflow-y-auto border-0 shadow-none focus-visible:ring-0 bg-transparent px-0 text-sm leading-5 text-gray-800 min-h-[24px]"
+          className="flex-1 max-h-20 overflow-y-auto border-0 shadow-none focus-visible:ring-0 bg-transparent px-0 text-sm leading-5 text-gray-800 min-h-[24px]"
           aria-label="聊天输入"
         />
 
