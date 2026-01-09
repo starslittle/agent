@@ -1,0 +1,9 @@
+---
+alwaysApply: true
+---
+
+# Python Environment & Package Management
+
+- Always prioritize using `uv` for Python package installation and environment management.
+- Use `uv pip install` instead of `pip install` where possible.
+- Use `uv venv` for creating virtual environments.
