@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import List, Optional
 
 import chromadb
-import requests
 import pandas as pd
 
 from llama_index.core import Settings
@@ -17,7 +16,6 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 # 新增：引擎模块
 from .engines.local import LocalEngine
-from .engines.notion import NotionEngine
 from .engines.pandas_engine import PandasEngine
 
 
@@ -25,39 +23,6 @@ from .engines.pandas_engine import PandasEngine
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 from src.core.settings import settings
-
-
-def _format_uuid_with_hyphens(uuid_str: str) -> str:
-    s = (uuid_str or "").strip()
-    if not s:
-        return s
-    if "-" in s:
-        return s
-    if len(s) == 32:
-        return f"{s[0:8]}-{s[8:12]}-{s[12:16]}-{s[16:20]}-{s[20:32]}"
-    return s
-
-
-def _fetch_page_ids_from_database(notion_api_key: str, database_id: str) -> List[str]:
-    """在缺少 NotionDatabaseReader 时，通过官方 API 枚举数据库下的页面 id。"""
-    headers = {
-        "Authorization": f"Bearer {notion_api_key}",
-        "Notion-Version": "2022-06-28",
-        "Content-Type": "application/json",
-    }
-    did = _format_uuid_with_hyphens(database_id)
-    url = f"https://api.notion.com/v1/databases/{did}/query"
-    try:
-        resp = requests.post(url, headers=headers, json={"page_size": 100}, timeout=60)
-        if resp.status_code >= 400:
-            logger.warning(f"列举数据库页面失败: {resp.status_code} {resp.text}")
-            return []
-        data = resp.json()
-        ids = [x.get("id") for x in data.get("results", []) if x.get("id")]
-        return ids
-    except Exception as e:
-        logger.warning(f"请求数据库页面列表失败: {e}")
-        return []
 
 
 class RAGConfig:
@@ -79,19 +44,10 @@ class RAGConfig:
     # 新字段：将不同引擎的向量库分目录存放
     CHROMA_BASE_DIR: str = str(BASE_DIR / "storage" / "chroma")
     CHROMA_LOCAL_DIR: str = str(BASE_DIR / "storage" / "chroma" / "local")
-    CHROMA_NOTION_DIR: str = str(BASE_DIR / "storage" / "chroma" / "notion")
     LOCAL_COLLECTION_NAME: str = "local"
-    NOTION_COLLECTION_NAME: str = "notion"
     # 允许通过环境变量 CSV_FILE_PATH 指定 CSV 路径；默认指向 data/raw 目录
     CSV_FILE_PATH: str = settings.CSV_FILE_PATH or str(BASE_DIR / "data" / "sales_data.csv")
     CSV_DIR_PATH: str = settings.CSV_DIR_PATH or str(BASE_DIR / "data" / "raw")
-
-    # Notion 配置
-    ENABLE_NOTION: bool = bool(settings.ENABLE_NOTION)
-    NOTION_API_KEY: str = settings.NOTION_API_KEY
-    NOTION_PAGE_IDS: List[str] = list(settings.NOTION_PAGE_IDS or [])
-    NOTION_DATABASE_ID: str = settings.NOTION_DATABASE_ID
-
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -102,7 +58,6 @@ class RAGSystem:
         self.config = config
         self._setup_settings()
         self.rag_query_engine: Optional[BaseQueryEngine] = None
-        self.notion_query_engine: Optional[BaseQueryEngine] = None
         self.pandas_query_engine: Optional[BaseQueryEngine] = None
         self.tools: List[QueryEngineTool] = []
 
@@ -125,10 +80,6 @@ class RAGSystem:
         logger.info("--- 构建/加载 本地文档 RAG 引擎 ---")
         self.rag_query_engine = LocalEngine(self.config).build()
 
-    def _build_notion_engine(self):
-        logger.info("--- 构建/加载 Notion RAG 引擎 ---")
-        self.notion_query_engine = NotionEngine(self.config).build()
-
     def _build_pandas_engine(self):
         logger.info("--- 构建/加载 Pandas 数据查询引擎 ---")
         self.pandas_query_engine = PandasEngine(self.config).build()
@@ -142,16 +93,6 @@ class RAGSystem:
                     metadata=ToolMetadata(
                         name="document_analyzer",
                         description="本地非结构化文档（如 PDF/TXT）检索与问答。",
-                    ),
-                )
-            )
-        if self.notion_query_engine:
-            self.tools.append(
-                QueryEngineTool(
-                    query_engine=self.notion_query_engine,
-                    metadata=ToolMetadata(
-                        name="notion_knowledge_base",
-                        description="Notion 工作区知识库检索与问答。",
                     ),
                 )
             )
@@ -192,15 +133,12 @@ class RAGSystem:
 
     def startup(self):
         self._build_local_rag_engine()
-        self._build_notion_engine()
         self._build_pandas_engine()
         self._setup_tools()
 
-    def get_query_engine(self, source: str = "notion") -> Optional[BaseQueryEngine]:
-        source = (source or "notion").lower()
+    def get_query_engine(self, source: str = "local") -> Optional[BaseQueryEngine]:
+        source = (source or "local").lower()
         # 兼容旧名称与工具名称
-        if source in ("notion", "notion_knowledge_base"):
-            return self.notion_query_engine
         if source in ("local", "document_analyzer"):
             return self.rag_query_engine
         if source in ("pandas", "sales_data_analyzer"):

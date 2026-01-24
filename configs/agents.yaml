@@ -34,7 +34,7 @@ agents:
 #      max_execution_time: 600
 
 #  - name: "general_rag_agent"
-#    description: "通用RAG问答代理，支持日期/天气、本地PDF/CSV、Notion 以及 Tavily 搜索（ReAct）。"
+#    description: "通用RAG问答代理，支持日期/天气、本地PDF/CSV 以及 Tavily 搜索（ReAct）。"
 #    is_default: false
 #    config:
 #      llm: "deepseek-v3.2"
@@ -46,8 +46,6 @@ agents:
 #          "query_local_kb",
 #          "init_pandas_rag",
 #          "query_pandas_data",
-#          "init_notion_rag",
-#          "query_notion_kb",
 #          "tavily_search_results_json",
 #          "deep_research",
 #        ]
