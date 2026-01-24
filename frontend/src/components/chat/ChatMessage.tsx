@@ -6,8 +6,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Bot, Copy, Check } from "lucide-react";
+import { Bot, Copy, Check, Brain, ChevronDown, ChevronRight } from "lucide-react";
 import { useSmoothTyping } from "@/hooks/useSmoothTyping";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export type ChatRole = "user" | "assistant";
 
@@ -15,17 +16,82 @@ export interface ChatMessageProps {
   role: ChatRole;
   content: string;
   thinking?: boolean;
+  thinkingFinished?: boolean;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinking }) => {
+const ThinkingProcess: React.FC<{ thoughts: string[]; thinkingFinished?: boolean }> = ({ thoughts, thinkingFinished }) => {
+  const [isOpen, setIsOpen] = React.useState(true);
+
+  React.useEffect(() => {
+    if (thinkingFinished) {
+      setIsOpen(false);
+    }
+  }, [thinkingFinished]);
+
+  if (thoughts.length === 0) return null;
+
+  return (
+    <div className="mb-4">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full">
+        <CollapsibleTrigger className="flex items-center gap-2 text-xs font-medium text-purple-600 hover:text-purple-700 transition-colors group">
+          <div className="flex items-center gap-1.5 bg-purple-50 px-2 py-1 rounded-md border border-purple-100 group-hover:bg-purple-100 transition-colors">
+            <Brain size={14} className="text-purple-500" />
+            <span>深度思考</span>
+            {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2 pl-3 border-l-2 border-purple-100 space-y-1.5">
+          {thoughts.map((thought, index) => (
+            <div key={index} className="text-xs text-gray-500 leading-relaxed">
+              {thought}
+            </div>
+          ))}
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+};
+
+const parseContent = (content: string) => {
+  const lines = content.split("\n");
+  const thoughts: string[] = [];
+  const answerLines: string[] = [];
+  let isCollectingThoughts = true;
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    // 识别思维过程的标识符
+    if (isCollectingThoughts && (trimmedLine.startsWith("【计划】") || trimmedLine.startsWith("【步骤】"))) {
+      thoughts.push(trimmedLine);
+    } else if (isCollectingThoughts && thoughts.length > 0 && trimmedLine === "") {
+      // 思维过程中的空行跳过
+      continue;
+    } else {
+      // 一旦遇到非思维标识符的内容，后续全部视为正式回答
+      if (trimmedLine !== "" || !isCollectingThoughts) {
+        isCollectingThoughts = false;
+        answerLines.push(line);
+      }
+    }
+  }
+
+  return {
+    thoughts,
+    answer: answerLines.join("\n").trim(),
+  };
+};
+
+export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinking, thinkingFinished }) => {
   const isUser = role === "user";
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null);
 
-  // 始终调用 hook，但是在 hook 内部或使用结果时处理逻辑
-  // 这里的策略是：始终计算 typedContent，但如果是用户消息，我们直接忽略计算结果使用原始 content
-  // 这种方式虽然稍微多一点计算，但符合 React Rules of Hooks
   const typedContent = useSmoothTyping(content, thinking);
   const displayedContent = isUser ? content : typedContent;
+
+  const { thoughts, answer } = React.useMemo(() => {
+    if (isUser) return { thoughts: [], answer: displayedContent };
+    return parseContent(displayedContent);
+  }, [displayedContent, isUser]);
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -51,13 +117,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
             : "rounded-2xl px-4 py-3 bg-white border border-gray-200 text-gray-800 max-w-[80%] shadow-sm"
         }
       >
-        {thinking ? (
+        {thinking && !displayedContent ? (
           <div className="space-y-2">
             <div className="h-4 w-40 bg-gray-200 rounded animate-pulse" />
             <div className="h-4 w-64 bg-gray-200 rounded animate-pulse" />
           </div>
         ) : (
           <div className={`text-sm leading-7 break-words ${isUser ? 'prose-invert' : ''}`}>
+            {!isUser && <ThinkingProcess thoughts={thoughts} thinkingFinished={thinkingFinished} />}
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -191,7 +258,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                 },
               }}
             >
-              {displayedContent || ""}
+              {answer || ""}
             </ReactMarkdown>
           </div>
         )}

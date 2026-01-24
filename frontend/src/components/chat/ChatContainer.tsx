@@ -8,6 +8,7 @@ interface Message {
   role: ChatRole;
   content: string;
   thinking?: boolean;
+  thinkingFinished?: boolean;
 }
 
 function uid() {
@@ -53,7 +54,7 @@ export const ChatContainer: React.FC = () => {
 
     const assistantId = uid();
     // 初始状态：thinking 为 true，content 为空
-    setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "", thinking: true }]);
+    setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "", thinking: true, thinkingFinished: false }]);
 
     // 如果有之前的请求，取消它
     if (abortControllerRef.current) {
@@ -82,17 +83,18 @@ export const ChatContainer: React.FC = () => {
       
       await postQueryStreamGraph(
         payload,
-        (delta: string) => {
+        (delta: string, isThinking?: boolean, thinkingFinished?: boolean) => {
           accumulatedContent += delta;
-          
+
           // 在回调中直接更新主状态
-          setMessages((prev) => 
+          setMessages((prev) =>
             prev.map((m) => {
               if (m.id === assistantId) {
-                return { 
-                  ...m, 
-                  content: accumulatedContent, 
-                  thinking: false // 一旦开始收到字，就结束思考状态
+                return {
+                  ...m,
+                  content: accumulatedContent,
+                  thinking: isThinking ?? m.thinking,
+                  thinkingFinished: thinkingFinished ?? m.thinkingFinished,
                 };
               }
               return m;
@@ -143,7 +145,7 @@ export const ChatContainer: React.FC = () => {
         <div className="flex flex-col gap-6 pb-4">
           {messages.map((m) => (
             <div key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-              <ChatMessage role={m.role} content={m.content} thinking={m.thinking} />
+              <ChatMessage role={m.role} content={m.content} thinking={m.thinking} thinkingFinished={m.thinkingFinished} />
             </div>
           ))}
         </div>

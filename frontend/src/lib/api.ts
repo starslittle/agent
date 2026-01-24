@@ -16,6 +16,8 @@ export interface StreamChunk {
   type: "delta" | "done" | "error";
   data?: string;
   message?: string;
+  isThinking?: boolean;
+  thinkingFinished?: boolean;
 }
 
 // SSE 流式输出函数
@@ -96,7 +98,7 @@ export async function postQueryStreamSSE(
 // 基于 LangGraph 的流式输出函数
 export async function postQueryStreamGraph(
   payload: QueryPayload,
-  onDelta: (delta: string) => void,
+  onDelta: (delta: string, isThinking?: boolean, thinkingFinished?: boolean) => void,
   signal?: AbortSignal
 ): Promise<void> {
   const base = getApiBase();
@@ -145,7 +147,7 @@ export async function postQueryStreamGraph(
           try {
             const data: StreamChunk = JSON.parse(jsonStr);
             if (data.type === "delta" && data.data) {
-              onDelta(data.data);
+              onDelta(data.data, data.isThinking, data.thinkingFinished);
             } else if (data.type === "done") {
               return;
             }
