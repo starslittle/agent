@@ -17,6 +17,10 @@ export default defineConfig(({ mode }) => ({
         target: "http://localhost:8002",
         changeOrigin: true,
       },
+      "/query_stream_sse": {
+        target: "http://localhost:8002",
+        changeOrigin: true,
+      },
       "/api": {
         target: "http://localhost:8002",
         changeOrigin: true,

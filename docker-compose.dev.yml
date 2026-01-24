@@ -1,7 +1,7 @@
 services:
   app:
     build: .
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend/src
     environment:
       - ENVIRONMENT=development  # 虽然是开发环境，但现在统一使用 PostgreSQL
       - DATABASE_URL=postgresql://my_agent:tangtao0123456@postgres:5432/agent_db?options=-cclient_encoding%3DUTF8
@@ -10,11 +10,11 @@ services:
     dns:
       - 223.5.5.5
     volumes:
-      - ./src:/app/src
-      - ./configs:/app/configs
-      - ./prompts:/app/prompts
-      - ./data:/app/data
-      - ./storage:/app/storage
+      - ./backend/src:/app/backend/src
+      - ./backend/configs:/app/backend/configs
+      - ./backend/prompts:/app/backend/prompts
+      - ./backend/data:/app/backend/data
+      - ./backend/storage:/app/backend/storage
       - ./frontend/dist:/app/frontend/dist
     ports:
       - "8000:8000"
@@ -34,7 +34,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
-      - ./scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/init_pgvector.sql
+      - ./backend/scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/init_pgvector.sql
     restart: unless-stopped
 
   redis:

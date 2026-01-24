@@ -1,7 +1,0 @@
-ruff
-black
-mypy
-pytest
-httpx
-
-

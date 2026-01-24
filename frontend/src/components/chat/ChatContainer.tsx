@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import ChatMessage, { ChatRole } from "./ChatMessage";
 import ChatInput from "./ChatInput";
-import { postQueryStreamSSE } from "@/lib/api";
+import { postQueryStreamGraph } from "@/lib/api";
 
 interface Message {
   id: string;
@@ -47,7 +47,7 @@ export const ChatContainer: React.FC = () => {
     }
   }, []);
 
-  const handleSend = useCallback(async (text: string, deep: boolean, fortune: boolean) => {
+  const handleSend = useCallback(async (text: string, deep: boolean) => {
     const userMsg: Message = { id: uid(), role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
 
@@ -65,7 +65,7 @@ export const ChatContainer: React.FC = () => {
     setIsGenerating(true);
 
     try {
-      const agentName = fortune ? "fortune_agent" : (deep ? "research_agent" : undefined);
+      const agentName = deep ? "research_agent" : undefined;
       
       const chatHistory = messages
         .filter(m => !m.thinking)
@@ -80,7 +80,7 @@ export const ChatContainer: React.FC = () => {
       // 使用局部变量累积文本，直接更新 Messages
       let accumulatedContent = "";
       
-      await postQueryStreamSSE(
+      await postQueryStreamGraph(
         payload,
         (delta: string) => {
           accumulatedContent += delta;

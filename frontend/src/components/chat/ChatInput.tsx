@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Plus, Send, Square } from "lucide-react";
 
 interface ChatInputProps {
-  onSend: (text: string, deepThinking: boolean, fortuneMode: boolean) => void;
+  onSend: (text: string, deepThinking: boolean) => void;
   loading?: boolean;
   onStop?: () => void;
 }
@@ -14,7 +14,6 @@ interface ChatInputProps {
 export const ChatInput: React.FC<ChatInputProps> = ({ onSend, loading, onStop }) => {
   const [value, setValue] = useState("");
   const [deep, setDeep] = useState(false);
-  const [fortune, setFortune] = useState(false);
   // local sending state still useful for debounce/prevent double click
   const [sending, setSending] = useState(false); 
   const [file, setFile] = useState<File | null>(null);
@@ -40,7 +39,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, loading, onStop })
     const text = value.trim();
     if (!text && !file) return;
     setSending(true);
-    onSend(text || (file ? "[已附加图片]" : ""), deep, fortune);
+    onSend(text || (file ? "[已附加图片]" : ""), deep);
     setValue("");
     setFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -56,17 +55,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, loading, onStop })
 
   return (
     <div className="w-full space-y-2">
-      {/* 模式切换按钮：深度思考 / 命理模式 */}
+      {/* 模式切换按钮：深度思考 */}
       <div className="flex gap-2 justify-start">
         <button
           type="button"
-          onClick={() => {
-            setDeep((d) => {
-              const nd = !d;
-              if (nd) setFortune(false); // 互斥
-              return nd;
-            });
-          }}
+          onClick={() => setDeep(!deep)}
           aria-pressed={deep}
           className={cn(
             "px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200",
@@ -75,25 +68,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, loading, onStop })
           title="切换深度思考"
         >
           🧠 深度思考
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setFortune((f) => {
-              const nf = !f;
-              if (nf) setDeep(false); // 互斥
-              return nf;
-            });
-          }}
-          aria-pressed={fortune}
-          className={cn(
-            "px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200",
-            fortune ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          )}
-          title="切换命理模式"
-        >
-          ✨ 命理模式
         </button>
       </div>
 

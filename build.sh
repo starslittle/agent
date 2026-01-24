@@ -28,7 +28,7 @@ cd ..
 
 # 2. 安装后端依赖
 echo "🐍 安装 Python 依赖..."
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 
 echo "✅ 构建完成！"
 echo "💡 提示: 确保在生产环境中设置了以下环境变量："
