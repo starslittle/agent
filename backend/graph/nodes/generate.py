@@ -1,13 +1,13 @@
 """生成节点 - 整合上下文生成最终答案"""
 
-from typing import Dict, Any
+from typing import Dict, Any, AsyncIterator
 from graph.state import GraphState
 from langchain_community.chat_models import ChatTongyi
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from app.core.settings import settings
 
 
-async def generate_node(state: GraphState) -> Dict[str, Any]:
+async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
     """
     生成节点：整合上下文和工具结果，生成最终答案
     - 优先使用工具结果
@@ -17,7 +17,7 @@ async def generate_node(state: GraphState) -> Dict[str, Any]:
     Args:
         state: 当前状态
 
-    Returns:
+    Yields:
         Dict: 更新后的状态，包含 final_answer
     """
     query = state.get("query", "")
@@ -25,6 +25,7 @@ async def generate_node(state: GraphState) -> Dict[str, Any]:
     context = state.get("context", "")
     tool_results = state.get("tool_results", {})
     chat_history = state.get("chat_history", [])
+    streaming = bool(state.get("metadata", {}).get("streaming"))
 
     print(f"\n[✨ Generate] 生成最终答案，模式: {route}")
 
@@ -102,6 +103,32 @@ async def generate_node(state: GraphState) -> Dict[str, Any]:
 
         # 调用LLM
         chain = prompt | llm
+
+        if streaming:
+            answer_parts: list[str] = []
+            try:
+                async for chunk in chain.astream({
+                    "query": query,
+                    "context": full_context,
+                    "chat_history": messages if messages else None
+                }):
+                    piece = getattr(chunk, "content", None)
+                    if piece is None:
+                        piece = str(chunk)
+                    if not piece:
+                        continue
+                    answer_parts.append(piece)
+                    answer = "".join(answer_parts)
+                    yield {
+                        **state,
+                        "final_answer": answer,
+                        "output": answer,
+                    }
+                return
+            except Exception:
+                # 回退为非流式调用
+                pass
+
         response = await chain.ainvoke({
             "query": query,
             "context": full_context,
@@ -112,7 +139,7 @@ async def generate_node(state: GraphState) -> Dict[str, Any]:
 
         print(f"[✨ Generate] 生成答案: {answer[:100]}...")
 
-        return {
+        yield {
             **state,
             "final_answer": answer,
             "output": answer,
@@ -123,7 +150,7 @@ async def generate_node(state: GraphState) -> Dict[str, Any]:
         import traceback
         traceback.print_exc()
 
-        return {
+        yield {
             **state,
             "final_answer": f"抱歉，生成答案时出错：{str(e)}",
             "output": f"抱歉，生成答案时出错：{str(e)}",

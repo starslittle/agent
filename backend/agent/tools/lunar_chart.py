@@ -8,7 +8,21 @@ from langchain_core.tools import tool
 def _parse_date(date_str: str) -> Tuple[int, int, int]:
     if not date_str:
         raise ValueError("birth_date 不能为空，格式应为 YYYY-MM-DD")
-    parts = date_str.strip().replace("/", "-").split("-")
+    raw = date_str.strip()
+    if not raw:
+        raise ValueError("birth_date 不能为空，格式应为 YYYY-MM-DD")
+
+    # 兼容常见格式：YYYYMMDD / YYYY年MM月DD日 / YYYY/MM/DD
+    normalized = (
+        raw.replace("年", "-")
+        .replace("月", "-")
+        .replace("日", "")
+        .replace("/", "-")
+    )
+    if normalized.isdigit() and len(normalized) == 8:
+        normalized = f"{normalized[:4]}-{normalized[4:6]}-{normalized[6:]}"
+
+    parts = [p for p in normalized.split("-") if p]
     if len(parts) != 3:
         raise ValueError("birth_date 格式错误，应为 YYYY-MM-DD")
     return int(parts[0]), int(parts[1]), int(parts[2])
@@ -35,6 +49,17 @@ def _safe_call(fn, default: str = "") -> str:
         return default
 
 
+def _normalize_gender(gender: Optional[str]) -> Optional[int]:
+    if not gender:
+        return None
+    g = str(gender).strip().lower()
+    if g in {"男", "male", "m", "1", "man", "boy"}:
+        return 1
+    if g in {"女", "female", "f", "0", "woman", "girl"}:
+        return 0
+    return None
+
+
 @tool
 def get_lunar_chart(
     birth_date: str,
@@ -51,6 +76,20 @@ def get_lunar_chart(
     - gender: 性别，可选
     - birthplace: 出生地（城市），可选
     """
+    # 容错：当 Action Input 被当作字符串传入时，尝试从 JSON 中解析字段
+    if isinstance(birth_date, str) and birth_date.strip().startswith("{"):
+        try:
+            import json
+            payload = json.loads(birth_date)
+            if isinstance(payload, dict):
+                birth_date = payload.get("birth_date", birth_date)
+                birth_time = payload.get("birth_time", birth_time)
+                gender = payload.get("gender", gender)
+                birthplace = payload.get("birthplace", birthplace)
+        except Exception:
+            # 保持原始输入，交给下游解析报错
+            pass
+
     try:
         from lunar_python import Solar, Lunar  # type: ignore
     except Exception as e:
@@ -105,5 +144,68 @@ def get_lunar_chart(
         lines.append(f"- 性别: {gender}")
     if birthplace:
         lines.append(f"- 出生地: {birthplace}")
+
+    # 大运（如 lunar_python 支持且可获取）
+    da_yun_items = []
+    if eight_char and hasattr(eight_char, "getYun"):
+        yun = None
+        gender_flag = _normalize_gender(gender)
+        try:
+            yun = eight_char.getYun() if gender_flag is None else eight_char.getYun(gender_flag)
+        except TypeError:
+            if gender_flag is not None:
+                for val in (gender_flag, "男" if gender_flag == 1 else "女", "M" if gender_flag == 1 else "F"):
+                    try:
+                        yun = eight_char.getYun(val)
+                        break
+                    except Exception:
+                        continue
+        except Exception:
+            yun = None
+
+        if yun is not None and hasattr(yun, "getDaYun"):
+            try:
+                da_yun_items = yun.getDaYun() or []
+            except Exception:
+                da_yun_items = []
+
+    if da_yun_items:
+        lines.append("- 大运:")
+        for dy in da_yun_items[:12]:
+            name = ""
+            if hasattr(dy, "getName"):
+                name = _safe_call(dy.getName, "")
+            elif hasattr(dy, "getGanZhi"):
+                name = _safe_call(dy.getGanZhi, "")
+            elif hasattr(dy, "getZhi"):
+                name = _safe_call(dy.getZhi, "")
+            elif hasattr(dy, "getStartYear") or hasattr(dy, "getEndYear"):
+                name = ""
+            else:
+                name = str(dy).strip()
+
+            start_age = _safe_call(dy.getStartAge, "") if hasattr(dy, "getStartAge") else ""
+            end_age = _safe_call(dy.getEndAge, "") if hasattr(dy, "getEndAge") else ""
+            start_year = _safe_call(dy.getStartYear, "") if hasattr(dy, "getStartYear") else ""
+            end_year = _safe_call(dy.getEndYear, "") if hasattr(dy, "getEndYear") else ""
+            parts = []
+            if name:
+                parts.append(str(name))
+            if start_age or end_age:
+                if start_age and end_age:
+                    parts.append(f"{start_age}-{end_age}岁")
+                elif start_age:
+                    parts.append(f"{start_age}岁")
+                else:
+                    parts.append(f"{end_age}岁")
+            if start_year or end_year:
+                if start_year and end_year:
+                    parts.append(f"{start_year}-{end_year}")
+                elif start_year:
+                    parts.append(str(start_year))
+                else:
+                    parts.append(str(end_year))
+            if parts:
+                lines.append("  - " + " | ".join(parts))
 
     return "\n".join(lines)

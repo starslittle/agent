@@ -108,9 +108,13 @@ def load_agents():
         if not name:
             continue
         # 为流式接口准备一个启用 streaming 的执行器缓存（键: name+'_stream'）
-        executor = create_agent_from_config(conf, streaming_override=False)
+        executor = create_agent_from_config(conf, streaming_override=False, agent_name=name)
         AGENT_REGISTRY[name] = executor
-        AGENT_REGISTRY[name + "_stream"] = create_agent_from_config(conf, streaming_override=True)
+        AGENT_REGISTRY[name + "_stream"] = create_agent_from_config(
+            conf,
+            streaming_override=True,
+            agent_name=name,
+        )
         if agent_cfg.get("is_default"):
             DEFAULT_AGENT_NAME = name
     if not DEFAULT_AGENT_NAME and AGENT_REGISTRY:
@@ -179,31 +183,52 @@ async def query_stream_sse(req: QueryRequest):
             accumulated_output = ""
 
             has_stream = hasattr(executor, "stream") and callable(executor.stream)
+            stream_iter = executor.stream(invoke_params) if has_stream else None
 
-            if has_stream:
+            if stream_iter is not None:
                 # Agent 支持流式输出
                 print(f"🌊 [后端] 开始流式处理")
                 chunk_count = 0
                 delta_count = 0
 
-                for chunk in executor.stream(invoke_params):
-                    chunk_count += 1
-                    if isinstance(chunk, dict) and "output" in chunk:
-                        current_output = chunk.get("output", "")
+                if hasattr(stream_iter, "__aiter__"):
+                    async for chunk in stream_iter:
+                        chunk_count += 1
+                        if isinstance(chunk, dict) and "output" in chunk:
+                            current_output = chunk.get("output", "")
 
-                        if current_output and current_output.startswith(accumulated_output):
-                            delta = current_output[len(accumulated_output):]
-                            if delta:
-                                delta_count += 1
-                                # 发送增量数据
-                                yield {
-                                    "event": "message",
-                                    "data": json.dumps({
-                                        "type": "delta",
-                                        "data": delta
-                                    }, ensure_ascii=False)
-                                }
-                            accumulated_output = current_output
+                            if current_output and current_output.startswith(accumulated_output):
+                                delta = current_output[len(accumulated_output):]
+                                if delta:
+                                    delta_count += 1
+                                    # 发送增量数据
+                                    yield {
+                                        "event": "message",
+                                        "data": json.dumps({
+                                            "type": "delta",
+                                            "data": delta
+                                        }, ensure_ascii=False)
+                                    }
+                                accumulated_output = current_output
+                else:
+                    for chunk in stream_iter:
+                        chunk_count += 1
+                        if isinstance(chunk, dict) and "output" in chunk:
+                            current_output = chunk.get("output", "")
+
+                            if current_output and current_output.startswith(accumulated_output):
+                                delta = current_output[len(accumulated_output):]
+                                if delta:
+                                    delta_count += 1
+                                    # 发送增量数据
+                                    yield {
+                                        "event": "message",
+                                        "data": json.dumps({
+                                            "type": "delta",
+                                            "data": delta
+                                        }, ensure_ascii=False)
+                                    }
+                                accumulated_output = current_output
 
                 # 流式完成，发送done信号
                 yield {
@@ -213,8 +238,10 @@ async def query_stream_sse(req: QueryRequest):
 
             else:
                 # ===== 场景B：Agent不支持流式输出 =====
-                # 调用executor.invoke()方法，同步获取结果
-                result = executor.invoke(invoke_params)
+                if hasattr(executor, "ainvoke") and callable(executor.ainvoke):
+                    result = await executor.ainvoke(invoke_params)
+                else:
+                    result = executor.invoke(invoke_params)
 
                 # 提取输出内容
                 if isinstance(result, dict):

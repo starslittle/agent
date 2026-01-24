@@ -42,6 +42,7 @@
    "psycopg2-binary",
    "redis",
    "lunar-python>=1.4.8",
+  "py-iztro",
 ]
 
  [project.optional-dependencies]

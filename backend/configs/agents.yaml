@@ -24,7 +24,7 @@ agents:
     is_default: false
     config:
       llm: "deepseek-v3.2"
-      tools: ["get_current_date", "get_lunar_chart"]
+      tools: ["get_current_date", "get_lunar_chart", "get_ziwei_chart"]
       rag_db_path: "./storage/chroma/fortune"
       collection_name: "fortune"
       top_k: 10

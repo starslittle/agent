@@ -10,9 +10,12 @@ from .nodes.tool_router import tool_router_node
 from .nodes.tools_exec import tools_node
 from .nodes.rag import rag_node
 from .nodes.generate import generate_node
+from .nodes.planner import planner_node
+from .nodes.executor import executor_node
+from .nodes.replanner import replanner_node
 
 
-def route_after_router(state: GraphState) -> Literal["direct_llm", "tool_router", "rag", "end"]:
+def route_after_router(state: GraphState) -> Literal["direct_llm", "tool_router", "rag", "research_planner", "end"]:
     """
     路由决策：根据router节点的结果决定下一步
 
@@ -29,12 +32,9 @@ def route_after_router(state: GraphState) -> Literal["direct_llm", "tool_router"
     if route == "default":
         # 常规模式：直接LLM
         return "direct_llm"
-    elif route == "research":
-        # 深度思考模式：需要工具和RAG
-        return "tool_router"
-    elif route == "fortune":
-        # 命理模式：使用RAG
-        return "rag"
+    elif route in ["research", "fortune"]:
+        # 深度思考模式和命理模式均采用 Plan-and-Execute
+        return "research_planner"
     else:
         # 默认结束
         return "end"
@@ -59,6 +59,13 @@ def route_after_tool_router(state: GraphState) -> Literal["tools", "rag", "gener
     else:
         # 不需要工具：直接做RAG
         return "rag"
+
+
+def route_after_replanner(state: GraphState) -> Literal["research_executor", "generate"]:
+    """重计划后决定继续执行还是生成答案"""
+    if state.get("plan_done"):
+        return "generate"
+    return "research_executor"
 
 
 def build_graph():
@@ -92,6 +99,9 @@ def build_graph():
         workflow.add_node("tools", tools_node)
         workflow.add_node("rag", rag_node)
         workflow.add_node("generate", generate_node)
+        workflow.add_node("research_planner", planner_node)
+        workflow.add_node("research_executor", executor_node)
+        workflow.add_node("research_replanner", replanner_node)
 
         # 设置入口点
         workflow.set_entry_point("router")
@@ -104,6 +114,7 @@ def build_graph():
                 "direct_llm": "direct_llm",
                 "tool_router": "tool_router",
                 "rag": "rag",
+                "research_planner": "research_planner",
                 "end": END,
             }
         )
@@ -115,6 +126,17 @@ def build_graph():
             {
                 "tools": "tools",
                 "rag": "rag",
+                "generate": "generate",
+            }
+        )
+
+        workflow.add_edge("research_planner", "research_executor")
+        workflow.add_edge("research_executor", "research_replanner")
+        workflow.add_conditional_edges(
+            "research_replanner",
+            route_after_replanner,
+            {
+                "research_executor": "research_executor",
                 "generate": "generate",
             }
         )
@@ -149,31 +171,27 @@ def build_graph():
                 if route == "default":
                     # 常规模式
                     state = await direct_llm_node(state)
-                    yield {"output": state.get("final_answer", "")}
+                    yield state
 
-                elif route == "research":
-                    # 深度思考模式
-                    state = await tool_router_node(state)
-
-                    metadata = state.get("metadata", {})
-                    if metadata.get("need_tool"):
-                        state = await tools_node(state)
-
-                    state = await rag_node(state)
-                    state = await generate_node(state)
-                    yield {"output": state.get("final_answer", "")}
-
-                elif route == "fortune":
-                    # 命理模式
-                    state = await rag_node(state)
-                    state = await generate_node(state)
-                    yield {"output": state.get("final_answer", "")}
+                elif route in ["research", "fortune"]:
+                    # 深度思考模式与命理模式（Plan-and-Execute）
+                    state = await planner_node(state)
+                    while True:
+                        state = await executor_node(state)
+                        state = await replanner_node(state)
+                        if state.get("plan_done"):
+                            break
+                    async for update in generate_node(state):
+                        state = update
+                        yield state
 
             async def ainvoke(self, state: Dict[str, Any]):
                 """异步调用"""
-                async for _ in self.astream(state):
-                    pass
-                return state
+                final_state = state
+                async for event in self.astream(state):
+                    if isinstance(event, dict):
+                        final_state = event
+                return final_state
 
         return SimpleGraph()
 
@@ -182,6 +200,7 @@ def create_graph_state(
     query: str,
     chat_history: list = None,
     mode_hint: str = None,
+    force_route: str | None = None,
 ) -> GraphState:
     """
     创建初始Graph状态
@@ -198,6 +217,7 @@ def create_graph_state(
         "query": query,
         "chat_history": chat_history or [],
         "mode_hint": mode_hint,
+        "force_route": force_route,
         "route": "",
         "context_docs": [],
         "context": "",
@@ -207,4 +227,11 @@ def create_graph_state(
         "metadata": {},
         "intermediate_steps": [],
         "error": None,
+        "plan_tasks": [],
+        "plan_completed": [],
+        "plan_current": None,
+        "plan_notes": [],
+        "plan_done": False,
+        "plan_iteration": 0,
+        "plan_max_iterations": 6,
     }

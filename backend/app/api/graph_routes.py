@@ -9,11 +9,16 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.api.intent_router import classify_and_route
 from app.api.agent_factory import create_agent_from_config
-from graph import run_graph
+from app.core.settings import settings
+from rag.pipelines import query_fortune
+from langchain_community.chat_models import ChatTongyi
+from langchain_tavily import TavilySearch
+from graph import run_graph, stream_graph
 
 
 _STREAM_AGENT_CACHE: dict[str, object] = {}
 _STREAM_DEFAULT: str | None = None
+_FORTUNE_RAG_ENABLED = False  # 临时暂停命理RAG
 
 
 def _resolve_agents_yaml() -> Path:
@@ -49,7 +54,11 @@ def _load_stream_agents() -> None:
         conf = agent_cfg.get("config", {})
         if not name:
             continue
-        _STREAM_AGENT_CACHE[name] = create_agent_from_config(conf, streaming_override=True)
+        _STREAM_AGENT_CACHE[name] = create_agent_from_config(
+            conf,
+            streaming_override=True,
+            agent_name=name,
+        )
         if agent_cfg.get("is_default"):
             _STREAM_DEFAULT = name
     if _STREAM_DEFAULT is None and _STREAM_AGENT_CACHE:
@@ -62,6 +71,57 @@ def _get_stream_executor(agent_name: str | None):
     if not name or name not in _STREAM_AGENT_CACHE:
         raise HTTPException(status_code=404, detail=f"未找到指定 agent: {agent_name}")
     return _STREAM_AGENT_CACHE[name]
+
+
+def _grade_context(question: str, context: str) -> bool:
+    """判断内部检索内容是否足够回答问题。"""
+    prompt = (
+        "你是检索质量评估器。判断给定【检索内容】是否足以回答【用户问题】。\n"
+        "只回答 YES 或 NO，不要输出其他内容。\n\n"
+        f"用户问题：{question}\n\n"
+        f"检索内容：{context}\n"
+    )
+    llm = ChatTongyi(
+        model=settings.LLM_MODEL_NAME or "qwen-plus-2025-07-28",
+        temperature=0.0,
+        dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
+    )
+    try:
+        res = llm.invoke(prompt)
+        text = getattr(res, "content", str(res)).strip().upper()
+        return text.startswith("YES")
+    except Exception:
+        # 保守策略：失败时认为不足，触发外部检索
+        return False
+
+
+def _web_search(query: str, max_results: int = 5) -> str:
+    """使用 Tavily 进行网络搜索并格式化结果。"""
+    t = TavilySearch(max_results=max_results)
+    try:
+        results = t.invoke({"query": query})  # type: ignore
+    except Exception:
+        results = []
+    try:
+        if isinstance(results, dict) and "results" in results:
+            items = results.get("results") or []
+        else:
+            items = results or []
+    except Exception:
+        items = []
+    lines: list[str] = []
+    for item in items:
+        if isinstance(item, dict):
+            title = item.get("title") or ""
+            content = item.get("content") or item.get("snippet") or ""
+            url = item.get("url") or item.get("link") or ""
+        else:
+            s = str(item)
+            title = s[:60]
+            content = s
+            url = ""
+        lines.append(f"- 标题: {title}\n  摘要: {content}\n  链接: {url}")
+    return "\n".join(lines).strip()
 
 
 async def query_stream_graph(req: Any):
@@ -103,50 +163,83 @@ async def query_stream_graph(req: Any):
             elif req.agent_name == "fortune_agent" or req.agent_name == "fortune":
                 mode_hint = "fortune"
 
-            # 隐式意图识别得到目标 agent
-            routing = classify_and_route(req.query, mode_hint)
-            agent_name = routing.get("agent_name")
-            executor = _get_stream_executor(agent_name)
-
-            # 准备调用参数（chat_history 必须是列表）
-            invoke_params = {
-                "input": req.query,
-                "context": "",
-                "chat_history": chat_history,
-            }
-
             accumulated_output = ""
-            has_stream = hasattr(executor, "stream") and callable(executor.stream)
+            last_plan_completed = 0
+            seen_plan_current = None
+            sent_plan_list = False
+            thinking_finished_sent = False
+            async for chunk in stream_graph(
+                query=req.query,
+                chat_history=chat_history,
+                mode_hint=mode_hint,
+            ):
+                current_output = ""
+                if isinstance(chunk, dict):
+                    # 计划/执行过程提示（不包含思维链）
+                    plan_tasks = chunk.get("plan_tasks") or []
+                    plan_completed = chunk.get("plan_completed") or []
+                    plan_current = chunk.get("plan_current")
 
-            if has_stream:
-                for chunk in executor.stream(invoke_params):
-                    if isinstance(chunk, dict) and "output" in chunk:
-                        current_output = chunk.get("output", "")
-                        if current_output and current_output.startswith(accumulated_output):
-                            delta = current_output[len(accumulated_output):]
-                            if delta:
-                                import json
-                                yield {
-                                    "event": "message",
-                                    "data": json.dumps({
-                                        "type": "delta",
-                                        "data": delta
-                                    }, ensure_ascii=False)
-                                }
-                                accumulated_output = current_output
-            else:
-                # 若无 stream 能力，回退为一次性输出
-                result = executor.invoke(invoke_params)
-                output = result.get("output", "") if isinstance(result, dict) else str(result)
-                if output:
-                    import json
-                    yield {
-                        "event": "message",
-                        "data": json.dumps({
-                            "type": "delta",
-                            "data": output
-                        }, ensure_ascii=False)
-                    }
+                    if plan_tasks and not sent_plan_list:
+                        sent_plan_list = True
+                        plan_text = "【计划】" + "；".join(plan_tasks[:6])
+                        import json
+                        yield {
+                            "event": "message",
+                            "data": json.dumps({
+                                "type": "delta",
+                                "data": plan_text + "\n",
+                                "isThinking": True,
+                                "thinkingFinished": False,
+                            }, ensure_ascii=False)
+                        }
+
+                    if plan_current and plan_current != seen_plan_current:
+                        seen_plan_current = plan_current
+                        import json
+                        yield {
+                            "event": "message",
+                            "data": json.dumps({
+                                "type": "delta",
+                                "data": f"【步骤】开始：{plan_current}\n",
+                                "isThinking": True,
+                                "thinkingFinished": False,
+                            }, ensure_ascii=False)
+                        }
+
+                    if len(plan_completed) > last_plan_completed:
+                        newly = plan_completed[last_plan_completed:]
+                        last_plan_completed = len(plan_completed)
+                        for item in newly:
+                            import json
+                            yield {
+                                "event": "message",
+                                "data": json.dumps({
+                                    "type": "delta",
+                                    "data": f"【步骤】完成：{item}\n",
+                                    "isThinking": True,
+                                    "thinkingFinished": False,
+                                }, ensure_ascii=False)
+                            }
+
+                    current_output = chunk.get("final_answer") or chunk.get("output", "")
+                else:
+                    current_output = str(chunk)
+                if current_output and current_output.startswith(accumulated_output):
+                    delta = current_output[len(accumulated_output):]
+                    if delta:
+                        import json
+                        yield {
+                            "event": "message",
+                            "data": json.dumps({
+                                "type": "delta",
+                                "data": delta,
+                                "isThinking": False,
+                                "thinkingFinished": not thinking_finished_sent,
+                            }, ensure_ascii=False)
+                        }
+                        thinking_finished_sent = True
+                        accumulated_output = current_output
 
             # 发送完成信号
             import json

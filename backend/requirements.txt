@@ -34,6 +34,7 @@ tabulate
 matplotlib
 requests
 python-dotenv
+py-iztro
 
 # Web API (optional, for later FastAPI gateway)
 fastapi

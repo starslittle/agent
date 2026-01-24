@@ -20,11 +20,24 @@ async def router_node(state: GraphState) -> Dict[str, Any]:
     """
     query = state.get("query", "")
     mode_hint = state.get("mode_hint")
+    force_route = state.get("force_route")
 
     print(f"\n[🔀 Router] 分析查询: {query[:50]}...")
     print(f"[🔀 Router] 模式提示: {mode_hint or 'auto'}")
 
     try:
+        if force_route in {"default", "research", "fortune"}:
+            print(f"[🔀 Router] 强制路由: {force_route}")
+            return {
+                **state,
+                "route": force_route,
+                "metadata": {
+                    **state.get("metadata", {}),
+                    "route_type": force_route,
+                    "route_forced": True,
+                },
+            }
+
         # 使用现有的意图路由器
         routing_result = classify_and_route(query, mode_hint)
 

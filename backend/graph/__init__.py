@@ -24,7 +24,12 @@ def get_graph():
     return _graph_instance
 
 
-async def run_graph(query: str, chat_history: list = None, mode_hint: str = None):
+async def run_graph(
+    query: str,
+    chat_history: list = None,
+    mode_hint: str = None,
+    force_route: str | None = None,
+):
     """
     运行Graph（同步调用）
 
@@ -37,13 +42,19 @@ async def run_graph(query: str, chat_history: list = None, mode_hint: str = None
         dict: 包含最终答案的字典
     """
     graph = get_graph()
-    state = create_graph_state(query, chat_history, mode_hint)
+    state = create_graph_state(query, chat_history, mode_hint, force_route)
+    state["metadata"] = {**state.get("metadata", {}), "streaming": True}
 
     result = await graph.ainvoke(state)
     return result
 
 
-async def stream_graph(query: str, chat_history: list = None, mode_hint: str = None):
+async def stream_graph(
+    query: str,
+    chat_history: list = None,
+    mode_hint: str = None,
+    force_route: str | None = None,
+):
     """
     流式运行Graph
 
@@ -55,7 +66,17 @@ async def stream_graph(query: str, chat_history: list = None, mode_hint: str = N
     Yields:
         dict: 流式输出片段
     """
-    result = await run_graph(query, chat_history, mode_hint)
+    graph = get_graph()
+    state = create_graph_state(query, chat_history, mode_hint, force_route)
+
+    # 若 LangGraph 可用，优先流式输出状态
+    if hasattr(graph, "astream"):
+        async for event in graph.astream(state, stream_mode="values"):
+            yield event
+        return
+
+    # 回退：非 LangGraph（简化版本）
+    result = await graph.ainvoke(state)
     answer = result.get("final_answer", "") or result.get("output", "")
 
     if not answer:

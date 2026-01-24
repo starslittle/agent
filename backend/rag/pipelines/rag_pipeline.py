@@ -11,8 +11,6 @@ from typing import Optional
 
 import yaml
 
-from app.api.agent_factory import create_agent_from_config  # type: ignore
-
 
 _AGENTS_CACHE: dict[str, object] = {}
 _DEFAULT: Optional[str] = None
@@ -39,6 +37,7 @@ def _resolve_agents_yaml() -> Path:
 
 
 def _load_agents() -> None:
+    from app.api.agent_factory import create_agent_from_config  # type: ignore
     global _AGENTS_CACHE, _DEFAULT
     if _AGENTS_CACHE:
         return
@@ -51,7 +50,7 @@ def _load_agents() -> None:
         conf = agent_cfg.get("config", {})
         if not name:
             continue
-        _AGENTS_CACHE[name] = create_agent_from_config(conf)
+        _AGENTS_CACHE[name] = create_agent_from_config(conf, agent_name=name)
         if agent_cfg.get("is_default"):
             _DEFAULT = name
     if _DEFAULT is None and _AGENTS_CACHE:

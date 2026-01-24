@@ -1,7 +1,6 @@
 """Graph State 定义 - LangGraph 状态管理"""
 
 from typing import TypedDict, List, Dict, Any, Optional
-from langchain_core.messages import BaseMessage
 
 
 class GraphState(TypedDict):
@@ -14,6 +13,7 @@ class GraphState(TypedDict):
 
     # ===== 路由相关 =====
     route: str                          # 路由决策: "default" | "research" | "fortune"
+    force_route: Optional[str]          # 强制路由（可选）："default" | "research" | "fortune"
 
     # ===== 检索相关 =====
     context_docs: List[str]             # 检索到的文档内容
@@ -21,6 +21,15 @@ class GraphState(TypedDict):
 
     # ===== 工具相关 =====
     tool_results: Dict[str, Any]        # 工具执行结果
+
+    # ===== 计划-执行相关（research）=====
+    plan_tasks: List[str]               # 待执行任务清单
+    plan_completed: List[str]           # 已完成任务
+    plan_current: Optional[str]         # 当前任务
+    plan_notes: List[str]               # 执行笔记/证据
+    plan_done: bool                     # 是否完成
+    plan_iteration: int                 # 已执行轮次
+    plan_max_iterations: int            # 最大轮次限制
 
     # ===== 最终输出 =====
     final_answer: str                   # 最终答案
