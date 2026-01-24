@@ -1,6 +1,6 @@
 experiment: default_local_eval
 
-engine: local  # local | notion
+engine: local  # local
 
 dataset_path: data/eval/qa_dev.jsonl
 

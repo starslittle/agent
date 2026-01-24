@@ -21,7 +21,7 @@
 ## 核心能力
 - 简单聊天直答：`default_llm_agent`，无 ReAct、稳定输出。
 - 命理智能分析：命理模式下受限域智能路由，命理问题走 `fortune_agent`，非命理回退聊天。
-- 深度思考检索：深度模式下在 `research_agent` 与 `general_rag_agent` 之间路由，支持网络检索与本地/Notion/Pandas 知识库。
+- 深度思考检索：深度模式下在 `research_agent` 与 `general_rag_agent` 之间路由，支持网络检索与本地/Pandas 知识库。
 - 流式输出：`/query_stream` 持续返回增量文本，前端顺滑展示。
 
 ## 快速开始

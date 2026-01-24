@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Bot, Copy, Check } from "lucide-react";
+import { useSmoothTyping } from "@/hooks/useSmoothTyping";
 
 export type ChatRole = "user" | "assistant";
 
@@ -19,6 +20,12 @@ export interface ChatMessageProps {
 export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinking }) => {
   const isUser = role === "user";
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null);
+
+  // 始终调用 hook，但是在 hook 内部或使用结果时处理逻辑
+  // 这里的策略是：始终计算 typedContent，但如果是用户消息，我们直接忽略计算结果使用原始 content
+  // 这种方式虽然稍微多一点计算，但符合 React Rules of Hooks
+  const typedContent = useSmoothTyping(content, thinking);
+  const displayedContent = isUser ? content : typedContent;
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -114,13 +121,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                   return <p className="mb-2 last:mb-0">{children}</p>;
                 },
                 ul({ children }: any) {
-                  return <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>;
+                  return <ul className="list-disc list-outside ml-5 mb-2 space-y-1">{children}</ul>;
                 },
                 ol({ children }: any) {
-                  return <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>;
+                  return <ol className="list-decimal list-outside ml-5 mb-2 space-y-1">{children}</ol>;
                 },
                 li({ children }: any) {
-                  return <li className="ml-2">{children}</li>;
+                  return <li>{children}</li>;
                 },
                 a({ href, children }: any) {
                   return (
@@ -184,7 +191,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                 },
               }}
             >
-              {content || ""}
+              {displayedContent || ""}
             </ReactMarkdown>
           </div>
         )}

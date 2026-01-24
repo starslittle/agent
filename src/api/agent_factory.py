@@ -22,8 +22,6 @@ from ..rag.hybrid_retriever import HybridRetriever, CrossEncoderReranker
 from ..agent_app.tools import (
     get_current_date,
     get_seniverse_weather,
-    init_notion_rag,
-    query_notion_kb,
     init_pandas_rag,
     query_pandas_data,
     init_local_rag,
@@ -163,10 +161,6 @@ def load_tool(name: str):
         return get_current_date
     if key == "get_seniverse_weather":
         return get_seniverse_weather
-    if key == "init_notion_rag":
-        return init_notion_rag
-    if key == "query_notion_kb":
-        return query_notion_kb
     if key == "init_pandas_rag":
         return init_pandas_rag
     if key == "query_pandas_data":

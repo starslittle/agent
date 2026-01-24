@@ -16,9 +16,6 @@ if str(SRC_PATH) not in sys.path:
 from agent_app.tools import (
     get_current_date,
     get_seniverse_weather,
-    init_notion_rag,
-    query_notion_kb,
-    verify_notion_access,
     init_pandas_rag,
     query_pandas_data,
     init_local_rag,
@@ -34,9 +31,6 @@ def main():
         TavilySearch(max_results=1),
         get_current_date,
         get_seniverse_weather,
-        verify_notion_access,
-        init_notion_rag,
-        query_notion_kb,
         init_pandas_rag,
         query_pandas_data,
         init_local_rag,
@@ -51,7 +45,6 @@ def main():
             - TavilySearch：网页搜索
             - get_current_date：当前日期（中国格式）
             - get_seniverse_weather：中国天气
-            - verify_notion_access / init_notion_rag / query_notion_kb：Notion 访问与检索
             - init_pandas_rag / query_pandas_data：CSV 检索与分析
             - init_local_rag / query_local_kb：本地 PDF/TXT 检索
 

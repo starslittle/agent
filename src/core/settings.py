@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import List, Union, Any
-
-from pydantic import Field, AliasChoices
+from typing import Union, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,16 +33,6 @@ class Settings(BaseSettings):
     # 数据路径（可选覆盖）
     CSV_FILE_PATH: str = ""
     CSV_DIR_PATH: str = ""
-
-    # Notion 集成
-    ENABLE_NOTION: bool = False
-    NOTION_API_KEY: str = ""
-    NOTION_PAGE_IDS_RAW: str = Field(
-        default="",
-        validation_alias=AliasChoices("NOTION_PAGE_IDS", "notion_page_ids"),
-        description="兼容逗号分隔或 JSON 数组的原始输入",
-    )
-    NOTION_DATABASE_ID: str = ""
 
     # 服务端口（供本地开发使用）
     PORT: int = 8000
@@ -93,31 +81,6 @@ class Settings(BaseSettings):
             if match:
                 self.POSTGRES_USER = match.group(1)
                 self.POSTGRES_PASSWORD = match.group(2)
-
-    # 兼容：允许通过逗号分隔或 JSON 数组提供列表
-    @staticmethod
-    def _parse_csv_list(value: Union[str, List[str], None]) -> List[str]:
-        if value is None:
-            return []
-        if isinstance(value, list):
-            return [str(x).strip() for x in value if str(x).strip()]
-        s = str(value).strip()
-        # 兼容 JSON 数组和逗号分隔两种格式
-        if s.startswith("[") and s.endswith("]"):
-            try:
-                import json
-
-                arr = json.loads(s)
-                if isinstance(arr, list):
-                    return [str(x).strip() for x in arr if str(x).strip()]
-            except Exception:
-                pass
-        return [x.strip() for x in s.split(",") if x.strip()]
-
-    @property
-    def NOTION_PAGE_IDS(self) -> List[str]:  # type: ignore[override]
-        return self._parse_csv_list(self.NOTION_PAGE_IDS_RAW)
-
 
 @lru_cache()
 def get_settings() -> Settings:
