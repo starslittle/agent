@@ -10,14 +10,14 @@ services:
     dns:
       - 223.5.5.5
     volumes:
-      - ./src:/app/src
-      - ./configs:/app/configs
-      - ./prompts:/app/prompts
-      - ./data:/app/data
-      - ./storage:/app/storage
+      - ./backend/src:/app/backend/src
+      - ./backend/configs:/app/backend/configs
+      - ./backend/prompts:/app/backend/prompts
+      - ./backend/data:/app/backend/data
+      - ./backend/storage:/app/backend/storage
       - ./frontend/dist:/app/frontend/dist
     env_file:
-      - .env
+      - ./backend/.env
     depends_on:
       - redis
       - postgres
@@ -34,7 +34,7 @@ services:
       - "5437:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/init_pgvector.sql
+      - ./backend/scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/init_pgvector.sql
     restart: unless-stopped
 
   redis:

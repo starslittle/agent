@@ -1,0 +1,42 @@
+# 基础依赖 - 核心框架
+pyyaml
+python-dotenv
+
+# Core LLM/RAG stacks
+langchain>=0.2.10
+langchain-community>=0.2.10
+langchain-tavily
+langchain-dashscope
+langchain-postgres
+llama-index-core
+llama-index-llms-dashscope
+llama-index-embeddings-huggingface
+llama-index-vector-stores-chroma
+llama-index-readers-file
+llama-index-experimental
+chromadb
+
+# Data handling & utils
+pandas
+tabulate
+matplotlib
+requests
+
+# Validation/config
+pydantic
+pydantic-settings
+
+# PDF processing
+PyPDF2
+pdfplumber
+pymupdf
+
+# DOCX processing
+python-docx
+docx2txt
+
+# BM25 retriever
+rank_bm25
+
+# Runtime compatibility pins
+protobuf==3.20.3

@@ -1,0 +1,55 @@
+ [project]
+ name = "qidian-agent-backend"
+ version = "0.1.0"
+ description = "Backend for Qidian Agent with LangGraph."
+ requires-python = ">=3.10"
+ dependencies = [
+   "pyyaml",
+   "python-dotenv",
+   "langchain>=0.2.10",
+   "langchain-community>=0.2.10",
+   "langchain-tavily",
+   "langchain-dashscope",
+   "langchain-postgres",
+   "ragas",
+   "datasets",
+   "llama-index-core",
+   "llama-index-llms-dashscope",
+   "llama-index-embeddings-huggingface",
+   "llama-index-vector-stores-chroma",
+   "llama-index-readers-file",
+   "llama-index-experimental",
+   "chromadb",
+   "unstructured[local-inference]",
+   "pandas",
+   "tabulate",
+   "matplotlib",
+   "requests",
+   "pydantic",
+   "pydantic-settings",
+   "PyPDF2",
+   "pdfplumber",
+   "pymupdf",
+   "python-docx",
+   "docx2txt",
+   "rank_bm25",
+   "protobuf==3.20.3",
+   "fastapi",
+   "uvicorn[standard]",
+   "sse-starlette",
+   "python-multipart",
+   "langgraph>=0.2.0",
+   "psycopg2-binary",
+   "redis",
+   "lunar-python>=1.4.8",
+]
+
+ [project.optional-dependencies]
+ dev = [
+   "ruff",
+   "black",
+   "mypy",
+   "pytest",
+   "pytest-asyncio",
+   "httpx",
+ ]

@@ -3,17 +3,19 @@ import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Plus, Send } from "lucide-react";
+import { Plus, Send, Square } from "lucide-react";
 
 interface ChatInputProps {
-  onSend: (text: string, deepThinking: boolean, fortuneMode: boolean) => void;
+  onSend: (text: string, deepThinking: boolean) => void;
+  loading?: boolean;
+  onStop?: () => void;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
+export const ChatInput: React.FC<ChatInputProps> = ({ onSend, loading, onStop }) => {
   const [value, setValue] = useState("");
   const [deep, setDeep] = useState(false);
-  const [fortune, setFortune] = useState(false);
-  const [sending, setSending] = useState(false);
+  // local sending state still useful for debounce/prevent double click
+  const [sending, setSending] = useState(false); 
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -37,7 +39,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
     const text = value.trim();
     if (!text && !file) return;
     setSending(true);
-    onSend(text || (file ? "[已附加图片]" : ""), deep, fortune);
+    onSend(text || (file ? "[已附加图片]" : ""), deep);
     setValue("");
     setFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -53,17 +55,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
 
   return (
     <div className="w-full space-y-2">
-      {/* 模式切换按钮：深度思考 / 命理模式 */}
+      {/* 模式切换按钮：深度思考 */}
       <div className="flex gap-2 justify-start">
         <button
           type="button"
-          onClick={() => {
-            setDeep((d) => {
-              const nd = !d;
-              if (nd) setFortune(false); // 互斥
-              return nd;
-            });
-          }}
+          onClick={() => setDeep(!deep)}
           aria-pressed={deep}
           className={cn(
             "px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200",
@@ -72,25 +68,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
           title="切换深度思考"
         >
           🧠 深度思考
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setFortune((f) => {
-              const nf = !f;
-              if (nf) setDeep(false); // 互斥
-              return nf;
-            });
-          }}
-          aria-pressed={fortune}
-          className={cn(
-            "px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200",
-            fortune ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          )}
-          title="切换命理模式"
-        >
-          ✨ 命理模式
         </button>
       </div>
 
@@ -123,17 +100,25 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
           onInput={autosize}
           rows={1}
           placeholder="输入消息... Enter 发送，Shift+Enter 换行"
-          className="flex-1 max-h-40 overflow-y-auto border-0 shadow-none focus-visible:ring-0 bg-transparent px-0 text-sm leading-5 text-gray-800 min-h-[24px]"
+          className="flex-1 max-h-20 overflow-y-auto border-0 shadow-none focus-visible:ring-0 bg-transparent px-0 text-sm leading-5 text-gray-800 min-h-[24px]"
           aria-label="聊天输入"
         />
 
-        {/* 发送按钮 */}
+        {/* 发送/停止按钮 */}
         <button
-          disabled={sending || (!value.trim() && !file)}
-          onClick={handleSend}
-          className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 flex items-center justify-center transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!loading && (sending || (!value.trim() && !file))}
+          onClick={loading ? onStop : handleSend}
+          className={cn(
+            "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed",
+            "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+          )}
+          title={loading ? "停止生成" : "发送消息"}
         >
-          <Send size={18} className="text-white" />
+          {loading ? (
+            <Square size={14} className="text-white fill-white" />
+          ) : (
+            <Send size={18} className="text-white" />
+          )}
         </button>
       </div>
 
