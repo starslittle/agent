@@ -1,7 +1,5 @@
-import os
-import json
 from pathlib import Path
-from typing import Dict, AsyncGenerator
+from typing import Dict
 
 import uvicorn
 from dotenv import load_dotenv
@@ -32,7 +30,6 @@ except Exception as _e:
 from app.core.settings import settings
 
 from .api.agent_factory import create_agent_from_config
-from sse_starlette.sse import EventSourceResponse
 
 if settings.DASHSCOPE_API_KEY:
     print("[ENV] DASHSCOPE_API_KEY loaded successfully")
@@ -135,186 +132,13 @@ def load_agents():
         print(f"[REDIS] init failed: {_re}")
 
 
-@app.post("/query_stream_sse")
-async def query_stream_sse(req: QueryRequest):
-    """流式问答接口，使用 SSE 协议"""
-    if not req.query.strip():
-        raise HTTPException(status_code=400, detail="query 不能为空")
-
-    # ========== 智能体选择逻辑（流式） ==========
-    # 当前配置：仅使用通用智能体
-    agent_name = "default_llm_agent"
-
-    # 确保agent存在
-    if not agent_name or agent_name not in AGENT_REGISTRY:
-        raise HTTPException(status_code=404, detail=f"未找到指定 agent: {agent_name}")
-
-    async def event_generator():
-        """
-        这是SSE的核心：异步生成器
-        每次yield一个字典，sse-starlette会自动转换成SSE格式
-        """
-        try:
-            executor = AGENT_REGISTRY.get(agent_name)
-            if not executor:
-                yield {
-                    "event": "message",
-                    "data": json.dumps({"type": "error", "message": f"Agent {agent_name} 不存在"}, ensure_ascii=False)
-                }
-                return
-
-            # 准备调用参数（chat_history 必须是列表，不能是None）
-            history = []
-            if req.chat_history:
-                for msg in req.chat_history:
-                    role = msg.get("role", "")
-                    content = msg.get("content", "")
-                    if role == "user":
-                        history.append(("human", content))
-                    elif role == "assistant":
-                        history.append(("ai", content))
-
-            invoke_params = {
-                "input": req.query,
-                "context": "",
-                "chat_history": history  # 始终提供列表，即使为空
-            }
-
-            accumulated_output = ""
-
-            has_stream = hasattr(executor, "stream") and callable(executor.stream)
-            stream_iter = executor.stream(invoke_params) if has_stream else None
-
-            if stream_iter is not None:
-                # Agent 支持流式输出
-                print(f"🌊 [后端] 开始流式处理")
-                chunk_count = 0
-                delta_count = 0
-
-                if hasattr(stream_iter, "__aiter__"):
-                    async for chunk in stream_iter:
-                        chunk_count += 1
-                        if isinstance(chunk, dict) and "output" in chunk:
-                            current_output = chunk.get("output", "")
-
-                            if current_output and current_output.startswith(accumulated_output):
-                                delta = current_output[len(accumulated_output):]
-                                if delta:
-                                    delta_count += 1
-                                    # 发送增量数据
-                                    yield {
-                                        "event": "message",
-                                        "data": json.dumps({
-                                            "type": "delta",
-                                            "data": delta
-                                        }, ensure_ascii=False)
-                                    }
-                                accumulated_output = current_output
-                else:
-                    for chunk in stream_iter:
-                        chunk_count += 1
-                        if isinstance(chunk, dict) and "output" in chunk:
-                            current_output = chunk.get("output", "")
-
-                            if current_output and current_output.startswith(accumulated_output):
-                                delta = current_output[len(accumulated_output):]
-                                if delta:
-                                    delta_count += 1
-                                    # 发送增量数据
-                                    yield {
-                                        "event": "message",
-                                        "data": json.dumps({
-                                            "type": "delta",
-                                            "data": delta
-                                        }, ensure_ascii=False)
-                                    }
-                                accumulated_output = current_output
-
-                # 流式完成，发送done信号
-                yield {
-                    "event": "message",
-                    "data": json.dumps({"type": "done"}, ensure_ascii=False)
-                }
-
-            else:
-                # ===== 场景B：Agent不支持流式输出 =====
-                if hasattr(executor, "ainvoke") and callable(executor.ainvoke):
-                    result = await executor.ainvoke(invoke_params)
-                else:
-                    result = executor.invoke(invoke_params)
-
-                # 提取输出内容
-                if isinstance(result, dict):
-                    output = result.get("output", "")
-                else:
-                    output = str(result)
-
-                # 一次性发送完整输出
-                yield {
-                    "event": "message",
-                    "data": json.dumps({
-                        "type": "delta",
-                        "data": output  # 完整内容
-                    }, ensure_ascii=False)
-                }
-
-                # 发送完成信号
-                yield {
-                    "event": "message",
-                    "data": json.dumps({"type": "done"}, ensure_ascii=False)
-                }
-
-        except Exception as e:
-            # 错误处理
-            print(f"SSE流式处理异常: {e}")
-            import traceback
-            traceback.print_exc()
-
-            # 向前端发送错误事件
-            yield {
-                "event": "message",
-                "data": json.dumps({
-                    "type": "error",
-                    "message": f"处理失败: {str(e)}"
-                }, ensure_ascii=False)
-            }
-
-    print(f"📡 [后端] 返回EventSourceResponse")
-    # 返回SSE响应
-    return EventSourceResponse(
-        event_generator(),
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-# ===== 新的基于LangGraph的API端点 =====
-
-@app.post("/query_stream_graph")
-async def query_stream_graph_endpoint(req: QueryRequest):
+@app.post("/query_stream")
+async def query_stream_endpoint(req: QueryRequest):
     """
-    基于LangGraph的流式查询接口（新版本）
-
-    支持三种模式：
-    - default: 常规对话
-    - research: 深度思考（工具+RAG）
-    - fortune: 命理分析
+    唯一对外流式接口（SSE + LangGraph）。
     """
     from .api.graph_routes import query_stream_graph
     return await query_stream_graph(req)
-
-
-@app.post("/query_sync_graph")
-async def query_sync_graph_endpoint(req: QueryRequest):
-    """
-    基于LangGraph的同步查询接口（新版本）
-
-    返回完整答案而不是流式
-    """
-    from .api.graph_routes import query_sync_graph
-    return await query_sync_graph(req)
 
 
 # ===== 原有的API端点（保留兼容） =====

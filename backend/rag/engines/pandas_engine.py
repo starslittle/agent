@@ -4,7 +4,6 @@ from typing import Optional, List
 
 import pandas as pd
 from llama_index.core.base.base_query_engine import BaseQueryEngine
-from llama_index.experimental.query_engine import PandasQueryEngine
 
 
 logger = logging.getLogger(__name__)
@@ -67,12 +66,18 @@ class PandasEngine:
             return None
 
         try:
+            # 延迟导入，避免在未安装可选依赖（如 polars）时导致整个服务启动失败。
+            from llama_index.experimental.query_engine import PandasQueryEngine
+
             qe: BaseQueryEngine = PandasQueryEngine(
                 df=df,
                 verbose=True,
                 instructional_prompt="请严格根据指令生成Python代码来回答问题。",
             )
             return qe
+        except ModuleNotFoundError as e:
+            logger.warning(f"Pandas 引擎依赖缺失（{e}），已跳过该引擎。")
+            return None
         except Exception as e:
             logger.error(f"创建 Pandas 引擎时出错: {e}")
             return None

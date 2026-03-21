@@ -18,7 +18,7 @@ def _grade_context(question: str, context: str) -> bool:
         f"检索内容：{context}\n"
     )
     llm = ChatTongyi(
-        model=settings.LLM_MODEL_NAME or "qwen-plus-2025-07-28",
+        model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
         temperature=0.0,
         dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
     )

@@ -19,7 +19,7 @@ async def tool_router_node(state: GraphState) -> Dict[str, Any]:
     query = state.get("query", "").lower()
     route = state.get("route", "")
 
-    print(f"\n[🔧 Tool Router] 分析是否需要工具...")
+    print("\n[Tool Router] 分析是否需要工具...")
 
     # 工具相关关键字
     tool_keywords = {
@@ -43,7 +43,7 @@ async def tool_router_node(state: GraphState) -> Dict[str, Any]:
 
     need_tool = len(needed_tools) > 0
 
-    print(f"[🔧 Tool Router] 需要工具: {needed_tools if need_tool else '无'}")
+    print(f"[Tool Router] 需要工具: {needed_tools if need_tool else '无'}")
 
     return {
         **state,

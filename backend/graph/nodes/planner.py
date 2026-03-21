@@ -29,10 +29,10 @@ async def planner_node(state: GraphState) -> Dict[str, Any]:
     """
     query = state.get("query", "")
     route = state.get("route", "research")
-    print(f"\n[🧭 Planner] 生成任务清单 (模式: {route}): {query[:50]}...")
+    print(f"\n[Planner] 生成任务清单 (模式: {route}): {query[:50]}...")
 
     llm = ChatTongyi(
-        model=settings.LLM_MODEL_NAME or "qwen-plus-2025-07-28",
+        model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
         temperature=0.2,
         dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
     )
@@ -53,7 +53,7 @@ async def planner_node(state: GraphState) -> Dict[str, Any]:
         res = llm.invoke(prompt)
         text = getattr(res, "content", str(res))
     except Exception as e:
-        print(f"[🧭 Planner] 计划生成失败: {e}")
+        print(f"[Planner] 计划生成失败: {e}")
         text = ""
 
     tasks = _parse_tasks(text)

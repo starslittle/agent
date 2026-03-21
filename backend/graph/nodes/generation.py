@@ -22,7 +22,7 @@ async def generation_node(state: GraphState) -> Dict[str, Any]:
     # 3. 更新 output 字段
 
     llm = ChatTongyi(
-        model="qwen-plus-2025-07-28",
+        model="deepseek-v3.2",
         temperature=0.2,
         dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
     )

@@ -1,10 +1,18 @@
 """常规LLM节点 - 直接对话模式"""
 
+import sys
 from typing import Dict, Any
 from graph.state import GraphState
 from langchain_community.chat_models import ChatTongyi
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from app.core.settings import settings
+
+
+def _safe_preview(text: str, limit: int = 100) -> str:
+    """避免 Windows GBK 控制台因 emoji 等字符打印失败。"""
+    s = (text or "")[:limit]
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    return s.encode(encoding, errors="replace").decode(encoding, errors="replace")
 
 
 async def direct_llm_node(state: GraphState) -> Dict[str, Any]:
@@ -21,12 +29,12 @@ async def direct_llm_node(state: GraphState) -> Dict[str, Any]:
     query = state.get("query", "")
     chat_history = state.get("chat_history", [])
 
-    print(f"\n[💬 Direct LLM] 处理查询: {query[:50]}...")
+    print(f"\n[Direct LLM] 处理查询: {query[:50]}...")
 
     try:
         # 创建LLM
         llm = ChatTongyi(
-            model="qwen-plus-2025-07-28",
+            model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
             temperature=0.2,
             dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
         )
@@ -59,12 +67,12 @@ async def direct_llm_node(state: GraphState) -> Dict[str, Any]:
         chain = prompt | llm
         response = await chain.ainvoke({
             "query": query,
-            "chat_history": messages if messages else None
+            "chat_history": messages
         })
 
         answer = response.content if hasattr(response, 'content') else str(response)
 
-        print(f"[💬 Direct LLM] 生成答案: {answer[:100]}...")
+        print(f"[Direct LLM] 生成答案: {_safe_preview(answer)}...")
 
         return {
             **state,
@@ -73,7 +81,7 @@ async def direct_llm_node(state: GraphState) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        print(f"[❌ Direct LLM] 错误: {e}")
+        print(f"[Direct LLM] 错误: {e}")
         import traceback
         traceback.print_exc()
 

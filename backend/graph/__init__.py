@@ -10,6 +10,11 @@ __all__ = [
 
 from .state import GraphState
 from .builder import build_graph, create_graph_state
+from .nodes.router import router_node
+from .nodes.planner import planner_node
+from .nodes.executor import executor_node
+from .nodes.replanner import replanner_node
+from .nodes.generate import generate_node
 
 
 # 全局Graph实例
@@ -66,29 +71,36 @@ async def stream_graph(
     Yields:
         dict: 流式输出片段
     """
-    graph = get_graph()
     state = create_graph_state(query, chat_history, mode_hint, force_route)
+    state["metadata"] = {**state.get("metadata", {}), "streaming": True}
+    # 统一走手写流式编排，确保所有模式都可增量输出
+    state = await router_node(state)
+    route = state.get("route", "default")
 
-    # 若 LangGraph 可用，优先流式输出状态
-    if hasattr(graph, "astream"):
-        async for event in graph.astream(state, stream_mode="values"):
-            yield event
+    # default/research/fortune 的最终回答统一通过 generate_node 产出
+    if route == "default":
+        async for update in generate_node(state):
+            state = update
+            yield state
         return
 
-    # 回退：非 LangGraph（简化版本）
-    result = await graph.ainvoke(state)
-    answer = result.get("final_answer", "") or result.get("output", "")
+    if route in ["research", "fortune"]:
+        state = await planner_node(state)
+        yield state
+        while True:
+            state = await executor_node(state)
+            yield state
+            state = await replanner_node(state)
+            yield state
+            if state.get("plan_done"):
+                break
 
-    if not answer:
-        yield result
+        async for update in generate_node(state):
+            state = update
+            yield state
         return
 
-    # 分片输出，确保前端体验为流式
-    chunk_size = 20
-    for i in range(0, len(answer), chunk_size):
-        partial = answer[: i + chunk_size]
-        yield {
-            **result,
-            "final_answer": partial,
-            "output": partial,
-        }
+    # 未识别路由时兜底：直接流式生成
+    async for update in generate_node(state):
+        state = update
+        yield state

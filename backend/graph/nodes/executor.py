@@ -43,11 +43,11 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
         return {**state, "plan_done": True}
 
     current_task = plan_tasks.pop(0)
-    print(f"\n[🧩 Executor] 正在处理子任务: {current_task}")
+    print(f"\n[Executor] 正在处理子任务: {current_task}")
 
     # 使用 LLM 决定该任务最适合哪个工具
     llm = ChatTongyi(
-        model=settings.LLM_MODEL_NAME or "qwen-plus-2025-07-28",
+        model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
         temperature=0, # 决策需要高确定性
         dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
     )
@@ -76,7 +76,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
     except Exception:
         tool_name = "tavily_search" # 默认兜底
 
-    print(f"[🧩 Executor] 决策工具: {tool_name}")
+    print(f"[Executor] 决策工具: {tool_name}")
 
     note = ""
     # 执行选定的工具
@@ -107,7 +107,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
             gender = str(data.get("gender", "")).strip()
             birthplace = str(data.get("birthplace", "")).strip()
 
-            print(f"[🧩 Executor] 提取到出生日期: {birth_date or '(缺失)'}")
+            print(f"[Executor] 提取到出生日期: {birth_date or '(缺失)'}")
 
             if not birth_date:
                 note = "缺少出生日期，无法进行排盘，请补充 YYYY-MM-DD 格式日期。"
@@ -147,7 +147,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
             gender = str(data.get("gender", "")).strip()
             birthplace = str(data.get("birthplace", "")).strip()
 
-            print(f"[🧩 Executor] 提取到出生日期: {birth_date or '(缺失)'}")
+            print(f"[Executor] 提取到出生日期: {birth_date or '(缺失)'}")
 
             if not birth_date:
                 note = "缺少出生日期，无法进行紫微排盘，请补充 YYYY-MM-DD 格式日期。"

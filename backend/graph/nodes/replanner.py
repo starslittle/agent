@@ -36,15 +36,15 @@ async def replanner_node(state: GraphState) -> Dict[str, Any]:
     original_query = state.get("query", "")
     route = state.get("route", "research")
 
-    print(f"\n[🔄 Replanner] 检查进度 (模式: {route}, 第 {iteration} 轮)...")
+    print(f"\n[Replanner] 检查进度 (模式: {route}, 第 {iteration} 轮)...")
 
     # 强制熔断
     if iteration >= max_iterations:
-        print("[🔄 Replanner] 已达最大轮次，强制结束。")
+        print("[Replanner] 已达最大轮次，强制结束。")
         return {**state, "plan_done": True}
 
     llm = ChatTongyi(
-        model=settings.LLM_MODEL_NAME or "qwen-plus-2025-07-28",
+        model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
         temperature=0.2,
         dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
     )
@@ -73,21 +73,21 @@ async def replanner_node(state: GraphState) -> Dict[str, Any]:
         res = llm.invoke(prompt)
         text = getattr(res, "content", str(res)).strip()
     except Exception as e:
-        print(f"[🔄 Replanner] 错误: {e}")
+        print(f"[Replanner] 错误: {e}")
         text = "【保持原计划】"
 
     if "已完成" in text:
-        print("[🔄 Replanner] 目标已达成，进入生成阶段。")
+        print("[Replanner] 目标已达成，进入生成阶段。")
         return {**state, "plan_done": True, "plan_tasks": []}
     
     if "保持原计划" in text:
-        print("[🔄 Replanner] 继续按原计划执行。")
+        print("[Replanner] 继续按原计划执行。")
         return {**state, "plan_done": False}
 
     # 否则，解析新的任务清单
     new_tasks = _parse_tasks(text)
     if new_tasks:
-        print(f"[🔄 Replanner] 计划已动态调整: {new_tasks}")
+        print(f"[Replanner] 计划已动态调整: {new_tasks}")
         return {**state, "plan_tasks": new_tasks, "plan_done": False}
 
     return {**state, "plan_done": not plan_tasks}

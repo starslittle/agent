@@ -23,7 +23,7 @@ def main() -> None:
     try:
         from langchain_community.chat_models import ChatTongyi
         print("[STEP] 非流式调用测试…")
-        llm = ChatTongyi(model="qwen-plus-2025-07-28", temperature=0.2, dashscope_api_key=key, streaming=False)
+        llm = ChatTongyi(model="deepseek-v3.2", temperature=0.2, dashscope_api_key=key, streaming=False)
         resp = llm.invoke("用一句中文自我介绍")
         print("[OK] 非流式调用成功，返回:", getattr(resp, "content", str(resp))[:120].replace("\n", " "))
     except Exception as e:
@@ -33,7 +33,7 @@ def main() -> None:
     try:
         from langchain_community.chat_models import ChatTongyi
         print("[STEP] 流式调用测试…")
-        llm2 = ChatTongyi(model="qwen-plus-2025-07-28", temperature=0.2, dashscope_api_key=key, streaming=True)
+        llm2 = ChatTongyi(model="deepseek-v3.2", temperature=0.2, dashscope_api_key=key, streaming=True)
         got = False
         for i, chunk in enumerate(llm2.stream([("human", "请逐字回答: 你好世界")])):
             txt = getattr(chunk, "content", "")

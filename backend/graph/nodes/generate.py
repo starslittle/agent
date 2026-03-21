@@ -1,10 +1,17 @@
 """生成节点 - 整合上下文生成最终答案"""
 
+import sys
 from typing import Dict, Any, AsyncIterator
 from graph.state import GraphState
 from langchain_community.chat_models import ChatTongyi
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from app.core.settings import settings
+
+
+def _safe_preview(text: str, limit: int = 100) -> str:
+    s = (text or "")[:limit]
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    return s.encode(encoding, errors="replace").decode(encoding, errors="replace")
 
 
 async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
@@ -27,12 +34,12 @@ async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
     chat_history = state.get("chat_history", [])
     streaming = bool(state.get("metadata", {}).get("streaming"))
 
-    print(f"\n[✨ Generate] 生成最终答案，模式: {route}")
+    print(f"\n[Generate] 生成最终答案，模式: {route}")
 
     try:
-        # 创建LLM
+        # 创建LLM（默认用于非流式回退）
         llm = ChatTongyi(
-            model="qwen-plus-2025-07-28",
+            model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
             temperature=0.2,
             dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
         )
@@ -101,16 +108,22 @@ async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
             elif role == "ai":
                 messages.append(("ai", content))
 
-        # 调用LLM
-        chain = prompt | llm
-
         if streaming:
             answer_parts: list[str] = []
             try:
-                async for chunk in chain.astream({
+                # 显式开启 provider 流式；流式模式下禁止回退为一次性 ainvoke
+                llm_stream = ChatTongyi(
+                    model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
+                    temperature=0.2,
+                    dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
+                    streaming=True,
+                )
+                stream_chain = prompt | llm_stream
+
+                async for chunk in stream_chain.astream({
                     "query": query,
                     "context": full_context,
-                    "chat_history": messages if messages else None
+                    "chat_history": messages
                 }):
                     piece = getattr(chunk, "content", None)
                     if piece is None:
@@ -125,19 +138,32 @@ async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
                         "output": answer,
                     }
                 return
-            except Exception:
-                # 回退为非流式调用
-                pass
+            except Exception as stream_err:
+                print(f"[Generate] 流式 astream 失败（已禁用非流式回退）: {stream_err}")
+                error_text = f"抱歉，流式生成失败：{stream_err}"
+                partial = ""
+                step = 12
+                for i in range(0, len(error_text), step):
+                    partial += error_text[i:i + step]
+                    yield {
+                        **state,
+                        "final_answer": partial,
+                        "output": partial,
+                        "error": str(stream_err),
+                    }
+                return
 
+        # 非流式模式（仅用于同步调用路径）
+        chain = prompt | llm
         response = await chain.ainvoke({
             "query": query,
             "context": full_context,
-            "chat_history": messages if messages else None
+            "chat_history": messages
         })
 
         answer = response.content if hasattr(response, 'content') else str(response)
 
-        print(f"[✨ Generate] 生成答案: {answer[:100]}...")
+        print(f"[Generate] 生成答案: {_safe_preview(answer)}...")
 
         yield {
             **state,
@@ -146,7 +172,7 @@ async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
         }
 
     except Exception as e:
-        print(f"[❌ Generate] 错误: {e}")
+        print(f"[Generate] 错误: {e}")
         import traceback
         traceback.print_exc()
 

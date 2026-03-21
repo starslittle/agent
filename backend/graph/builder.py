@@ -15,7 +15,7 @@ from .nodes.executor import executor_node
 from .nodes.replanner import replanner_node
 
 
-def route_after_router(state: GraphState) -> Literal["direct_llm", "tool_router", "rag", "research_planner", "end"]:
+def route_after_router(state: GraphState) -> Literal["direct_llm", "tool_router", "rag", "research_planner", "generate", "end"]:
     """
     路由决策：根据router节点的结果决定下一步
 
@@ -27,11 +27,11 @@ def route_after_router(state: GraphState) -> Literal["direct_llm", "tool_router"
     """
     route = state.get("route", "default")
 
-    print(f"[🔀 Route Decision] 当前路由: {route}")
+    print(f"[Route Decision] 当前路由: {route}")
 
     if route == "default":
-        # 常规模式：直接LLM
-        return "direct_llm"
+        # 常规模式：走 generate 节点，复用 token 级流式生成能力
+        return "generate"
     elif route in ["research", "fortune"]:
         # 深度思考模式和命理模式均采用 Plan-and-Execute
         return "research_planner"
@@ -87,7 +87,7 @@ def build_graph():
         # 尝试使用langgraph
         from langgraph.graph import StateGraph, END
 
-        print("[🔨 Graph] 使用 LangGraph 构建")
+        print("[Graph] 使用 LangGraph 构建")
 
         # 创建图
         workflow = StateGraph(GraphState)
@@ -115,6 +115,7 @@ def build_graph():
                 "tool_router": "tool_router",
                 "rag": "rag",
                 "research_planner": "research_planner",
+                "generate": "generate",
                 "end": END,
             }
         )
@@ -149,18 +150,18 @@ def build_graph():
 
         # 编译图
         app = workflow.compile()
-        print("[✅ Graph] LangGraph 构建成功")
+        print("[Graph] LangGraph 构建成功")
 
         return app
 
     except ImportError:
         # langgraph未安装，使用简化版本
-        print("[⚠️  Graph] LangGraph 未安装，使用简化版本")
+        print("[Graph] LangGraph 未安装，使用简化版本")
 
         class SimpleGraph:
             """简化的Graph实现"""
 
-            async def astream(self, state: Dict[str, Any]):
+            async def astream(self, state: Dict[str, Any], stream_mode: str | None = None, **kwargs):
                 """流式执行"""
                 # 1. Router
                 state = await router_node(state)

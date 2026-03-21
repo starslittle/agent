@@ -22,12 +22,12 @@ async def router_node(state: GraphState) -> Dict[str, Any]:
     mode_hint = state.get("mode_hint")
     force_route = state.get("force_route")
 
-    print(f"\n[🔀 Router] 分析查询: {query[:50]}...")
-    print(f"[🔀 Router] 模式提示: {mode_hint or 'auto'}")
+    print(f"\n[Router] 分析查询: {query[:50]}...")
+    print(f"[Router] 模式提示: {mode_hint or 'auto'}")
 
     try:
         if force_route in {"default", "research", "fortune"}:
-            print(f"[🔀 Router] 强制路由: {force_route}")
+            print(f"[Router] 强制路由: {force_route}")
             return {
                 **state,
                 "route": force_route,
@@ -50,8 +50,8 @@ async def router_node(state: GraphState) -> Dict[str, Any]:
         else:
             route_type = "default"
 
-        print(f"[🔀 Router] 路由决策: {route_type}")
-        print(f"[🔀 Router] 理由: {routing_result.get('reason', '')}")
+        print(f"[Router] 路由决策: {route_type}")
+        print(f"[Router] 理由: {routing_result.get('reason', '')}")
 
         return {
             **state,
@@ -64,7 +64,7 @@ async def router_node(state: GraphState) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        print(f"[❌ Router] 错误: {e}")
+        print(f"[Router] 错误: {e}")
         # 默认使用常规模式
         return {
             **state,

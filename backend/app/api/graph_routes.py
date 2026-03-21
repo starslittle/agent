@@ -1,6 +1,8 @@
 """Graph API 路由 - 统一流式输出接口"""
 
 from typing import Dict, Any
+import sys
+import time
 from pathlib import Path
 
 import yaml
@@ -19,6 +21,12 @@ from graph import run_graph, stream_graph
 _STREAM_AGENT_CACHE: dict[str, object] = {}
 _STREAM_DEFAULT: str | None = None
 _FORTUNE_RAG_ENABLED = False  # 临时暂停命理RAG
+
+
+def _safe_preview(text: str, limit: int = 50) -> str:
+    s = (text or "")[:limit]
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    return s.encode(encoding, errors="replace").decode(encoding, errors="replace")
 
 
 def _resolve_agents_yaml() -> Path:
@@ -82,7 +90,7 @@ def _grade_context(question: str, context: str) -> bool:
         f"检索内容：{context}\n"
     )
     llm = ChatTongyi(
-        model=settings.LLM_MODEL_NAME or "qwen-plus-2025-07-28",
+        model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
         temperature=0.0,
         dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
     )
@@ -140,6 +148,13 @@ async def query_stream_graph(req: Any):
     async def event_generator():
         """SSE事件生成器"""
         try:
+            stream_started_at = time.perf_counter()
+            first_delta_sent_at: float | None = None
+            delta_count = 0
+            thinking_delta_count = 0
+            answer_delta_count = 0
+            final_output_len = 0
+
             # 转换聊天历史格式
             chat_history = []
             if req.chat_history:
@@ -151,10 +166,10 @@ async def query_stream_graph(req: Any):
                     elif role == "assistant":
                         chat_history.append(("ai", content))
 
-            print(f"\n[🌊 Stream] 开始流式处理")
-            print(f"[🌊 Stream] 查询: {req.query[:50]}...")
-            print(f"[🌊 Stream] 模式: {req.agent_name or 'auto'}")
-            print(f"[🌊 Stream] 历史记录: {len(chat_history)} 条")
+            print("\n[Stream] 开始流式处理")
+            print(f"[Stream] 查询: {_safe_preview(req.query)}...")
+            print(f"[Stream] 模式: {req.agent_name or 'auto'}")
+            print(f"[Stream] 历史记录: {len(chat_history)} 条")
 
             # 将 agent_name 转换为 mode_hint（用于隐式意图识别）
             mode_hint = None
@@ -166,7 +181,8 @@ async def query_stream_graph(req: Any):
             accumulated_output = ""
             last_plan_completed = 0
             seen_plan_current = None
-            sent_plan_list = False
+            emitted_thinking_keys: set[str] = set()
+            thinking_step_index = 0
             thinking_finished_sent = False
             async for chunk in stream_graph(
                 query=req.query,
@@ -176,51 +192,35 @@ async def query_stream_graph(req: Any):
                 current_output = ""
                 if isinstance(chunk, dict):
                     # 计划/执行过程提示（不包含思维链）
-                    plan_tasks = chunk.get("plan_tasks") or []
                     plan_completed = chunk.get("plan_completed") or []
                     plan_current = chunk.get("plan_current")
 
-                    if plan_tasks and not sent_plan_list:
-                        sent_plan_list = True
-                        plan_text = "【计划】" + "；".join(plan_tasks[:6])
-                        import json
-                        yield {
-                            "event": "message",
-                            "data": json.dumps({
-                                "type": "delta",
-                                "data": plan_text + "\n",
-                                "isThinking": True,
-                                "thinkingFinished": False,
-                            }, ensure_ascii=False)
-                        }
-
                     if plan_current and plan_current != seen_plan_current:
                         seen_plan_current = plan_current
+                        current_key = str(plan_current).strip()
+                        key = f"current::{current_key}"
+                        if not current_key or key in emitted_thinking_keys:
+                            continue
+                        emitted_thinking_keys.add(key)
                         import json
+                        thinking_step_index += 1
+                        if first_delta_sent_at is None:
+                            first_delta_sent_at = time.perf_counter()
+                        delta_count += 1
+                        thinking_delta_count += 1
                         yield {
                             "event": "message",
                             "data": json.dumps({
                                 "type": "delta",
-                                "data": f"【步骤】开始：{plan_current}\n",
+                                "data": f"Step{thinking_step_index}: {plan_current}\n",
                                 "isThinking": True,
                                 "thinkingFinished": False,
                             }, ensure_ascii=False)
                         }
 
+                    # 已完成事件仅用于进度跟踪，不再推送到前端思考区
                     if len(plan_completed) > last_plan_completed:
-                        newly = plan_completed[last_plan_completed:]
                         last_plan_completed = len(plan_completed)
-                        for item in newly:
-                            import json
-                            yield {
-                                "event": "message",
-                                "data": json.dumps({
-                                    "type": "delta",
-                                    "data": f"【步骤】完成：{item}\n",
-                                    "isThinking": True,
-                                    "thinkingFinished": False,
-                                }, ensure_ascii=False)
-                            }
 
                     current_output = chunk.get("final_answer") or chunk.get("output", "")
                 else:
@@ -229,6 +229,10 @@ async def query_stream_graph(req: Any):
                     delta = current_output[len(accumulated_output):]
                     if delta:
                         import json
+                        if first_delta_sent_at is None:
+                            first_delta_sent_at = time.perf_counter()
+                        delta_count += 1
+                        answer_delta_count += 1
                         yield {
                             "event": "message",
                             "data": json.dumps({
@@ -240,6 +244,7 @@ async def query_stream_graph(req: Any):
                         }
                         thinking_finished_sent = True
                         accumulated_output = current_output
+                        final_output_len = len(accumulated_output)
 
             # 发送完成信号
             import json
@@ -249,10 +254,23 @@ async def query_stream_graph(req: Any):
                 "data": json.dumps({"type": "done"}, ensure_ascii=False)
             }
 
-            print(f"[✅ Stream] 流式处理完成")
+            total_ms = (time.perf_counter() - stream_started_at) * 1000
+            first_token_ms = (
+                (first_delta_sent_at - stream_started_at) * 1000
+                if first_delta_sent_at is not None
+                else None
+            )
+            first_token_text = f"{first_token_ms:.0f}ms" if first_token_ms is not None else "N/A"
+            print(
+                "[Stream Metrics] "
+                f"first_token={first_token_text}, "
+                f"deltas={delta_count} (thinking={thinking_delta_count}, answer={answer_delta_count}), "
+                f"output_len={final_output_len}, total={total_ms:.0f}ms"
+            )
+            print("[Stream] 流式处理完成")
 
         except Exception as e:
-            print(f"[❌ Stream] 错误: {e}")
+            print(f"[Stream] 错误: {e}")
             import traceback
             traceback.print_exc()
 
@@ -301,8 +319,8 @@ async def query_sync_graph(req: Any) -> Dict[str, Any]:
                 elif role == "assistant":
                     chat_history.append(("ai", content))
 
-        print(f"\n[🔄 Graph Sync] 开始同步处理")
-        print(f"[🔄 Graph Sync] 查询: {req.query[:50]}...")
+        print("\n[Graph Sync] 开始同步处理")
+        print(f"[Graph Sync] 查询: {_safe_preview(req.query)}...")
 
         # 同步调用Graph
         result = await run_graph(
@@ -313,7 +331,7 @@ async def query_sync_graph(req: Any) -> Dict[str, Any]:
 
         answer = result.get("final_answer", "") or result.get("output", "")
 
-        print(f"[✅ Graph Sync] 同步处理完成")
+        print("[Graph Sync] 同步处理完成")
 
         return {
             "answer": answer,
@@ -322,7 +340,7 @@ async def query_sync_graph(req: Any) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        print(f"[❌ Graph Sync] 错误: {e}")
+        print(f"[Graph Sync] 错误: {e}")
         import traceback
         traceback.print_exc()
 
