@@ -1,0 +1,9 @@
+# Agent 特定依赖
+# Tavily 搜索
+langchain-tavily
+
+# 深度研究工具
+# 可根据需要添加
+
+# 紫微斗数排盘
+py-iztro
