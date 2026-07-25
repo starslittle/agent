@@ -1,0 +1,13 @@
+{
+  "request": {
+    "query": "你好",
+    "agent_name": "default_llm_agent",
+    "chat_history": [
+      {
+        "role": "user",
+        "content": "上一条消息"
+      }
+    ]
+  },
+  "response": "event: message\r\ndata: {\"type\": \"delta\", \"data\": \"你\", \"isThinking\": false, \"thinkingFinished\": true}\r\n\r\nevent: message\r\ndata: {\"type\": \"delta\", \"data\": \"好\", \"isThinking\": false, \"thinkingFinished\": false}\r\n\r\nevent: message\r\ndata: {\"type\": \"done\"}\r\n\r\n"
+}

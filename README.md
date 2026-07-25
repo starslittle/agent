@@ -25,16 +25,37 @@
 - 流式输出：`/query_stream` 持续返回增量文本，前端顺滑展示。
 
 ## 快速开始
-1) 安装依赖（建议 Python 3.10+）
+
+推荐使用开发 Compose，一次启动带热更新的前端、Go 网关、Python Agent、
+PostgreSQL 和 Redis：
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+访问 `http://localhost:5173`。前端代码由 Vite 热更新，日常修改不需要重新
+构建镜像；只有依赖、Dockerfile 或生产镜像内容变化时才需要重新构建。
+
+也可以手动启动各服务：
+
+1) 安装依赖（建议 Python 3.11+）
 ```bash
 pip install -r backend/requirements.txt
 ```
-2) 本地运行后端
+2) 本地运行 Python Legacy API
 ```bash
-# 在仓库根目录执行
-uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8001 --reload
 ```
-3) 本地运行前端（可选，若需要二开）
+3) 本地运行 Go 公网入口
+```bash
+cd go-backend
+go run ./cmd/server
+```
+
+启动 Go 前设置 `HTTP_ADDR=:8000` 和
+`PYTHON_BASE_URL=http://127.0.0.1:8001`。
+
+4) 本地运行前端
 ```bash
 cd frontend
 npm install
@@ -64,13 +85,14 @@ npm run dev
   - 入参：`{ query: string, agent_name?: string, chat_history?: {role,content}[] }`
   - SSE 流式返回：`data: {"type":"delta","data":"..."}`，结束为
     `data: {"type":"done"}`
-- GET `/healthz`：服务健康与已加载 Agent 列表
+- GET `/healthz`：Go 网关进程健康
+- GET `/readyz`：Go 网关与 Python 上游均可用
 
 ## 部署与持久化
-- 一体化部署：使用 `build.sh`（先构建前端，再安装后端依赖），`Start Command` 示例：
-```bash
-uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT
-```
+- 生产部署：`docker compose up --build -d`
+- Go 是唯一公网入口；Python Agent、PostgreSQL 和 Redis 只在内部网络开放。
+- 当前 Go 仅代理完整 Python Agent 流程，尚未直接执行 Python Tool。默认
+  Agent 与工具会在后续阶段逐项迁移。
 - 数据持久化（RAG）：
   - 开发：默认使用本地 Chroma（`backend/storage/chroma`）
   - 生产：配置 `DATABASE_URL` 与 `ENVIRONMENT=production`，自动切换到 PostgreSQL（pgvector）。

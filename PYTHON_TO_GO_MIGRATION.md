@@ -339,14 +339,15 @@ flowchart LR
 ```mermaid
 flowchart LR
     USER["浏览器"] -->|唯一公网入口| GO["Go Agent API"]
-    GO -->|内部 SSE 代理/回退| PY["Python Legacy API"]
-    GO -->|内部工具协议| TOOLS["Python Tool Service"]
-    GO --> PG["PostgreSQL"]
-    GO --> REDIS["Redis"]
+    GO -->|当前：完整 SSE 代理| PY["Python Legacy API"]
     PY --> PG
     PY --> REDIS
-    TOOLS --> CHROMA["Chroma / 文件数据"]
+    PY -->|当前：进程内调用| TOOLS["Python Tools / RAG"]
 ```
+
+这一阶段 Go 不直接调用 Tool。它把完整请求代理给 Python，Python 的
+`stream_graph` 仍在进程内调用现有工具。阶段 2 起迁移默认 Agent，阶段 4
+才增加独立 Python Tool Service；两者不能混为当前已实现架构。
 
 约束：
 
@@ -1547,16 +1548,16 @@ migration:
 - [x] 修复当前 Docker/Compose 路径、内部网络和健康检查
 - [x] 固化实际 Prompt 来源、路径基准和 SHA-256
 - [x] 修正文档中的公网实际执行链和 Agent 基线矩阵
-- [ ] 固化 `/query_stream` 请求和 SSE 响应契约
+- [x] 固化 `/query_stream` 请求和 SSE 响应契约
 - [ ] 增加 Python 服务协议回归测试
 - [x] 修复前端 SSE `error` 被吞掉的问题
 - [x] 统一 Docker 开发和部署端口为 8000
-- [ ] 初始化 `go-backend` 工程
-- [ ] 实现配置加载和启动校验
-- [ ] 实现健康检查
-- [ ] 实现请求 ID、日志、恢复中间件
-- [ ] 实现 SSE Writer 和心跳
-- [ ] 实现 Go 到 Python 的 SSE 代理
+- [x] 初始化 `go-backend` 工程
+- [x] 实现配置加载和启动校验
+- [x] 实现健康检查
+- [x] 实现请求 ID、日志、恢复中间件
+- [x] 实现透传式 SSE Writer；阶段 1 不注入心跳，避免改变 Python 原始帧
+- [x] 实现 Go 到 Python 的 SSE 代理
 - [ ] 实现 `execution_id`、服务端超时、取消接口和 Worker 隔离
 - [ ] 实现 LLM Client 接口和 Mock
 - [ ] 实现 DashScope 适配器

@@ -1,6 +1,3 @@
-# Compatibility production entry for platforms that build the repository root.
-# The resulting image is the Go public gateway; Python is built separately from
-# backend/Dockerfile and must be reachable through PYTHON_BASE_URL.
 FROM golang:1.24-alpine AS go-build
 
 WORKDIR /src/go-backend

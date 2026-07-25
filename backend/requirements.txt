@@ -39,6 +39,7 @@ py-iztro
 # Web API (optional, for later FastAPI gateway)
 fastapi
 uvicorn[standard]
+sse-starlette
  
 # For PostgreSQL connection and vector support
 psycopg2-binary

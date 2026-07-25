@@ -1,10 +1,56 @@
 services:
-  app:
-    build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --reload --reload-dir /app/backend
+  frontend:
+    image: node:20-alpine
+    working_dir: /workspace/frontend
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_PROXY_TARGET: http://gateway:8000
+    volumes:
+      - ./frontend:/workspace/frontend
+      - frontend_node_modules:/workspace/frontend/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  gateway:
+    image: golang:1.24-alpine
+    working_dir: /workspace/go-backend
+    command: go run ./cmd/server
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      HTTP_ADDR: ":8000"
+      PYTHON_BASE_URL: http://python:8000
+      MAX_REQUEST_BYTES: ${MAX_REQUEST_BYTES:-1048576}
+      UPSTREAM_HEADER_TIMEOUT: ${UPSTREAM_HEADER_TIMEOUT:-30s}
+      SHUTDOWN_TIMEOUT: ${SHUTDOWN_TIMEOUT:-10s}
+    volumes:
+      - ./go-backend:/workspace/go-backend
+      - go_module_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+    ports:
+      - "${PORT:-8000}:8000"
+    depends_on:
+      python:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "3", "-O", "-", "http://localhost:8000/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  python:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-development}
-      PORT: ${PORT:-8000}
+      PORT: "8000"
       POSTGRES_DB: ${POSTGRES_DB:-agent_db}
       POSTGRES_USER: ${POSTGRES_USER:-qidian_agent}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
@@ -20,8 +66,8 @@ services:
       - 223.5.5.5
     volumes:
       - ./backend:/app/backend
-    ports:
-      - "${PORT:-8000}:${PORT:-8000}"
+    expose:
+      - "8000"
     depends_on:
       redis:
         condition: service_healthy
@@ -33,7 +79,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.getenv(\"PORT\", \"8000\")}/healthz', timeout=3)",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)",
         ]
       interval: 15s
       timeout: 5s
@@ -72,4 +118,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  frontend_node_modules:
+  go_module_cache:
+  go_build_cache:
   postgres_dev_data:

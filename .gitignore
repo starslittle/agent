@@ -154,3 +154,12 @@ coverage.xml
 # -------------------------------------------------------------------
 frontend/node_modules/
 frontend/dist/
+
+
+# -------------------------------------------------------------------
+# 9. Go Build Artifacts
+# -------------------------------------------------------------------
+go-backend/bin/
+go-backend/.tmp/
+go-backend/*.exe
+go-backend/coverage.out
