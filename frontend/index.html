@@ -1,8 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 在首屏绘制前应用主题，避免暗色模式闪烁 -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("theme");
+          var dark = t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
     <title>奇点AI</title>
     <meta name="description" content="奇点AI：支持流式输出与深度思考的智能体对话前端，顺滑体验，开箱即用。" />
     <meta name="author" content="奇点AI" />

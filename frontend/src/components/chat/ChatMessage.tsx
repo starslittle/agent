@@ -36,16 +36,16 @@ const ThinkingProcess: React.FC<{ thoughts: string[]; thinkingFinished?: boolean
   return (
     <div className="mb-4">
       <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full">
-        <CollapsibleTrigger className="flex items-center gap-2 text-xs font-medium text-purple-600 hover:text-purple-700 transition-colors group">
-          <div className="flex items-center gap-1.5 bg-purple-50 px-2 py-1 rounded-md border border-purple-100 group-hover:bg-purple-100 transition-colors">
-            <Brain size={14} className="text-purple-500" />
+        <CollapsibleTrigger className="flex items-center gap-2 text-xs font-medium text-primary hover:text-primary/80 transition-colors group">
+          <div className="flex items-center gap-1.5 bg-primary/10 px-2 py-1 rounded-md border border-primary/20 group-hover:bg-primary/15 transition-colors">
+            <Brain size={14} className="text-primary" />
             <span>深度思考</span>
             {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </div>
         </CollapsibleTrigger>
-        <CollapsibleContent className="mt-2 pl-3 border-l-2 border-purple-100 space-y-1.5">
+        <CollapsibleContent className="mt-2 pl-3 border-l-2 border-primary/20 space-y-1.5">
           {thoughts.map((thought, index) => (
-            <div key={index} className="text-xs text-gray-500 leading-relaxed">
+            <div key={index} className="text-xs text-muted-foreground leading-relaxed">
               {thought}
             </div>
           ))}
@@ -244,14 +244,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
       <div
         className={
           isUser
-            ? "rounded-2xl px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white max-w-[80%] ml-auto order-1"
-            : "rounded-2xl px-4 py-3 bg-white border border-gray-200 text-gray-800 max-w-full shadow-sm"
+            ? "rounded-2xl px-4 py-3 bg-gradient-to-r from-primary to-accent text-primary-foreground max-w-[80%] ml-auto order-1"
+            : "rounded-2xl px-4 py-3 bg-card border border-border text-foreground max-w-full shadow-sm"
         }
       >
         {thinking && !displayedContent ? (
           <div className="space-y-2">
-            <div className="h-4 w-40 bg-gray-200 rounded animate-pulse" />
-            <div className="h-4 w-64 bg-gray-200 rounded animate-pulse" />
+            <div className="h-4 w-40 bg-muted rounded animate-pulse" />
+            <div className="h-4 w-64 bg-muted rounded animate-pulse" />
           </div>
         ) : (
           <div className={`text-sm leading-7 break-words ${isUser ? 'prose-invert' : ''}`}>
@@ -267,11 +267,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
 
                   return !inline && match ? (
                     <div className="relative group my-4">
-                      <div className="flex items-center justify-between bg-gray-800 text-gray-200 px-4 py-2 rounded-t-lg text-xs font-mono">
+                      <div className="flex items-center justify-between bg-neutral-800 text-neutral-200 px-4 py-2 rounded-t-lg text-xs font-mono">
                         <span>{language}</span>
                         <button
                           onClick={() => handleCopyCode(codeString)}
-                          className="flex items-center gap-1 hover:bg-gray-700 px-2 py-1 rounded transition-colors"
+                          className="flex items-center gap-1 hover:bg-neutral-700 px-2 py-1 rounded transition-colors"
                           title="复制代码"
                         >
                           {copiedCode === codeString ? (
@@ -304,14 +304,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                       </SyntaxHighlighter>
                     </div>
                   ) : (
-                    <code
-                      className={`${
-                        isUser 
-                          ? "bg-white/20 text-white" 
-                          : "bg-gray-100 text-red-600"
-                      } px-1.5 py-0.5 rounded text-xs font-mono`}
-                      {...props}
-                    >
+                      <code
+                        className={`${
+                          isUser 
+                            ? "bg-white/20 text-white" 
+                            : "bg-muted text-foreground font-medium"
+                        } px-1.5 py-0.5 rounded text-xs font-mono`}
+                        {...props}
+                      >
                       {children}
                     </code>
                   );
@@ -337,7 +337,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                       className={`${
                         isUser 
                           ? "text-white underline hover:text-gray-200" 
-                          : "text-blue-600 hover:text-blue-800 underline"
+                          : "text-accent hover:text-primary underline"
                       }`}
                     >
                       {children}
@@ -346,9 +346,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                 },
                 blockquote({ children }: any) {
                   return (
-                    <blockquote className={`border-l-4 pl-4 py-2 my-2 italic ${
-                      isUser ? "border-white/40" : "border-gray-300"
-                    }`}>
+                  <blockquote className={`border-l-4 pl-4 py-2 my-2 italic ${
+                    isUser ? "border-white/40" : "border-border"
+                  }`}>
                       {children}
                     </blockquote>
                   );
@@ -367,15 +367,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                   const isCopied = copiedTableIdx === tableIdx;
                   const isExpanded = Boolean(expandedTables[tableIdx]);
                   return (
-                    <div className="my-4 overflow-hidden rounded-xl border border-gray-200">
+                    <div className="my-4 overflow-hidden rounded-xl border border-border">
                       {!isUser && (
-                        <div className="flex items-center justify-between border-b border-gray-200 bg-white px-3 py-2">
-                          <span className="text-sm font-semibold text-gray-700">表格</span>
+                        <div className="flex items-center justify-between border-b border-border bg-muted px-3 py-2">
+                          <span className="text-sm font-semibold text-foreground">表格</span>
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => handleCopyTable(tableIdx)}
-                              className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:text-gray-700 hover:bg-white transition-colors"
+                              className="inline-flex items-center justify-center rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
                               title="复制该表格"
                               aria-label="复制该表格"
                             >
@@ -384,7 +384,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                             <button
                               type="button"
                               onClick={() => handleDownloadTable(tableIdx)}
-                              className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:text-gray-700 hover:bg-white transition-colors"
+                              className="inline-flex items-center justify-center rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
                               title="下载 TSV"
                               aria-label="下载 TSV"
                             >
@@ -393,7 +393,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                             <button
                               type="button"
                               onClick={() => toggleTableExpanded(tableIdx)}
-                              className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:text-gray-700 hover:bg-white transition-colors"
+                              className="inline-flex items-center justify-center rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
                               title={isExpanded ? "收起表格" : "展开表格"}
                               aria-label={isExpanded ? "收起表格" : "展开表格"}
                             >
@@ -403,7 +403,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                         </div>
                       )}
                       <div className={`${isExpanded ? "overflow-auto" : "max-h-[360px] overflow-auto"}`}>
-                        <table className="min-w-full divide-y divide-gray-300">
+                        <table className="min-w-full divide-y divide-border">
                           {children}
                         </table>
                       </div>
@@ -411,18 +411,18 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
                   );
                 },
                 thead({ children }: any) {
-                  return <thead className="bg-gray-50">{children}</thead>;
+                  return <thead className="bg-muted">{children}</thead>;
                 },
                 th({ children }: any) {
                   return (
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-900 border border-gray-300">
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-foreground border border-border">
                       {children}
                     </th>
                   );
                 },
                 td({ children }: any) {
                   return (
-                    <td className="px-4 py-2 text-sm text-gray-700 border border-gray-300">
+                    <td className="px-4 py-2 text-sm text-foreground border border-border">
                       {children}
                     </td>
                   );
@@ -432,12 +432,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
               {stableMarkdown || ""}
             </ReactMarkdown>
             {!isUser && typedPendingText && (
-              <pre className="whitespace-pre-wrap break-words text-sm leading-7 mt-2 text-gray-600">
+              <pre className="whitespace-pre-wrap break-words text-sm leading-7 mt-2 text-muted-foreground">
                 {typedPendingText}
               </pre>
             )}
             {!isUser && hasUnclosedFence && (
-              <div className="text-xs text-gray-400 mt-1">代码块生成中，已暂时使用纯文本显示。</div>
+              <div className="text-xs text-muted-foreground mt-1">代码块生成中，已暂时使用纯文本显示。</div>
             )}
           </div>
         )}
@@ -447,7 +447,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
           <button
             type="button"
             onClick={handleCopyMessage}
-            className="inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-1.5 rounded transition-colors"
+            className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted p-1.5 rounded transition-colors"
             title="复制整条消息"
             aria-label="复制整条消息"
           >

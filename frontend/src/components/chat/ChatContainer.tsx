@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import ChatMessage, { ChatRole } from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import { postQueryStreamGraph } from "@/lib/api";
+import { useAuth } from "@/auth/AuthProvider";
 
 interface Message {
   id: string;
@@ -16,6 +17,7 @@ function uid() {
 }
 
 export const ChatContainer: React.FC = () => {
+  const { csrfToken } = useAuth();
   const [messages, setMessages] = useState<Message[]>([{
     id: uid(),
     role: "assistant",
@@ -101,6 +103,7 @@ export const ChatContainer: React.FC = () => {
             })
           );
         },
+        csrfToken,
         controller.signal
       );
       
@@ -131,7 +134,7 @@ export const ChatContainer: React.FC = () => {
       setIsGenerating(false);
       abortControllerRef.current = null;
     }
-  }, [messages]);
+  }, [csrfToken, messages]);
 
   return (
     <section className="flex flex-col h-full w-full relative">
@@ -140,7 +143,7 @@ export const ChatContainer: React.FC = () => {
         <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 min-h-full flex flex-col">
           <div className="flex flex-col gap-6 py-6 pb-6">
             {messages.map((m) => (
-              <div key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+              <div key={m.id} className={`${m.role === "user" ? "flex justify-end" : "flex justify-start"} animate-in fade-in-0 slide-in-from-bottom-2 duration-300 motion-reduce:animate-none motion-reduce:transition-none`}>
                 <ChatMessage role={m.role} content={m.content} thinking={m.thinking} thinkingFinished={m.thinkingFinished} />
               </div>
             ))}
