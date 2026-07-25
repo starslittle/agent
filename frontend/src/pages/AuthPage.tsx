@@ -5,10 +5,6 @@ import {
   Eye,
   EyeOff,
   LoaderCircle,
-  LockKeyhole,
-  Orbit,
-  ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
 
@@ -56,67 +52,62 @@ export default function AuthPage() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-background text-foreground lg:grid lg:grid-cols-[1.12fr_0.88fr]">
-      <section className="relative hidden min-h-screen overflow-hidden bg-[#080b19] px-12 py-10 text-white lg:flex lg:flex-col">
-        <div className="absolute -left-24 top-1/4 h-80 w-80 rounded-full bg-violet-600/20 blur-3xl" />
-        <div className="absolute -right-16 bottom-20 h-72 w-72 rounded-full bg-blue-500/15 blur-3xl" />
-        <div className="absolute inset-0 opacity-30 [background-image:radial-gradient(circle_at_center,rgba(255,255,255,.22)_1px,transparent_1px)] [background-size:38px_38px]" />
+    <main className="relative min-h-screen overflow-x-hidden bg-[#f7f8fc] text-foreground dark:bg-[#080a13]">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-90 dark:opacity-70"
+        aria-hidden="true"
+      >
+        <div className="absolute left-1/2 top-[42%] h-[32rem] w-[48rem] -translate-x-1/2 -translate-y-1/2 rotate-[-9deg] rounded-[50%] border border-violet-300/25 dark:border-violet-400/10" />
+        <div className="absolute left-1/2 top-[42%] h-[24rem] w-[38rem] -translate-x-1/2 -translate-y-1/2 rotate-[12deg] rounded-[50%] border border-blue-300/20 dark:border-blue-400/10" />
+        <div className="absolute left-1/2 top-[38%] h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-300/15 blur-3xl dark:bg-violet-600/10" />
+      </div>
 
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 border border-white/20 shadow-[0_0_20px_hsl(262,83%,58%/0.2)]">
-            <span className="bg-gradient-to-tr from-violet-300 via-fuchsia-200 to-blue-300 bg-clip-text text-transparent text-base font-bold">奇</span>
+      <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-5 py-5 sm:px-8 sm:py-7">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-[0.9rem] border border-violet-200/80 bg-white/80 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5">
+            <span className="bg-gradient-to-tr from-violet-600 to-blue-500 bg-clip-text text-sm font-bold text-transparent dark:from-violet-300 dark:to-blue-300">
+              奇
+            </span>
           </div>
           <div>
-            <p className="text-lg font-semibold tracking-tight">奇点AI</p>
-            <p className="text-xs tracking-[0.24em] text-white/45">QIDIAN INTELLIGENCE</p>
+            <p className="text-[15px] font-semibold tracking-tight">奇点AI</p>
+            <p className="text-[10px] tracking-[0.2em] text-muted-foreground">
+              QIDIAN INTELLIGENCE
+            </p>
           </div>
         </div>
+        <p className="hidden text-xs text-muted-foreground sm:block">
+          对话与任务，回到同一个工作空间
+        </p>
+      </header>
 
-        <div className="relative z-10 my-auto max-w-2xl pb-16">
-          <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-violet-300/20 bg-violet-400/10 px-4 py-2 text-sm text-violet-100">
-            <Orbit className="h-4 w-4" />
-            你的智能工作空间
+      <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-[29rem] flex-col justify-center px-5 pb-12 pt-28 sm:px-4 sm:pb-16">
+        <div className="animate-in fade-in-0 slide-in-from-bottom-3 duration-500 motion-reduce:animate-none motion-reduce:transition-none">
+          <div className="mb-6 text-center">
+            <div className="relative mx-auto mb-6 h-16 w-16" aria-hidden="true">
+              <div className="absolute inset-[3px] rotate-[-18deg] rounded-[50%] border border-violet-400/40" />
+              <div className="absolute inset-[10px] rotate-[22deg] rounded-[50%] border border-blue-400/35" />
+              <div className="absolute inset-0 animate-[spin_18s_linear_infinite] rounded-[50%] border border-transparent border-t-violet-500/70 motion-reduce:animate-none" />
+              <div className="absolute left-1/2 top-1/2 grid h-9 w-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#111526] text-xs font-bold text-white shadow-[0_10px_30px_-10px_rgba(91,33,182,0.75)] dark:bg-white dark:text-[#111526]">
+                奇
+              </div>
+            </div>
+
+            <p className="mb-3 text-[11px] font-semibold tracking-[0.18em] text-primary">
+              {isRegister ? "创建工作空间账号" : "进入你的工作空间"}
+            </p>
+            <h1 className="text-[2.35rem] font-semibold leading-tight tracking-[-0.045em] text-foreground sm:text-[2.65rem]">
+              {isRegister ? "从这里开始" : "欢迎回来"}
+            </h1>
+            <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
+              {isRegister
+                ? "创建账号后，你的对话与任务会安全地归于同一个工作空间。"
+                : "登录后继续上次的对话、研究与智能体任务。"}
+            </p>
           </div>
-          <h1 className="max-w-xl text-[clamp(3.4rem,6vw,6.5rem)] font-semibold leading-[0.94] tracking-[-0.055em]">
-            思考，
-            <span className="block bg-gradient-to-r from-violet-300 via-fuchsia-200 to-blue-300 bg-clip-text text-transparent">
-              从一个奇点开始。
-            </span>
-          </h1>
-          <p className="mt-8 max-w-lg text-lg leading-8 text-slate-300">
-            登录后，你的对话、研究任务与智能体执行记录将拥有明确、安全的个人归属。
-          </p>
-        </div>
 
-        <div className="relative z-10 grid grid-cols-3 gap-4 border-t border-white/10 pt-6 text-sm text-white/60">
-          <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />服务端会话</span>
-          <span className="flex items-center gap-2"><LockKeyhole className="h-4 w-4" />凭据不进浏览器存储</span>
-          <span className="flex items-center gap-2"><Sparkles className="h-4 w-4" />持续扩展的 Agent</span>
-        </div>
-      </section>
-
-      <section className="relative flex min-h-screen items-center justify-center px-5 py-10 sm:px-10 lg:px-16">
-        <div className="absolute left-5 top-5 flex items-center gap-2 lg:hidden">
-          <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-tr from-primary/10 to-accent/10 border border-primary/20 shadow-sm">
-            <span className="bg-gradient-to-tr from-primary to-accent bg-clip-text text-transparent text-xs font-bold">奇</span>
-          </div>
-          <span className="font-semibold">奇点AI</span>
-        </div>
-
-        <div className="w-full max-w-md animate-in fade-in-0 slide-in-from-bottom-4 duration-500 motion-reduce:animate-none motion-reduce:transition-none">
-          <p className="mb-5 text-xs font-semibold tracking-[0.22em] text-primary">
-            {isRegister ? "CREATE YOUR SPACE" : "WELCOME BACK"}
-          </p>
-          <h2 className="text-4xl font-semibold tracking-[-0.04em] text-foreground">
-            {isRegister ? "创建你的账号" : "继续你的思考"}
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            {isRegister
-              ? "完成注册后会自动登录，稍后可以继续绑定其他身份方式。"
-              : "使用你的邮箱和密码进入工作空间。"}
-          </p>
-
-          <form className="mt-9 space-y-5" onSubmit={handleSubmit}>
+          <div className="rounded-[1.75rem] border border-white/80 bg-white/85 p-5 shadow-[0_24px_80px_-36px_rgba(31,41,70,0.3)] backdrop-blur-xl sm:p-7 dark:border-white/10 dark:bg-white/[0.055] dark:shadow-[0_24px_80px_-36px_rgba(0,0,0,0.8)]">
+            <form className="space-y-5" onSubmit={handleSubmit}>
             {isRegister && (
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-foreground">称呼</span>
@@ -127,13 +118,13 @@ export default function AuthPage() {
                   autoComplete="name"
                   maxLength={80}
                   placeholder="你希望我们如何称呼你"
-                  className="h-12 w-full rounded-2xl border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/20"
+                  className="h-12 w-full rounded-xl border border-input bg-background/70 px-4 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 focus:border-primary focus:ring-4 focus:ring-primary/15"
                 />
               </label>
             )}
 
             <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-700">邮箱</span>
+              <span className="text-sm font-medium text-foreground">邮箱</span>
               <input
                 id="email"
                 type="email"
@@ -142,12 +133,12 @@ export default function AuthPage() {
                 onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
                 placeholder="name@example.com"
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100"
+                className="h-12 w-full rounded-xl border border-input bg-background/70 px-4 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 focus:border-primary focus:ring-4 focus:ring-primary/15"
               />
             </label>
 
             <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-700">密码</span>
+              <span className="text-sm font-medium text-foreground">密码</span>
               <span className="relative block">
                 <input
                   id="password"
@@ -159,7 +150,7 @@ export default function AuthPage() {
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete={isRegister ? "new-password" : "current-password"}
                   placeholder={isRegister ? "至少 12 个字符" : "输入你的密码"}
-                  className="h-12 w-full rounded-2xl border border-input bg-background px-4 pr-12 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/20"
+                  className="h-12 w-full rounded-xl border border-input bg-background/70 px-4 pr-12 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 focus:border-primary focus:ring-4 focus:ring-primary/15"
                 />
                 <button
                   type="button"
@@ -184,7 +175,7 @@ export default function AuthPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="group flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-primary to-accent px-5 text-sm font-semibold text-primary-foreground shadow-[0_18px_45px_-22px_hsl(var(--primary)/0.5)] transition hover:-translate-y-0.5 hover:from-primary/90 hover:to-accent/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 disabled:pointer-events-none disabled:opacity-60 motion-reduce:transform-none"
+              className="group flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#121629] px-5 text-sm font-semibold text-white shadow-[0_16px_35px_-20px_rgba(18,22,41,0.8)] transition hover:-translate-y-0.5 hover:bg-[#1d2340] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:pointer-events-none disabled:opacity-60 motion-reduce:transform-none dark:bg-white dark:text-[#121629] dark:hover:bg-white/90"
             >
               {submitting ? (
                 <><LoaderCircle className="h-4 w-4 animate-spin" />正在处理</>
@@ -192,9 +183,10 @@ export default function AuthPage() {
                 <>{isRegister ? "创建账号" : "登录"}<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></>
               )}
             </button>
-          </form>
+            </form>
+          </div>
 
-          <p className="mt-7 text-center text-sm text-slate-500">
+          <p className="mt-6 text-center text-sm text-muted-foreground">
             {isRegister ? "已经有账号？" : "还没有账号？"}
             <Link
               to={isRegister ? "/login" : "/register"}

@@ -1,6 +1,5 @@
 
 import React, { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Brain, Plus, Send, Square } from "lucide-react";
@@ -54,77 +53,79 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, loading, onStop })
   };
 
   return (
-    <div className="w-full space-y-2">
-      {/* 模式切换按钮：深度思考 */}
-      <div className="flex gap-2 justify-start">
-        <button
-          type="button"
-          onClick={() => setDeep(!deep)}
-          aria-pressed={deep}
-          className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200",
-            deep ? "bg-gradient-to-r from-primary to-accent text-primary-foreground shadow-md" : "bg-muted text-muted-foreground hover:bg-muted/70"
-          )}
-          title="切换深度思考"
-        >
-          <Brain size={15} />
-          深度思考
-        </button>
-      </div>
+    <div className="w-full">
+      <div className="rounded-[1.6rem] border border-white/90 bg-white/90 p-2.5 shadow-[0_20px_60px_-28px_rgba(31,41,70,0.4)] backdrop-blur-xl dark:border-white/10 dark:bg-[#111521]/90 dark:shadow-[0_20px_60px_-28px_rgba(0,0,0,0.9)]">
+        <div className="flex items-end gap-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            aria-label="上传图片"
+            title="上传图片"
+          >
+            <Plus size={19} />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
 
-      {/* 对话框 */}
-      <div className="flex items-center gap-2 py-2 px-2 bg-card rounded-2xl border border-border shadow-sm">
-        {/* 上传图片按钮 */}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="flex-shrink-0 w-9 h-9 rounded-full bg-muted hover:bg-muted/70 flex items-center justify-center transition-colors"
-          aria-label="上传图片"
-          title="上传图片"
-        >
-          <Plus size={20} className="text-gray-600" />
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-        />
+          <Textarea
+            ref={taRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={onKeyDown}
+            onInput={autosize}
+            rows={1}
+            placeholder="描述你想解决的问题…"
+            className="min-h-[40px] max-h-32 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-2.5 text-sm leading-5 text-foreground shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
+            aria-label="聊天输入"
+          />
 
-        {/* 输入框 */}
-        <Textarea
-          ref={taRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={onKeyDown}
-          onInput={autosize}
-          rows={1}
-          placeholder="输入消息... Enter 发送，Shift+Enter 换行"
-          className="flex-1 max-h-20 overflow-y-auto border-0 shadow-none focus-visible:ring-0 bg-transparent px-0 text-sm leading-5 text-gray-800 min-h-[24px]"
-          aria-label="聊天输入"
-        />
+          <button
+            type="button"
+            disabled={!loading && (sending || (!value.trim() && !file))}
+            onClick={loading ? onStop : handleSend}
+            className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-[#121629] text-white shadow-[0_10px_24px_-12px_rgba(18,22,41,0.8)] transition hover:-translate-y-0.5 hover:bg-[#1d2340] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transform-none dark:bg-white dark:text-[#121629] dark:hover:bg-white/90"
+            title={loading ? "停止生成" : "发送消息"}
+            aria-label={loading ? "停止生成" : "发送消息"}
+          >
+            {loading ? (
+              <Square size={13} className="fill-current" />
+            ) : (
+              <Send size={17} />
+            )}
+          </button>
+        </div>
 
-        {/* 发送/停止按钮 */}
-        <button
-          disabled={!loading && (sending || (!value.trim() && !file))}
-          onClick={loading ? onStop : handleSend}
-          className={cn(
-            "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed",
-            "bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90"
-          )}
-          title={loading ? "停止生成" : "发送消息"}
-        >
-          {loading ? (
-            <Square size={14} className="text-white fill-white" />
-          ) : (
-            <Send size={18} className="text-white" />
-          )}
-        </button>
+        <div className="mt-1 flex items-center justify-between px-1">
+          <button
+            type="button"
+            onClick={() => setDeep(!deep)}
+            aria-pressed={deep}
+            className={cn(
+              "inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+              deep
+                ? "bg-violet-500/10 text-violet-700 dark:text-violet-300"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+            title="切换深度思考"
+          >
+            <Brain size={13} />
+            深度思考
+            <span className={cn("h-1.5 w-1.5 rounded-full", deep ? "bg-violet-500" : "bg-muted-foreground/35")} />
+          </button>
+          <span className="pr-1 text-[10px] text-muted-foreground/70">
+            Enter 发送 · Shift + Enter 换行
+          </span>
+        </div>
       </div>
 
       {file && (
-        <div className="px-4 text-xs text-gray-500 truncate" aria-live="polite">
+        <div className="mt-2 truncate px-4 text-xs text-muted-foreground" aria-live="polite">
           已选择图片：{file.name}
         </div>
       )}

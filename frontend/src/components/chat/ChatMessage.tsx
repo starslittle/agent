@@ -8,7 +8,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Bot, Copy, Check, Brain, ChevronDown, ChevronRight, Download, Maximize2, Minimize2 } from "lucide-react";
+import { Copy, Check, Brain, ChevronDown, ChevronRight, Download, Maximize2, Minimize2 } from "lucide-react";
 import { useStreamMarkdownBuffer } from "@/hooks/useStreamMarkdownBuffer";
 import { useSmoothTyping } from "@/hooks/useSmoothTyping";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -226,7 +226,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
   };
 
   const handleCopyMessage = async () => {
-    const textToCopy = normalizedAnswer || "";
+    const textToCopy = isUser ? displayedContent : normalizedAnswer;
     if (!textToCopy.trim()) return;
     try {
       await navigator.clipboard.writeText(textToCopy);
@@ -240,12 +240,20 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
   tableRenderIndexRef.current = 0;
 
   return (
-    <article className="w-full flex flex-col items-start">
+    <article className={`group/message flex w-full flex-col ${isUser ? "items-end" : "items-start"}`}>
+      {!isUser && (
+        <div className="mb-2 flex items-center gap-2 px-1">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#121629] text-[10px] font-bold text-white shadow-sm dark:bg-white dark:text-[#121629]">
+            奇
+          </span>
+          <span className="text-xs font-medium text-muted-foreground">奇点AI</span>
+        </div>
+      )}
       <div
         className={
           isUser
-            ? "rounded-2xl px-4 py-3 bg-gradient-to-r from-primary to-accent text-primary-foreground max-w-[80%] ml-auto order-1"
-            : "rounded-2xl px-4 py-3 bg-card border border-border text-foreground max-w-full shadow-sm"
+            ? "max-w-[82%] rounded-[1.35rem] rounded-br-md bg-[#121629] px-4 py-3 text-white shadow-[0_12px_28px_-18px_rgba(18,22,41,0.8)] dark:bg-white dark:text-[#121629]"
+            : "max-w-full rounded-[1.5rem] rounded-tl-md border border-white/80 bg-white/75 px-5 py-4 text-foreground shadow-[0_14px_42px_-30px_rgba(31,41,70,0.35)] backdrop-blur dark:border-white/[0.08] dark:bg-white/[0.045]"
         }
       >
         {thinking && !displayedContent ? (
@@ -442,14 +450,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
           </div>
         )}
       </div>
-      {!isUser && (
-        <div className="mt-2 ml-1">
+      {displayedContent.trim() && (
+        <div className={`mt-1.5 ${isUser ? "mr-1" : "ml-1"}`}>
           <button
             type="button"
             onClick={handleCopyMessage}
-            className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted p-1.5 rounded transition-colors"
-            title="复制整条消息"
-            aria-label="复制整条消息"
+            className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-100 transition-[opacity,color,background-color] hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 sm:opacity-0 sm:group-hover/message:opacity-100 sm:group-focus-within/message:opacity-100"
+            title={copiedMessage ? "已复制" : "复制消息"}
+            aria-label={copiedMessage ? "消息已复制" : "复制消息"}
           >
             {copiedMessage ? <Check size={14} /> : <Copy size={14} />}
           </button>
