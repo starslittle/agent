@@ -45,7 +45,7 @@ async def replanner_node(state: GraphState) -> Dict[str, Any]:
         return {**state, "plan_done": True}
 
     llm = ChatTongyi(
-        model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
+        model=settings.LLM_MODEL_NAME or "deepseek-v4-flash",
         temperature=0.2,
         dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
     )

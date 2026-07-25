@@ -50,7 +50,7 @@ except ImportError as e:
 class RAGConfig:
     # API 和模型配置
     DASHSCOPE_API_KEY: str = settings.DASHSCOPE_API_KEY
-    LLM_MODEL_NAME: str = "qwen-turbo-2025-04-28"
+    LLM_MODEL_NAME: str = "deepseek-v4-flash"
     EMBED_MODEL_NAME: str = "BAAI/bge-small-zh-v1.5"
 
     # RAG 系统配置

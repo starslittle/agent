@@ -48,7 +48,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
 
     # 使用 LLM 决定该任务最适合哪个工具
     llm = ChatTongyi(
-        model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
+        model=settings.LLM_MODEL_NAME or "deepseek-v4-flash",
         temperature=0, # 决策需要高确定性
         dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
     )

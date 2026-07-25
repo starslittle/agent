@@ -30,9 +30,9 @@ class Settings(BaseSettings):
     INTERNAL_AGENT_SECRET: str = ""
 
     # RAG / 模型相关（默认值与现有代码保持一致）
-    LLM_MODEL_NAME: str = "deepseek-v3.2"
+    LLM_MODEL_NAME: str = "deepseek-v4-flash"
     EMBED_MODEL_NAME: str = "BAAI/bge-small-zh-v1.5"
-    FORTUNE_LLM_MODEL: str = "deepseek-v3.2"
+    FORTUNE_LLM_MODEL: str = "deepseek-v4-flash"
     EVAL_EMBED_MODEL: str = "BAAI/bge-small-zh-v1.5"
 
     # 数据路径（可选覆盖）

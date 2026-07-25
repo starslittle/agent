@@ -40,7 +40,7 @@ async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
     try:
         # 创建LLM（默认用于非流式回退）
         llm = ChatTongyi(
-            model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
+            model=settings.LLM_MODEL_NAME or "deepseek-v4-flash",
             temperature=0.2,
             dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
         )
@@ -98,7 +98,7 @@ async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
             try:
                 # 显式开启 provider 流式；流式模式下禁止回退为一次性 ainvoke
                 llm_stream = ChatTongyi(
-                    model=settings.LLM_MODEL_NAME or "deepseek-v3.2",
+                    model=settings.LLM_MODEL_NAME or "deepseek-v4-flash",
                     temperature=0.2,
                     dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
                     streaming=True,
