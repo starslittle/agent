@@ -1,25 +1,30 @@
 import React from "react";
 import ChatContainer from "@/components/chat/ChatContainer";
+import { ChatSidebar } from "@/components/chat/ChatSidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container py-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-primary to-accent shadow flex items-center justify-center text-ongradient text-sm font-bold" aria-label="奇点AI Logo">奇</div>
-            <span className="text-lg font-semibold">奇点AI</span>
-          </div>
-          {/* <nav className="hidden sm:block text-sm text-muted-foreground">
-            <a href="#" className="hover:text-foreground transition-colors">关于</a>
-          </nav> */}
-        </div>
-      </header>
+    <SidebarProvider>
+      <div className="h-screen w-full bg-background flex overflow-hidden">
+        <ChatSidebar />
 
-      <main className="container py-8">
-        <ChatContainer />
-      </main>
-    </div>
+        <div className="flex-1 flex flex-col min-w-0">
+          <header className="border-b flex-shrink-0">
+            <div className="container py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-primary to-accent shadow flex items-center justify-center text-ongradient text-sm font-bold" aria-label="奇点AI Logo">奇</div>
+                <span className="text-lg font-semibold">奇点AI</span>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-hidden w-full relative">
+            <ChatContainer />
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
   );
 };
 

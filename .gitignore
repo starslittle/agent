@@ -9,6 +9,7 @@
 .env
 *.env
 .env.*
+!.env.example
 secrets.ini
 credentials.json
 
@@ -107,6 +108,9 @@ models/
 .pydevproject
 .sublime-project
 .sublime-workspace
+
+# Local AI assistant settings (machine-specific)
+.claude/settings.local.json
 
 
 # -------------------------------------------------------------------

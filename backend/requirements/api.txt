@@ -1,0 +1,5 @@
+# API 依赖 - FastAPI 和 Web 服务
+fastapi
+uvicorn[standard]
+sse-starlette
+python-multipart

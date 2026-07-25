@@ -81,7 +81,7 @@ git push
    - **Root Directory**: 留空
    - **Environment**: Python 3
    - **Build Command**: `./build.sh`
-   - **Start Command**: `uvicorn src.api.main:app --host=0.0.0.0 --port=$PORT`
+   - **Start Command**: `uvicorn app.main:app --app-dir backend --host=0.0.0.0 --port=$PORT`
 
 #### 3. 配置环境变量
 
@@ -110,7 +110,7 @@ git push
 ### 本地运行（开发模式）
 ```bash
 # 后端（使用本地 ChromaDB）
-uvicorn src.api.main:app --reload
+uvicorn app.main:app --app-dir backend --reload --port 8000
 
 # 前端
 cd frontend
@@ -131,7 +131,7 @@ ENVIRONMENT=production
 DATABASE_URL=你的_External_Database_URL
 
 # 然后正常启动
-uvicorn src.api.main:app --reload
+uvicorn app.main:app --app-dir backend --reload --port 8000
 ```
 
 ## 🔍 故障排除
@@ -159,7 +159,7 @@ uvicorn src.api.main:app --reload
 
 **本地开发：**
 ```bash
-uvicorn src.api.main:app --reload --log-level debug
+uvicorn app.main:app --app-dir backend --reload --port 8000 --log-level debug
 ```
 
 **生产环境：**

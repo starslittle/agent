@@ -21,19 +21,18 @@
 ## 核心能力
 - 简单聊天直答：`default_llm_agent`，无 ReAct、稳定输出。
 - 命理智能分析：命理模式下受限域智能路由，命理问题走 `fortune_agent`，非命理回退聊天。
-- 深度思考检索：深度模式下在 `research_agent` 与 `general_rag_agent` 之间路由，支持网络检索与本地/Notion/Pandas 知识库。
+- 深度思考检索：深度模式下在 `research_agent` 与 `general_rag_agent` 之间路由，支持网络检索与本地/Pandas 知识库。
 - 流式输出：`/query_stream` 持续返回增量文本，前端顺滑展示。
 
 ## 快速开始
 1) 安装依赖（建议 Python 3.10+）
 ```bash
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 2) 本地运行后端
 ```bash
-# PowerShell 请分两步
-cd C:\Users\10245\Desktop\agent
-uvicorn src.api.main:app --reload
+# 在仓库根目录执行
+uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000 --reload
 ```
 3) 本地运行前端（可选，若需要二开）
 ```bash
@@ -42,11 +41,11 @@ npm install
 npm run dev
 ```
 
-> 环境变量：复制 `env.example` 为 `.env`，至少设置 `DASHSCOPE_API_KEY`；如需云数据库，配置 `DATABASE_URL` 与 `ENVIRONMENT=production`。
+> 环境变量：复制根目录 `.env.example` 为根目录 `.env`。本地 Python 与 Docker Compose 统一读取这一份配置；至少设置 `DASHSCOPE_API_KEY`，使用 Compose 时还需设置 `POSTGRES_PASSWORD`。
 
 ## 运行与模式说明
-前端通过按钮控制模式，后端遵循以下约定（`QueryRequest.agent_name`）：
-- 默认/未选/`default`：固定 `default_llm_agent`（简单聊天；不触发路由与 ReAct）
+前端通过按钮提供模式提示，后端仍会执行意图分类：
+- 默认/未选：全局智能路由
 - `fortune` 或 `fortune_agent`：命理智能路由
   - 真命理 → `fortune_agent`
   - 闲聊/非命理 → 回退 `default_llm_agent`
@@ -54,25 +53,28 @@ npm run dev
   - 研究/检索 → `research_agent`
   - 一般分析 → `general_rag_agent`
   - 闲聊 → 回退 `default_llm_agent`
-- `auto`：全局智能路由（可选）
+- `general_rag_agent` 和 `default_llm_agent` 当前不会被公网 Handler 强制路由，
+  会按自动模式处理
+
+公网流最终只有 `default`、`research`、`fortune` 三条执行路径。当前 RAG
+节点全局停用，本地 KB/Pandas 不在 `/query_stream` 的实际执行链中。
 
 ## API 速览
-- POST `/query`
-  - 入参：`{ query: string, agent_name?: string, chat_history?: {role,content}[] }`
-  - 出参：`{ agent_name: string, answer: string, output?: string }`
 - POST `/query_stream`
-  - NDJSON 流式返回：`{"type":"delta","data":"..."}`，结束为 `{"type":"done"}`
+  - 入参：`{ query: string, agent_name?: string, chat_history?: {role,content}[] }`
+  - SSE 流式返回：`data: {"type":"delta","data":"..."}`，结束为
+    `data: {"type":"done"}`
 - GET `/healthz`：服务健康与已加载 Agent 列表
 
 ## 部署与持久化
 - 一体化部署：使用 `build.sh`（先构建前端，再安装后端依赖），`Start Command` 示例：
 ```bash
-uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port $PORT
 ```
 - 数据持久化（RAG）：
-  - 开发：默认使用本地 Chroma（`storage/chroma`）
+  - 开发：默认使用本地 Chroma（`backend/storage/chroma`）
   - 生产：配置 `DATABASE_URL` 与 `ENVIRONMENT=production`，自动切换到 PostgreSQL（pgvector）。
-  - 提供 `scripts/migrate_chroma_to_pg.py` 用于数据迁移。
+  - 提供 `backend/scripts/migrate_chroma_to_pg.py` 用于数据迁移。
 
 ---
 更多细节请参考 `DEPLOYMENT.md` 与源码注释。

@@ -1,0 +1,2 @@
+backend/agent/prompts/*.txt text eol=lf
+backend/agent/prompts/*.md text eol=lf
