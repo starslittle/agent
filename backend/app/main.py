@@ -3,7 +3,7 @@ from typing import Dict
 
 import uvicorn
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -112,11 +112,16 @@ def load_agents():
 
 
 @app.post("/query_stream")
-async def query_stream_endpoint(req: QueryRequest):
+async def query_stream_endpoint(req: QueryRequest, request: Request):
     """
     唯一对外流式接口（SSE + LangGraph）。
     """
     from .api.graph_routes import query_stream_graph
+    from .api.internal_auth import verify_internal_request
+
+    body = await request.body()
+    if not verify_internal_request(request.headers, body):
+        raise HTTPException(status_code=401, detail="invalid internal request")
 
     return await query_stream_graph(req)
 

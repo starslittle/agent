@@ -33,8 +33,9 @@ PostgreSQL 和 Redis：
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-访问 `http://localhost:5173`。前端代码由 Vite 热更新，日常修改不需要重新
-构建镜像；只有依赖、Dockerfile 或生产镜像内容变化时才需要重新构建。
+访问 `http://localhost:5173`，先注册本地账户再进入聊天页。前端代码由
+Vite 热更新，日常修改不需要重新构建镜像；只有依赖、Dockerfile 或生产镜像
+内容变化时才需要重新构建。
 
 也可以手动启动各服务：
 
@@ -62,7 +63,9 @@ npm install
 npm run dev
 ```
 
-> 环境变量：复制根目录 `.env.example` 为根目录 `.env`。本地 Python 与 Docker Compose 统一读取这一份配置；至少设置 `DASHSCOPE_API_KEY`，使用 Compose 时还需设置 `POSTGRES_PASSWORD`。
+> 环境变量：复制根目录 `.env.example` 为根目录 `.env`。本地 Python 与
+> Docker Compose 统一读取这一份配置；至少设置 `DASHSCOPE_API_KEY`、
+> `POSTGRES_PASSWORD`，并生成至少 32 字符的 `INTERNAL_AGENT_SECRET`。
 
 ## 运行与模式说明
 前端通过按钮提供模式提示，后端仍会执行意图分类：
@@ -81,10 +84,16 @@ npm run dev
 节点全局停用，本地 KB/Pandas 不在 `/query_stream` 的实际执行链中。
 
 ## API 速览
+- POST `/api/v1/auth/register`：注册并建立登录 Session
+- POST `/api/v1/auth/login`：登录并建立登录 Session
+- GET `/api/v1/session`：恢复当前 Session
+- GET `/api/v1/me`：读取当前用户
+- POST `/api/v1/auth/logout`：注销当前 Session
 - POST `/query_stream`
   - 入参：`{ query: string, agent_name?: string, chat_history?: {role,content}[] }`
   - SSE 流式返回：`data: {"type":"delta","data":"..."}`，结束为
     `data: {"type":"done"}`
+  - 需要 Session Cookie 和会话接口返回的 `X-CSRF-Token`
 - GET `/healthz`：Go 网关进程健康
 - GET `/readyz`：Go 网关与 Python 上游均可用
 
@@ -93,6 +102,7 @@ npm run dev
 - Go 是唯一公网入口；Python Agent、PostgreSQL 和 Redis 只在内部网络开放。
 - 当前 Go 仅代理完整 Python Agent 流程，尚未直接执行 Python Tool。默认
   Agent 与工具会在后续阶段逐项迁移。
+- 用户、登录身份与服务端 Session 已由 Go 写入 PostgreSQL。
 - 数据持久化（RAG）：
   - 开发：默认使用本地 Chroma（`backend/storage/chroma`）
   - 生产：配置 `DATABASE_URL` 与 `ENVIRONMENT=production`，自动切换到 PostgreSQL（pgvector）。

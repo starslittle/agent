@@ -63,8 +63,8 @@ export default function AuthPage() {
         <div className="absolute inset-0 opacity-30 [background-image:radial-gradient(circle_at_center,rgba(255,255,255,.22)_1px,transparent_1px)] [background-size:38px_38px]" />
 
         <div className="relative z-10 flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 border border-white/15">
-            <span className="bg-gradient-to-tr from-primary to-accent bg-clip-text text-transparent text-base font-bold">奇</span>
+          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 border border-white/20 shadow-[0_0_20px_hsl(262,83%,58%/0.2)]">
+            <span className="bg-gradient-to-tr from-violet-300 via-fuchsia-200 to-blue-300 bg-clip-text text-transparent text-base font-bold">奇</span>
           </div>
           <div>
             <p className="text-lg font-semibold tracking-tight">奇点AI</p>
@@ -97,7 +97,7 @@ export default function AuthPage() {
 
       <section className="relative flex min-h-screen items-center justify-center px-5 py-10 sm:px-10 lg:px-16">
         <div className="absolute left-5 top-5 flex items-center gap-2 lg:hidden">
-          <div className="grid h-8 w-8 place-items-center rounded-full bg-card border border-border">
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-tr from-primary/10 to-accent/10 border border-primary/20 shadow-sm">
             <span className="bg-gradient-to-tr from-primary to-accent bg-clip-text text-transparent text-xs font-bold">奇</span>
           </div>
           <span className="font-semibold">奇点AI</span>

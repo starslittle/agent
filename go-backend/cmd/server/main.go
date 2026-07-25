@@ -10,8 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/starslittle/agent/go-backend/internal/auth"
 	"github.com/starslittle/agent/go-backend/internal/config"
 	"github.com/starslittle/agent/go-backend/internal/httpapi"
+	"github.com/starslittle/agent/go-backend/internal/platform/postgres"
 )
 
 func main() {
@@ -23,7 +25,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	api, err := httpapi.New(cfg, logger)
+	startupCtx, startupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer startupCancel()
+	store, err := postgres.Open(startupCtx, cfg.DatabaseURL)
+	if err != nil {
+		logger.Error("initialize_postgres", "error", err)
+		os.Exit(1)
+	}
+	defer store.Close()
+	if err := store.Migrate(startupCtx); err != nil {
+		logger.Error("migrate_postgres", "error", err)
+		os.Exit(1)
+	}
+
+	authService := auth.NewService(store, cfg.SessionTTL)
+	api, err := httpapi.New(cfg, logger, authService)
 	if err != nil {
 		logger.Error("initialize_server", "error", err)
 		os.Exit(1)

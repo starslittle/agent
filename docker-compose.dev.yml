@@ -16,13 +16,22 @@ services:
     restart: unless-stopped
 
   gateway:
-    image: golang:1.24-alpine
+    image: golang:1.25-alpine
     working_dir: /workspace/go-backend
     command: go run ./cmd/server
     environment:
       APP_ENV: ${APP_ENV:-development}
       HTTP_ADDR: ":8000"
       PYTHON_BASE_URL: http://python:8000
+      POSTGRES_DB: ${POSTGRES_DB:-agent_db}
+      POSTGRES_USER: ${POSTGRES_USER:-qidian_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      PUBLIC_ORIGINS: ${PUBLIC_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      COOKIE_SECURE: "false"
+      SESSION_TTL: ${SESSION_TTL:-168h}
+      INTERNAL_AGENT_SECRET: ${INTERNAL_AGENT_SECRET:-development-only-agent-secret-change-me}
       MAX_REQUEST_BYTES: ${MAX_REQUEST_BYTES:-1048576}
       UPSTREAM_HEADER_TIMEOUT: ${UPSTREAM_HEADER_TIMEOUT:-30s}
       SHUTDOWN_TIMEOUT: ${SHUTDOWN_TIMEOUT:-10s}
@@ -59,6 +68,7 @@ services:
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?Set DASHSCOPE_API_KEY in .env}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       SENIVERSE_API_KEY: ${SENIVERSE_API_KEY:-}
+      INTERNAL_AGENT_SECRET: ${INTERNAL_AGENT_SECRET:-development-only-agent-secret-change-me}
       LLM_MODEL_NAME: ${LLM_MODEL_NAME:-deepseek-v3.2}
       REDIS_URL: redis://redis:6379/0
       HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}

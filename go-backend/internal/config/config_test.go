@@ -11,6 +11,10 @@ func TestLoadUsesPortAndPythonDefaults(t *testing.T) {
 	t.Setenv("MAX_REQUEST_BYTES", "")
 	t.Setenv("UPSTREAM_HEADER_TIMEOUT", "")
 	t.Setenv("SHUTDOWN_TIMEOUT", "")
+	t.Setenv("SESSION_TTL", "")
+	t.Setenv("COOKIE_SECURE", "")
+	t.Setenv("GO_DATABASE_URL", "postgres://test:test@localhost/test")
+	t.Setenv("INTERNAL_AGENT_SECRET", "test-secret-that-is-at-least-32-characters")
 
 	cfg, err := Load()
 	if err != nil {
@@ -30,6 +34,8 @@ func TestLoadUsesPortAndPythonDefaults(t *testing.T) {
 func TestLoadPrefersGoEnvironmentAlias(t *testing.T) {
 	t.Setenv("APP_ENV", "staging")
 	t.Setenv("ENVIRONMENT", "production")
+	t.Setenv("GO_DATABASE_URL", "postgres://test:test@localhost/test")
+	t.Setenv("INTERNAL_AGENT_SECRET", "test-secret-that-is-at-least-32-characters")
 
 	cfg, err := Load()
 	if err != nil {
@@ -41,6 +47,8 @@ func TestLoadPrefersGoEnvironmentAlias(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidPythonURL(t *testing.T) {
+	t.Setenv("GO_DATABASE_URL", "postgres://test:test@localhost/test")
+	t.Setenv("INTERNAL_AGENT_SECRET", "test-secret-that-is-at-least-32-characters")
 	t.Setenv("PYTHON_BASE_URL", "python:8000")
 
 	if _, err := Load(); err == nil {

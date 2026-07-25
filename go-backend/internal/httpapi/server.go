@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/starslittle/agent/go-backend/internal/auth"
 	"github.com/starslittle/agent/go-backend/internal/config"
 )
 
@@ -16,11 +18,19 @@ type Server struct {
 	handler http.Handler
 }
 
-func New(cfg config.Config, logger *slog.Logger) (*Server, error) {
+func New(
+	cfg config.Config,
+	logger *slog.Logger,
+	authService *auth.Service,
+) (*Server, error) {
+	if authService == nil {
+		return nil, errors.New("auth service is required")
+	}
 	proxy, err := newStreamProxy(
 		cfg.PythonBaseURL,
 		cfg.MaxRequestBytes,
 		cfg.UpstreamHeaderTimeout,
+		cfg.InternalAgentSecret,
 		logger,
 	)
 	if err != nil {
@@ -28,14 +38,34 @@ func New(cfg config.Config, logger *slog.Logger) (*Server, error) {
 	}
 
 	mux := http.NewServeMux()
+	authAPI := newAuthHTTP(cfg, authService)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":  "ok",
 			"service": "go-gateway",
 		})
 	})
-	mux.HandleFunc("GET /readyz", readinessHandler(cfg.PythonBaseURL, proxy.client))
-	mux.Handle("POST /query_stream", proxy)
+	mux.HandleFunc("GET /readyz", readinessHandler(cfg.PythonBaseURL, proxy.client, authService))
+	mux.Handle("POST /api/v1/auth/register", authAPI.protectMutation(http.HandlerFunc(authAPI.register)))
+	mux.Handle("POST /api/v1/auth/login", authAPI.protectMutation(http.HandlerFunc(authAPI.login)))
+	mux.HandleFunc("GET /api/v1/session", authAPI.session)
+	mux.Handle("GET /api/v1/me", authAPI.requireSession(http.HandlerFunc(authAPI.me)))
+	mux.Handle(
+		"POST /api/v1/auth/logout",
+		authAPI.protectMutation(
+			authAPI.requireSession(
+				authAPI.requireCSRF(http.HandlerFunc(authAPI.logout)),
+			),
+		),
+	)
+	mux.Handle(
+		"POST /query_stream",
+		authAPI.protectMutation(
+			authAPI.requireSession(
+				authAPI.requireCSRF(proxy),
+			),
+		),
+	)
 	if cfg.StaticDir != "" {
 		mux.Handle("/", spaHandler(cfg.StaticDir))
 	}
@@ -53,9 +83,17 @@ func (s *Server) Handler() http.Handler {
 	return s.handler
 }
 
-func readinessHandler(pythonBaseURL string, client *http.Client) http.HandlerFunc {
+func readinessHandler(
+	pythonBaseURL string,
+	client *http.Client,
+	authService *auth.Service,
+) http.HandlerFunc {
 	healthURL := strings.TrimRight(pythonBaseURL, "/") + "/healthz"
 	return func(w http.ResponseWriter, r *http.Request) {
+		if err := authService.Ping(r.Context()); err != nil {
+			writeJSONError(w, http.StatusServiceUnavailable, "database_not_ready")
+			return
+		}
 		request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, healthURL, nil)
 		if err != nil {
 			writeJSONError(w, http.StatusServiceUnavailable, "python_upstream_not_ready")

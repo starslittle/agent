@@ -3,6 +3,9 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +24,7 @@ type streamProxy struct {
 	maxRequestSize int64
 	client         *http.Client
 	logger         *slog.Logger
+	internalSecret []byte
 }
 
 type queryRequest struct {
@@ -31,6 +35,7 @@ func newStreamProxy(
 	pythonBaseURL string,
 	maxRequestSize int64,
 	headerTimeout time.Duration,
+	internalSecret string,
 	logger *slog.Logger,
 ) (*streamProxy, error) {
 	baseURL, err := url.Parse(pythonBaseURL)
@@ -53,6 +58,7 @@ func newStreamProxy(
 		maxRequestSize: maxRequestSize,
 		client:         &http.Client{Transport: transport},
 		logger:         logger,
+		internalSecret: []byte(internalSecret),
 	}, nil
 }
 
@@ -100,6 +106,19 @@ func (p *streamProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	copyRequestHeaders(upstreamRequest.Header, r.Header)
+	session, ok := sessionFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required")
+		return
+	}
+	signInternalRequest(
+		upstreamRequest.Header,
+		p.internalSecret,
+		session.User.ID,
+		r.Header.Get(requestIDHeader),
+		body,
+		time.Now().UTC(),
+	)
 
 	response, err := p.client.Do(upstreamRequest)
 	if err != nil {
@@ -171,21 +190,46 @@ func readRequestBody(body io.ReadCloser, limit int64) ([]byte, error) {
 }
 
 func copyRequestHeaders(target, source http.Header) {
-	for name, values := range source {
-		if isHopByHopHeader(name) || strings.EqualFold(name, "Host") {
-			continue
-		}
-		for _, value := range values {
-			target.Add(name, value)
+	for _, name := range []string{"Traceparent", "Tracestate"} {
+		if value := source.Get(name); value != "" {
+			target.Set(name, value)
 		}
 	}
+	target.Set(requestIDHeader, source.Get(requestIDHeader))
 	target.Set("Accept", "text/event-stream")
 	target.Set("Content-Type", "application/json")
+}
+
+func signInternalRequest(
+	headers http.Header,
+	secret []byte,
+	userID string,
+	requestID string,
+	body []byte,
+	now time.Time,
+) {
+	timestamp := now.Format(time.RFC3339)
+	bodyHash := sha256.Sum256(body)
+	canonical := strings.Join([]string{
+		userID,
+		requestID,
+		timestamp,
+		hex.EncodeToString(bodyHash[:]),
+	}, "\n")
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write([]byte(canonical))
+	headers.Set("X-Qidian-User-ID", userID)
+	headers.Set("X-Qidian-Timestamp", timestamp)
+	headers.Set("X-Qidian-Signature", hex.EncodeToString(mac.Sum(nil)))
 }
 
 func copyResponseHeaders(target, source http.Header) {
 	for name, values := range source {
 		if isHopByHopHeader(name) || strings.EqualFold(name, "Content-Length") {
+			continue
+		}
+		switch http.CanonicalHeaderKey(name) {
+		case "Set-Cookie", "Access-Control-Allow-Origin", "Access-Control-Allow-Credentials":
 			continue
 		}
 		for _, value := range values {

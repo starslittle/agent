@@ -111,6 +111,7 @@ models/
 
 # Local AI assistant settings (machine-specific)
 .claude/settings.local.json
+.workbuddy/
 
 
 # -------------------------------------------------------------------

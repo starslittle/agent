@@ -24,6 +24,7 @@ export interface StreamChunk {
 export async function postQueryStreamGraph(
   payload: QueryPayload,
   onDelta: (delta: string, isThinking?: boolean, thinkingFinished?: boolean) => void,
+  csrfToken: string,
   signal?: AbortSignal
 ): Promise<void> {
   const base = getApiBase();
@@ -32,10 +33,12 @@ export async function postQueryStreamGraph(
     method: "POST",
     headers: { 
       "Content-Type": "application/json",
-      "Accept": "text/event-stream"
+      "Accept": "text/event-stream",
+      "X-CSRF-Token": csrfToken,
     },
     body: JSON.stringify(payload),
     signal,
+    credentials: "include",
   });
 
   if (!res.ok) {

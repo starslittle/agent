@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     DASHSCOPE_API_KEY: str = ""
     TAVILY_API_KEY: str = ""
     SENIVERSE_API_KEY: str = ""
+    INTERNAL_AGENT_SECRET: str = ""
 
     # RAG / 模型相关（默认值与现有代码保持一致）
     LLM_MODEL_NAME: str = "deepseek-v3.2"

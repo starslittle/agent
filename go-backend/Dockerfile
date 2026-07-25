@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS go-build
+FROM golang:1.25-alpine AS go-build
 
 WORKDIR /src/go-backend
 COPY go-backend/go.mod ./
