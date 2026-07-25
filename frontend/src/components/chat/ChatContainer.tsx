@@ -1,31 +1,96 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import ChatMessage, { ChatRole } from "./ChatMessage";
 import ChatInput from "./ChatInput";
-import { postQueryStreamGraph } from "@/lib/api";
+import {
+  createConversation,
+  postConversationStream,
+  type Conversation,
+  type StoredMessage,
+} from "@/lib/chat-api";
 import { useAuth } from "@/auth/AuthProvider";
-import { ArrowDown, ArrowUpRight } from "lucide-react";
+import { ArrowDown, ArrowUpRight, LoaderCircle } from "lucide-react";
 
 interface Message {
   id: string;
   role: ChatRole;
   content: string;
+  status?: StoredMessage["status"];
   thinking?: boolean;
   thinkingFinished?: boolean;
 }
 
 function uid() {
-  return Math.random().toString(36).slice(2);
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = character === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
 }
 
-export const ChatContainer: React.FC = () => {
+interface ChatContainerProps {
+  conversationId?: string | null;
+  initialMessages?: StoredMessage[];
+  onConversationCreated?: (conversation: Conversation) => void;
+  onConversationChanged?: () => void;
+  hasEarlierMessages?: boolean;
+  loadingEarlierMessages?: boolean;
+  onLoadEarlierMessages?: () => void;
+}
+
+function toViewMessage(message: StoredMessage): Message {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    status: message.status,
+    thinking: message.status === "streaming",
+    thinkingFinished: message.status !== "streaming",
+  };
+}
+
+export const ChatContainer: React.FC<ChatContainerProps> = ({
+  conversationId,
+  initialMessages = [],
+  onConversationCreated,
+  onConversationChanged,
+  hasEarlierMessages = false,
+  loadingEarlierMessages = false,
+  onLoadEarlierMessages,
+}) => {
   const { csrfToken } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(
+    () => initialMessages.map(toViewMessage),
+  );
   const [isFollowingLatest, setIsFollowingLatest] = useState(true);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const isFollowingLatestRef = useRef(true);
   const lastScrollTopRef = useRef(0);
+
+  useEffect(() => {
+    setMessages((current) => {
+      const incomingByID = new Map(
+        initialMessages.map((message) => [message.id, message]),
+      );
+      const merged = current.map((message) => {
+        const incoming = incomingByID.get(message.id);
+        if (!incoming) return message;
+        if (message.status === "streaming" && incoming.status === "streaming") {
+          return message;
+        }
+        return toViewMessage(incoming);
+      });
+      const known = new Set(merged.map((message) => message.id));
+      const earlier = initialMessages
+        .filter((message) => !known.has(message.id))
+        .map(toViewMessage);
+      return earlier.length > 0 ? [...earlier, ...merged] : merged;
+    });
+  }, [initialMessages]);
   
   // 移除：streamRef, streamingMessageId, streamingContent 相关的状态和 Effect
   // 这些中间状态是导致卡顿和逻辑复杂的元凶
@@ -100,12 +165,25 @@ export const ChatContainer: React.FC = () => {
   const handleSend = useCallback(async (text: string, deep: boolean) => {
     scrollToLatest();
 
-    const userMsg: Message = { id: uid(), role: "user", content: text };
+    const clientMessageID = uid();
+    const userMsg: Message = {
+      id: clientMessageID,
+      role: "user",
+      content: text,
+      status: "completed",
+    };
     setMessages((prev) => [...prev, userMsg]);
 
     const assistantId = uid();
     // 初始状态：thinking 为 true，content 为空
-    setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "", thinking: true, thinkingFinished: false }]);
+    setMessages((prev) => [...prev, {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      status: "streaming",
+      thinking: true,
+      thinkingFinished: false,
+    }]);
 
     // 如果有之前的请求，取消它
     if (abortControllerRef.current) {
@@ -115,66 +193,92 @@ export const ChatContainer: React.FC = () => {
     const controller = new AbortController();
     abortControllerRef.current = controller;
     setIsGenerating(true);
+    let createdConversation: Conversation | null = null;
+    let accumulatedContent = "";
 
     try {
       const agentName = deep ? "research_agent" : undefined;
-      
-      const chatHistory = messages
-        .filter(m => !m.thinking)
-        .map(m => ({ role: m.role, content: m.content }));
-      
-      const payload = { 
-        query: text, 
-        agent_name: agentName,
-        chat_history: chatHistory.length > 0 ? chatHistory : null
-      };
+      let targetConversationID = conversationId || "";
+      if (!targetConversationID) {
+        createdConversation = await createConversation(csrfToken, agentName);
+        targetConversationID = createdConversation.id;
+      }
 
       // 使用局部变量累积文本，直接更新 Messages
-      let accumulatedContent = "";
-      
-      await postQueryStreamGraph(
-        payload,
-        (delta: string, isThinking?: boolean, thinkingFinished?: boolean) => {
-          accumulatedContent += delta;
-
-          // 在回调中直接更新主状态
-          setMessages((prev) =>
-            prev.map((m) => {
-              if (m.id === assistantId) {
-                return {
-                  ...m,
-                  content: accumulatedContent,
-                  thinking: isThinking ?? m.thinking,
-                  thinkingFinished: thinkingFinished ?? m.thinkingFinished,
-                };
-              }
-              return m;
-            })
-          );
+      await postConversationStream(
+        targetConversationID,
+        {
+          content: text,
+          client_message_id: clientMessageID,
+          agent_name: agentName,
         },
         csrfToken,
+        (event) => {
+          if (event.type === "meta") {
+            setMessages((prev) => prev.map((message) => {
+              if (message.id === clientMessageID) {
+                return { ...message, id: event.user_message_id };
+              }
+              if (message.id === assistantId) {
+                return { ...message, id: event.assistant_message_id };
+              }
+              return message;
+            }));
+            return;
+          }
+          if (event.type !== "delta" || !event.data) return;
+          accumulatedContent += event.data;
+          setMessages((prev) =>
+            prev.map((message) => {
+              if (message.id === assistantId ||
+                  (event.type === "delta" && message.status === "streaming" && message.role === "assistant")) {
+                return {
+                  ...message,
+                  content: accumulatedContent,
+                  status: "streaming",
+                  thinking: event.isThinking ?? message.thinking,
+                  thinkingFinished: event.thinkingFinished ?? message.thinkingFinished,
+                };
+              }
+              return message;
+            }),
+          );
+        },
         controller.signal
       );
       
       if (!accumulatedContent) {
         throw new Error("流式输出未收到任何内容");
       }
-
+      setMessages((prev) => prev.map((message) =>
+        message.role === "assistant" && message.status === "streaming"
+          ? {
+              ...message,
+              status: "completed",
+              thinking: false,
+              thinkingFinished: true,
+            }
+          : message,
+      ));
     } catch (err: unknown) {
       // 如果是用户手动停止，不做错误处理，只确保 thinking 结束
       if ((err as Error).name === "AbortError") {
         setMessages((prev) => prev.map((m) =>
-          m.id === assistantId ? { ...m, thinking: false } : m
+          m.role === "assistant" && m.status === "streaming"
+            ? { ...m, status: "stopped", thinking: false }
+            : m
         ));
         return;
       }
 
       console.error("对话失败:", err);
       setMessages((prev) => prev.map((m) => 
-        m.id === assistantId 
+        m.role === "assistant" && m.status === "streaming"
           ? { 
               ...m, 
-              content: `请求失败：${(err as Error)?.message || String(err)}`, 
+              content: accumulatedContent ||
+                `请求失败：${(err as Error)?.message || String(err)}`,
+              status: "failed",
               thinking: false 
             }
           : m
@@ -182,8 +286,18 @@ export const ChatContainer: React.FC = () => {
     } finally {
       setIsGenerating(false);
       abortControllerRef.current = null;
+      if (createdConversation) {
+        onConversationCreated?.(createdConversation);
+      }
+      onConversationChanged?.();
     }
-  }, [csrfToken, messages, scrollToLatest]);
+  }, [
+    conversationId,
+    csrfToken,
+    onConversationChanged,
+    onConversationCreated,
+    scrollToLatest,
+  ]);
 
   const suggestions = [
     {
@@ -253,19 +367,35 @@ export const ChatContainer: React.FC = () => {
                 </div>
               </div>
             ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`${message.role === "user" ? "flex justify-end" : "flex justify-start"} animate-in fade-in-0 slide-in-from-bottom-2 duration-300 motion-reduce:animate-none motion-reduce:transition-none`}
-                >
-                  <ChatMessage
-                    role={message.role}
-                    content={message.content}
-                    thinking={message.thinking}
-                    thinkingFinished={message.thinkingFinished}
-                  />
-                </div>
-              ))
+              <>
+                {hasEarlierMessages && (
+                  <div className="flex justify-center pb-1">
+                    <button
+                      type="button"
+                      onClick={onLoadEarlierMessages}
+                      disabled={loadingEarlierMessages}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-3 py-1.5 text-[11px] text-muted-foreground transition hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
+                    >
+                      {loadingEarlierMessages && <LoaderCircle className="h-3 w-3 animate-spin" />}
+                      加载更早消息
+                    </button>
+                  </div>
+                )}
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`${message.role === "user" ? "flex justify-end" : "flex justify-start"} animate-in fade-in-0 slide-in-from-bottom-2 duration-300 motion-reduce:animate-none motion-reduce:transition-none`}
+                  >
+                    <ChatMessage
+                      role={message.role}
+                      content={message.content}
+                      status={message.status}
+                      thinking={message.thinking}
+                      thinkingFinished={message.thinkingFinished}
+                    />
+                  </div>
+                ))}
+              </>
             )}
           </div>
         </div>

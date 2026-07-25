@@ -1,19 +1,188 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import ChatContainer from "@/components/chat/ChatContainer";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { useAuth } from "@/auth/AuthProvider";
-import { LogOut, Sparkles } from "lucide-react";
+import {
+  deleteConversation,
+  getConversation,
+  listConversations,
+  listMessages,
+  renameConversation,
+  type Conversation,
+  type StoredMessage,
+} from "@/lib/chat-api";
+import { LoaderCircle, LogOut } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 
 const Index = () => {
-  const { user, logout } = useAuth();
-  const [chatKey, setChatKey] = useState(0);
+  const { user, csrfToken, logout } = useAuth();
+  const { conversationId } = useParams<{ conversationId?: string }>();
+  const navigate = useNavigate();
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
+  const [initialMessages, setInitialMessages] = useState<StoredMessage[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [listLoading, setListLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(Boolean(conversationId));
+  const [earlierCursor, setEarlierCursor] = useState<number | null>(null);
+  const [earlierLoading, setEarlierLoading] = useState(false);
+
+  const refreshConversations = useCallback(async (query = searchQuery) => {
+    try {
+      const response = await listConversations(query);
+      setConversations(response.items);
+    } catch (error) {
+      toast.error((error as Error).message || "无法加载会话列表");
+    } finally {
+      setListLoading(false);
+    }
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setListLoading(true);
+    const timer = window.setTimeout(() => {
+      void refreshConversations(searchQuery);
+    }, searchQuery ? 250 : 0);
+    return () => window.clearTimeout(timer);
+  }, [refreshConversations, searchQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimer: number | undefined;
+    if (!conversationId) {
+      setActiveConversation(null);
+      setInitialMessages([]);
+      setEarlierCursor(null);
+      setMessagesLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setMessagesLoading(true);
+    const refreshStreamingMessages = async (attempt: number) => {
+      if (cancelled || attempt > 6) return;
+      try {
+        const response = await listMessages(conversationId);
+        if (cancelled) return;
+        setInitialMessages(response.items);
+        setEarlierCursor(response.next_before ?? null);
+        if (response.items.some((message) => message.status === "streaming")) {
+          retryTimer = window.setTimeout(
+            () => void refreshStreamingMessages(attempt + 1),
+            Math.min(400 * (attempt + 1), 1600),
+          );
+        }
+      } catch {
+        // The initial load already surfaced errors. Polling is best-effort.
+      }
+    };
+
+    void Promise.all([
+      getConversation(conversationId),
+      listMessages(conversationId),
+    ]).then(([conversation, messageResponse]) => {
+      if (cancelled) return;
+      setActiveConversation(conversation);
+      setInitialMessages(messageResponse.items);
+      setEarlierCursor(messageResponse.next_before ?? null);
+      if (messageResponse.items.some((message) => message.status === "streaming")) {
+        retryTimer = window.setTimeout(
+          () => void refreshStreamingMessages(1),
+          400,
+        );
+      }
+    }).catch((error) => {
+      if (cancelled) return;
+      toast.error((error as Error).message || "无法加载这个会话");
+      navigate("/", { replace: true });
+    }).finally(() => {
+      if (!cancelled) setMessagesLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
+  }, [conversationId, navigate]);
+
+  const handleLoadEarlier = useCallback(async () => {
+    if (!conversationId || earlierCursor === null || earlierLoading) return;
+    setEarlierLoading(true);
+    try {
+      const response = await listMessages(conversationId, 50, earlierCursor);
+      setInitialMessages((current) => {
+        const known = new Set(current.map((message) => message.id));
+        return [
+          ...response.items.filter((message) => !known.has(message.id)),
+          ...current,
+        ];
+      });
+      setEarlierCursor(response.next_before ?? null);
+    } catch (error) {
+      toast.error((error as Error).message || "无法加载更早消息");
+    } finally {
+      setEarlierLoading(false);
+    }
+  }, [conversationId, earlierCursor, earlierLoading]);
+
+  const handleConversationCreated = useCallback((conversation: Conversation) => {
+    setConversations((current) => [
+      conversation,
+      ...current.filter((item) => item.id !== conversation.id),
+    ]);
+    navigate(`/chat/${conversation.id}`, { replace: true });
+  }, [navigate]);
+
+  const handleRename = useCallback(async (conversation: Conversation) => {
+    const title = window.prompt("为这段对话输入新标题", conversation.title)?.trim();
+    if (!title || title === conversation.title) return;
+    try {
+      const updated = await renameConversation(conversation.id, title, csrfToken);
+      setConversations((current) =>
+        current.map((item) => item.id === updated.id ? { ...item, ...updated } : item),
+      );
+      if (activeConversation?.id === updated.id) {
+        setActiveConversation(updated);
+      }
+    } catch (error) {
+      toast.error((error as Error).message || "重命名失败");
+    }
+  }, [activeConversation?.id, csrfToken]);
+
+  const handleDelete = useCallback(async (conversation: Conversation) => {
+    if (!window.confirm(`确定删除“${conversation.title}”吗？`)) return;
+    try {
+      await deleteConversation(conversation.id, csrfToken);
+      setConversations((current) =>
+        current.filter((item) => item.id !== conversation.id),
+      );
+      if (conversation.id === conversationId) {
+        navigate("/", { replace: true });
+      }
+      toast.success("会话已删除");
+    } catch (error) {
+      toast.error((error as Error).message || "删除失败");
+    }
+  }, [conversationId, csrfToken, navigate]);
 
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full overflow-hidden bg-[#f5f7fb] dark:bg-[#080a13]">
-        <ChatSidebar onNewChat={() => setChatKey((key) => key + 1)} />
+        <ChatSidebar
+          onNewChat={() => navigate("/")}
+          conversations={conversations}
+          activeConversationId={conversationId}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onSelect={(conversation) => navigate(`/chat/${conversation.id}`)}
+          onRename={(conversation) => void handleRename(conversation)}
+          onDelete={(conversation) => void handleDelete(conversation)}
+          loading={listLoading}
+        />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="z-20 flex h-[4.5rem] flex-shrink-0 items-center border-b border-border/60 bg-background/75 px-4 backdrop-blur-xl sm:px-6">
@@ -22,7 +191,9 @@ const Index = () => {
                 <SidebarTrigger className="h-9 w-9 rounded-xl border border-border/70 bg-background/80 text-muted-foreground hover:bg-muted" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h1 className="truncate text-sm font-semibold sm:text-base">新的对话</h1>
+                    <h1 className="truncate text-sm font-semibold sm:text-base">
+                      {activeConversation?.title || "新的对话"}
+                    </h1>
                     <span className="hidden items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 sm:inline-flex dark:text-emerald-300">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                       在线
@@ -64,7 +235,23 @@ const Index = () => {
               <div className="absolute left-1/2 top-[38%] h-[24rem] w-[38rem] -translate-x-1/2 -translate-y-1/2 rotate-[11deg] rounded-[50%] border border-blue-300/15 dark:border-blue-400/[0.06]" />
               <div className="absolute left-1/2 top-[35%] h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-300/10 blur-3xl dark:bg-violet-600/[0.06]" />
             </div>
-            <ChatContainer key={chatKey} />
+            {messagesLoading ? (
+              <div className="relative z-10 flex h-full items-center justify-center text-muted-foreground">
+                <LoaderCircle className="h-5 w-5 animate-spin" />
+                <span className="ml-2 text-xs">正在恢复会话</span>
+              </div>
+            ) : (
+              <ChatContainer
+                key={conversationId || "new-conversation"}
+                conversationId={conversationId}
+                initialMessages={initialMessages}
+                onConversationCreated={handleConversationCreated}
+                onConversationChanged={() => void refreshConversations()}
+                hasEarlierMessages={earlierCursor !== null}
+                loadingEarlierMessages={earlierLoading}
+                onLoadEarlierMessages={() => void handleLoadEarlier()}
+              />
+            )}
           </main>
         </div>
       </div>

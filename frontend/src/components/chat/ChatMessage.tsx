@@ -18,6 +18,7 @@ export type ChatRole = "user" | "assistant";
 export interface ChatMessageProps {
   role: ChatRole;
   content: string;
+  status?: "pending" | "streaming" | "completed" | "stopped" | "failed";
   thinking?: boolean;
   thinkingFinished?: boolean;
 }
@@ -161,7 +162,13 @@ function markdownTableToTsv(tableMarkdown: string): string {
   return rows.map((r) => r.join("\t")).join("\n");
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinking, thinkingFinished }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({
+  role,
+  content,
+  status,
+  thinking,
+  thinkingFinished,
+}) => {
   const isUser = role === "user";
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null);
   const [copiedMessage, setCopiedMessage] = React.useState(false);
@@ -450,17 +457,25 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ role, content, thinkin
           </div>
         )}
       </div>
-      {displayedContent.trim() && (
-        <div className={`mt-1.5 ${isUser ? "mr-1" : "ml-1"}`}>
-          <button
-            type="button"
-            onClick={handleCopyMessage}
-            className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-100 transition-[opacity,color,background-color] hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 sm:opacity-0 sm:group-hover/message:opacity-100 sm:group-focus-within/message:opacity-100"
-            title={copiedMessage ? "已复制" : "复制消息"}
-            aria-label={copiedMessage ? "消息已复制" : "复制消息"}
-          >
-            {copiedMessage ? <Check size={14} /> : <Copy size={14} />}
-          </button>
+      {(displayedContent.trim() || (!isUser && (status === "stopped" || status === "failed"))) && (
+        <div className={`mt-1.5 flex items-center gap-2 ${isUser ? "mr-1" : "ml-1"}`}>
+          {!isUser && status === "stopped" && (
+            <span className="text-[10px] text-muted-foreground">已停止生成</span>
+          )}
+          {!isUser && status === "failed" && (
+            <span className="text-[10px] text-destructive">生成未完成</span>
+          )}
+          {displayedContent.trim() && (
+            <button
+              type="button"
+              onClick={handleCopyMessage}
+              className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-100 transition-[opacity,color,background-color] hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 sm:opacity-0 sm:group-hover/message:opacity-100 sm:group-focus-within/message:opacity-100"
+              title={copiedMessage ? "已复制" : "复制消息"}
+              aria-label={copiedMessage ? "消息已复制" : "复制消息"}
+            >
+              {copiedMessage ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          )}
         </div>
       )}
     </article>

@@ -23,6 +23,8 @@
 - 命理智能分析：命理模式下受限域智能路由，命理问题走 `fortune_agent`，非命理回退聊天。
 - 深度思考检索：深度模式下在 `research_agent` 与 `general_rag_agent` 之间路由，支持网络检索与本地/Pandas 知识库。
 - 流式输出：`/query_stream` 持续返回增量文本，前端顺滑展示。
+- 用户级会话：历史消息、会话标题、搜索、重命名、删除和刷新恢复由 Go 与
+  PostgreSQL 持久化。
 
 ## 快速开始
 
@@ -89,7 +91,15 @@ npm run dev
 - GET `/api/v1/session`：恢复当前 Session
 - GET `/api/v1/me`：读取当前用户
 - POST `/api/v1/auth/logout`：注销当前 Session
+- GET/POST `/api/v1/conversations`：查询或创建当前用户会话
+- GET/PATCH/DELETE `/api/v1/conversations/{id}`：读取、重命名或删除会话
+- GET `/api/v1/conversations/{id}/messages`：分页读取历史消息
+- POST `/api/v1/conversations/{id}/messages/stream`
+  - 入参：`{ content, client_message_id, agent_name? }`
+  - Go 从数据库组装可信历史，并持久化完成、停止或失败状态
+  - SSE 首帧返回会话、消息和运行 ID
 - POST `/query_stream`
+  - 旧版兼容入口，暂不移除
   - 入参：`{ query: string, agent_name?: string, chat_history?: {role,content}[] }`
   - SSE 流式返回：`data: {"type":"delta","data":"..."}`，结束为
     `data: {"type":"done"}`
@@ -100,9 +110,10 @@ npm run dev
 ## 部署与持久化
 - 生产部署：`docker compose up --build -d`
 - Go 是唯一公网入口；Python Agent、PostgreSQL 和 Redis 只在内部网络开放。
-- 当前 Go 仅代理完整 Python Agent 流程，尚未直接执行 Python Tool。默认
+- 当前 Go 负责认证、会话与流式运行生命周期，但尚未直接执行 Python Tool。默认
   Agent 与工具会在后续阶段逐项迁移。
-- 用户、登录身份与服务端 Session 已由 Go 写入 PostgreSQL。
+- 用户、登录身份、服务端 Session、会话、消息和 Agent 运行记录均由 Go
+  写入 PostgreSQL。
 - 数据持久化（RAG）：
   - 开发：默认使用本地 Chroma（`backend/storage/chroma`）
   - 生产：配置 `DATABASE_URL` 与 `ENVIRONMENT=production`，自动切换到 PostgreSQL（pgvector）。

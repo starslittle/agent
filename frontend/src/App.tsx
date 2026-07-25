@@ -31,6 +31,14 @@ const App = () => (
                   </ProtectedRoute>
                 )}
               />
+              <Route
+                path="/chat/:conversationId"
+                element={(
+                  <ProtectedRoute>
+                    <Index />
+                  </ProtectedRoute>
+                )}
+              />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>

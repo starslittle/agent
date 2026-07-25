@@ -1,6 +1,7 @@
 import React, { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { MessageSquare, Plus, Search } from "lucide-react";
+import { MessageSquare, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import type { Conversation } from "@/lib/chat-api";
 import {
   Sidebar,
   SidebarContent,
@@ -12,23 +13,44 @@ import {
 
 interface ChatSidebarProps {
   onNewChat: () => void;
+  conversations: Conversation[];
+  activeConversationId?: string | null;
+  searchQuery: string;
+  onSearchChange: (value: string) => void;
+  onSelect: (conversation: Conversation) => void;
+  onRename: (conversation: Conversation) => void;
+  onDelete: (conversation: Conversation) => void;
+  loading?: boolean;
 }
 
-export const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
+function formatConversationDate(value?: string): string {
+  if (!value) return "刚刚";
+  const date = new Date(value);
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  }
+  return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+}
+
+export const ChatSidebar: React.FC<ChatSidebarProps> = ({
+  onNewChat,
+  conversations,
+  activeConversationId,
+  searchQuery,
+  onSearchChange,
+  onSelect,
+  onRename,
+  onDelete,
+  loading = false,
+}) => {
   const parentRef = useRef<HTMLDivElement>(null);
 
-  // 临时模拟历史记录；接入真实会话接口后移除
-  const historyItems = Array.from({ length: 5 }, (_, i) => ({
-    id: i,
-    title: `历史会话 ${i + 1}`,
-    date: new Date().toLocaleDateString()
-  }));
-
   const rowVirtualizer = useVirtualizer({
-    count: historyItems.length,
+    count: conversations.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 56, // 每个列表项预估高度 56px
-    overscan: 10, // 视口外多渲染几项，防止快速滚动时出现白屏
+    estimateSize: () => 64,
+    overscan: 8,
   });
 
   return (
@@ -64,7 +86,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
         <SidebarGroup className="min-h-0 flex-1 px-2">
           <SidebarGroupLabel className="mb-1 justify-between px-2 text-[11px] font-medium">
             <span>最近对话</span>
-            <span>{historyItems.length}</span>
+            <span>{conversations.length}</span>
           </SidebarGroupLabel>
 
           <div
@@ -72,50 +94,120 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
             className="w-full flex-1 overflow-auto overflow-x-hidden"
             style={{ height: "calc(100vh - 250px)" }}
           >
-            <div
-              style={{
-                height: `${rowVirtualizer.getTotalSize()}px`,
-                width: '100%',
-                position: 'relative',
-              }}
-            >
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const item = historyItems[virtualRow.index];
-                return (
-                  <button
-                    type="button"
-                    key={virtualRow.index}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: `${virtualRow.size}px`,
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                    className="group flex w-full items-center gap-3 rounded-xl px-3 text-left transition hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:hover:bg-white/[0.06]"
-                  >
-                    <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-white/70 text-muted-foreground shadow-sm transition group-hover:text-primary dark:bg-white/[0.06]">
-                      <MessageSquare className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-medium">{item.title}</span>
-                      <span className="mt-0.5 block text-[10px] text-muted-foreground">{item.date}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            {loading ? (
+              <div className="space-y-2 px-2 pt-2">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={index} className="h-14 animate-pulse rounded-xl bg-white/50 dark:bg-white/[0.04]" />
+                ))}
+              </div>
+            ) : conversations.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <p className="text-xs font-medium text-foreground">
+                  {searchQuery ? "没有找到相关对话" : "还没有历史对话"}
+                </p>
+                <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+                  {searchQuery ? "换个关键词试试" : "发送第一条消息后会自动保存"}
+                </p>
+              </div>
+            ) : (
+              <div
+                style={{
+                  height: `${rowVirtualizer.getTotalSize()}px`,
+                  width: "100%",
+                  position: "relative",
+                }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const item = conversations[virtualRow.index];
+                  const active = item.id === activeConversationId;
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: `${virtualRow.size}px`,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                      className="px-0.5 py-0.5"
+                    >
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onSelect(item)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            onSelect(item);
+                          }
+                        }}
+                        className={`group relative flex h-full w-full items-center gap-3 rounded-xl px-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                          active
+                            ? "bg-white text-foreground shadow-sm dark:bg-white/[0.08]"
+                            : "hover:bg-white/70 dark:hover:bg-white/[0.06]"
+                        }`}
+                      >
+                        <span className={`grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg shadow-sm transition ${
+                          active
+                            ? "bg-[#121629] text-white dark:bg-white dark:text-[#121629]"
+                            : "bg-white/70 text-muted-foreground group-hover:text-primary dark:bg-white/[0.06]"
+                        }`}>
+                          <MessageSquare className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="min-w-0 flex-1 pr-12">
+                          <span className="block truncate text-xs font-medium">{item.title}</span>
+                          <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                            {item.last_message_preview || formatConversationDate(item.last_message_at || item.created_at)}
+                          </span>
+                        </span>
+                        <span className="absolute right-2 flex items-center rounded-lg bg-inherit opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onRename(item);
+                            }}
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            aria-label={`重命名${item.title}`}
+                            title="重命名"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onDelete(item);
+                            }}
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            aria-label={`删除${item.title}`}
+                            title="删除"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="px-4 pb-5">
-        <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-white/50 px-3 py-3 text-muted-foreground dark:bg-white/[0.035]">
+        <label className="flex items-center gap-2 rounded-xl border border-border/50 bg-white/55 px-3 py-2.5 text-muted-foreground transition focus-within:border-primary/30 focus-within:ring-2 focus-within:ring-primary/10 dark:bg-white/[0.035]">
           <Search className="h-4 w-4 flex-shrink-0" />
-          <p className="text-[11px] leading-4">
-            会话搜索与真实历史记录将在下一阶段接入
-          </p>
-        </div>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="搜索历史对话"
+            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+          />
+        </label>
       </SidebarFooter>
     </Sidebar>
   );

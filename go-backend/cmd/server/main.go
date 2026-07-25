@@ -12,6 +12,7 @@ import (
 
 	"github.com/starslittle/agent/go-backend/internal/auth"
 	"github.com/starslittle/agent/go-backend/internal/config"
+	"github.com/starslittle/agent/go-backend/internal/conversation"
 	"github.com/starslittle/agent/go-backend/internal/httpapi"
 	"github.com/starslittle/agent/go-backend/internal/platform/postgres"
 )
@@ -39,7 +40,12 @@ func main() {
 	}
 
 	authService := auth.NewService(store, cfg.SessionTTL)
-	api, err := httpapi.New(cfg, logger, authService)
+	conversationService := conversation.NewService(store)
+	if err := conversationService.Recover(startupCtx); err != nil {
+		logger.Error("recover_stale_generations", "error", err)
+		os.Exit(1)
+	}
+	api, err := httpapi.New(cfg, logger, authService, conversationService)
 	if err != nil {
 		logger.Error("initialize_server", "error", err)
 		os.Exit(1)

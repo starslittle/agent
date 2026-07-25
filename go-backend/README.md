@@ -4,6 +4,9 @@
 
 - 注册、登录、退出和会话恢复；
 - PostgreSQL 用户、身份凭据与服务端 Session；
+- PostgreSQL 用户级会话、消息与 Agent 运行记录；
+- 会话列表、搜索、重命名、软删除和消息分页；
+- 新会话流式请求的历史组装、检查点与完成/停止/失败落库；
 - HttpOnly Cookie、CSRF 校验、登录限流和登录审计；
 - `POST /query_stream` 请求校验与 Python SSE 字节透传；
 - `GET /healthz` 进程存活检查；
@@ -96,6 +99,24 @@ SSE 契约样例位于
 | `GET /api/v1/me` | 获取当前用户 | Session |
 | `POST /api/v1/auth/logout` | 撤销当前 Session | Session、CSRF、Origin |
 | `POST /query_stream` | 发起 Agent 流式请求 | Session、CSRF、Origin |
+
+## 会话 API
+
+| 方法与路径 | 作用 | 保护 |
+|---|---|---|
+| `POST /api/v1/conversations` | 创建空会话 | Session、CSRF、Origin |
+| `GET /api/v1/conversations` | 会话列表与关键词搜索 | Session |
+| `GET /api/v1/conversations/{id}` | 获取会话 | Session |
+| `PATCH /api/v1/conversations/{id}` | 重命名会话 | Session、CSRF、Origin |
+| `DELETE /api/v1/conversations/{id}` | 软删除会话 | Session、CSRF、Origin |
+| `GET /api/v1/conversations/{id}/messages` | 游标分页读取消息 | Session |
+| `POST /api/v1/conversations/{id}/messages/stream` | 持久化流式生成 | Session、CSRF、Origin |
+
+新流式入口由 Go 从 PostgreSQL 读取可信历史，再调用 Python Agent。浏览器只
+提交当前消息和 `client_message_id`，不再上传完整 `chat_history`。Go 会在
+首帧返回会话、消息与运行 ID，并在完成、断流或失败时保存最终状态。
+
+旧 `/query_stream` 继续保留为兼容入口。
 
 浏览器不保存 Session Token；它只保存由服务端设置的 HttpOnly Cookie。详细
 边界和扩展方式见根目录 `AUTHENTICATION.md`。

@@ -12,6 +12,7 @@ import (
 
 	"github.com/starslittle/agent/go-backend/internal/auth"
 	"github.com/starslittle/agent/go-backend/internal/config"
+	"github.com/starslittle/agent/go-backend/internal/conversation"
 )
 
 type Server struct {
@@ -22,6 +23,7 @@ func New(
 	cfg config.Config,
 	logger *slog.Logger,
 	authService *auth.Service,
+	conversationServices ...*conversation.Service,
 ) (*Server, error) {
 	if authService == nil {
 		return nil, errors.New("auth service is required")
@@ -66,6 +68,58 @@ func New(
 			),
 		),
 	)
+	if len(conversationServices) > 0 && conversationServices[0] != nil {
+		conversationAPI := newConversationHTTP(
+			conversationServices[0],
+			proxy,
+			logger,
+			cfg.MaxRequestBytes,
+		)
+		mux.Handle(
+			"POST /api/v1/conversations",
+			authAPI.protectMutation(
+				authAPI.requireSession(
+					authAPI.requireCSRF(http.HandlerFunc(conversationAPI.create)),
+				),
+			),
+		)
+		mux.Handle(
+			"GET /api/v1/conversations",
+			authAPI.requireSession(http.HandlerFunc(conversationAPI.list)),
+		)
+		mux.Handle(
+			"GET /api/v1/conversations/{conversationID}",
+			authAPI.requireSession(http.HandlerFunc(conversationAPI.get)),
+		)
+		mux.Handle(
+			"PATCH /api/v1/conversations/{conversationID}",
+			authAPI.protectMutation(
+				authAPI.requireSession(
+					authAPI.requireCSRF(http.HandlerFunc(conversationAPI.rename)),
+				),
+			),
+		)
+		mux.Handle(
+			"DELETE /api/v1/conversations/{conversationID}",
+			authAPI.protectMutation(
+				authAPI.requireSession(
+					authAPI.requireCSRF(http.HandlerFunc(conversationAPI.delete)),
+				),
+			),
+		)
+		mux.Handle(
+			"GET /api/v1/conversations/{conversationID}/messages",
+			authAPI.requireSession(http.HandlerFunc(conversationAPI.messages)),
+		)
+		mux.Handle(
+			"POST /api/v1/conversations/{conversationID}/messages/stream",
+			authAPI.protectMutation(
+				authAPI.requireSession(
+					authAPI.requireCSRF(http.HandlerFunc(conversationAPI.stream)),
+				),
+			),
+		)
+	}
 	if cfg.StaticDir != "" {
 		mux.Handle("/", spaHandler(cfg.StaticDir))
 	}
