@@ -18,7 +18,14 @@ const Index = () => {
           <header className="border-b flex-shrink-0">
             <div className="container py-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-primary to-accent shadow flex items-center justify-center text-on-gradient text-sm font-bold" aria-label="奇点AI Logo">奇</div>
+                <div
+                  className="grid h-9 w-9 place-items-center rounded-full bg-card border border-border shadow-sm"
+                  aria-label="奇点AI Logo"
+                >
+                  <span className="bg-gradient-to-tr from-primary to-accent bg-clip-text text-transparent text-sm font-bold">
+                    奇
+                  </span>
+                </div>
                 <span className="text-lg font-semibold">奇点AI</span>
               </div>
               <div className="flex items-center gap-3">
