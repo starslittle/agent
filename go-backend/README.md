@@ -122,6 +122,11 @@ SSE 契约样例位于
 提交当前消息和 `client_message_id`，不再上传完整 `chat_history`。Go 会在
 首帧返回会话、消息与运行 ID，并在完成、断流或失败时保存最终状态。
 
+V1 内部事件必须严格连续。Go 检测到序号缺口后不会处理跨序号事件，而是从
+最后一个已确认序号重新附着 Python Runtime 并回放。两次回放仍失败或回放在
+追平前结束时，Run 以 `agent_event_sequence_gap` 失败收口，且不会把部分答案
+保存成完整回答。
+
 旧 `/query_stream` 继续保留为兼容入口。
 
 ## Agent Run 可观测 API

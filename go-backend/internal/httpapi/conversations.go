@@ -31,6 +31,8 @@ type conversationHTTP struct {
 	reconcileTimeout time.Duration
 }
 
+const maxV1SequenceResumeAttempts = 2
+
 type createConversationRequest struct {
 	AgentName string `json:"agent_name"`
 }
@@ -649,7 +651,7 @@ func (h *conversationHTTP) streamV1(
 		writeJSONError(w, http.StatusBadGateway, "python_upstream_unavailable")
 		return
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -680,16 +682,18 @@ func (h *conversationHTTP) streamV1(
 	flusher.Flush()
 
 	var (
-		answer             strings.Builder
-		firstTokenAt       *time.Time
-		lastCheckpoint     = time.Now()
-		checkpointLength   int
-		lastSequence       int64
-		finished           bool
-		terminalStatus     = "failed"
-		terminalCode       = "python_stream_closed"
-		terminalDetail     string
-		checkpointInterval = 2 * time.Second
+		answer                 strings.Builder
+		firstTokenAt           *time.Time
+		lastCheckpoint         = time.Now()
+		checkpointLength       int
+		lastSequence           int64
+		finished               bool
+		terminalStatus         = "failed"
+		terminalCode           = "python_stream_closed"
+		terminalDetail         string
+		checkpointInterval     = 2 * time.Second
+		reconciliationTarget   int64
+		sequenceResumeAttempts int
 	)
 	defer func() {
 		if finished {
@@ -714,49 +718,137 @@ func (h *conversationHTTP) streamV1(
 	for {
 		event, nextErr := stream.Next()
 		if nextErr != nil && !errors.Is(nextErr, agent.ErrSequenceGap) {
-			if !agent.IsStreamDone(nextErr) {
-				terminalDetail = nextErr.Error()
-			}
 			if r.Context().Err() != nil {
 				terminalStatus = string(agent.StatusCancelled)
 				terminalCode = "client_cancelled"
+				return
+			}
+			if reconciliationTarget > 0 {
+				terminalStatus = "failed"
+				terminalCode = "agent_event_sequence_gap"
+				terminalDetail = fmt.Sprintf(
+					"replay ended before sequence %d",
+					reconciliationTarget,
+				)
+				h.abortV1SequenceGap(
+					r,
+					userID,
+					generation,
+					firstTokenAt,
+					terminalDetail,
+				)
+				finished = true
+				writeSSEJSON(w, map[string]any{
+					"type":    "error",
+					"message": "Agent 事件流不完整，请重试",
+				})
+				flusher.Flush()
+				return
+			}
+			if !agent.IsStreamDone(nextErr) {
+				terminalDetail = nextErr.Error()
 			}
 			return
 		}
 		if errors.Is(nextErr, agent.ErrSequenceGap) {
 			expected := lastSequence + 1
-			_ = h.service.MarkSequenceGap(
+			if markErr := h.service.MarkSequenceGap(
 				context.WithoutCancel(r.Context()),
 				userID,
 				generation.Run.ID,
 				expected,
 				event.Sequence,
-			)
-			reconcileCtx, cancel := context.WithTimeout(
-				context.WithoutCancel(r.Context()),
-				h.reconcileTimeout,
-			)
-			_, reconcileErr := h.v1Client.Get(
-				reconcileCtx,
-				userID,
-				requestID,
-				generation.Run.ExecutionID,
-			)
-			cancel()
-			if reconcileErr != nil {
+			); markErr != nil {
 				h.logger.Warn(
-					"agent_sequence_reconcile_failed",
-					"error", reconcileErr,
+					"agent_sequence_gap_mark_failed",
+					"error", markErr,
 					"run_id", generation.Run.ID,
 					"expected", expected,
 					"received", event.Sequence,
 				)
 			}
+			if event.Sequence > reconciliationTarget {
+				reconciliationTarget = event.Sequence
+			}
+			_ = stream.Close()
+
+			var (
+				resumedStream agent.EventStream
+				resumeErr     error
+			)
+			for sequenceResumeAttempts < maxV1SequenceResumeAttempts {
+				sequenceResumeAttempts++
+				resumedStream, resumeErr = h.v1Client.Resume(
+					r.Context(),
+					runRequest,
+					lastSequence,
+				)
+				if resumeErr == nil {
+					break
+				}
+				h.logger.Warn(
+					"agent_sequence_resume_failed",
+					"error", resumeErr,
+					"run_id", generation.Run.ID,
+					"attempt", sequenceResumeAttempts,
+					"starting_after", lastSequence,
+				)
+			}
+			if resumeErr != nil || resumedStream == nil {
+				terminalStatus = "failed"
+				terminalCode = "agent_event_sequence_gap"
+				terminalDetail = fmt.Sprintf(
+					"event sequence gap: expected %d, received %d",
+					expected,
+					event.Sequence,
+				)
+				h.abortV1SequenceGap(
+					r,
+					userID,
+					generation,
+					firstTokenAt,
+					terminalDetail,
+				)
+				finished = true
+				writeSSEJSON(w, map[string]any{
+					"type":    "error",
+					"message": "Agent 事件流不完整，请重试",
+				})
+				flusher.Flush()
+				return
+			}
+			stream = resumedStream
+			h.logger.Info(
+				"agent_sequence_resume_started",
+				"run_id", generation.Run.ID,
+				"attempt", sequenceResumeAttempts,
+				"starting_after", lastSequence,
+				"recovery_target", reconciliationTarget,
+			)
+			continue
 		}
 		if event.Sequence <= lastSequence {
 			continue
 		}
 		lastSequence = event.Sequence
+		if reconciliationTarget > 0 &&
+			lastSequence >= reconciliationTarget {
+			if reconcileErr := h.service.MarkSequenceReconciled(
+				context.WithoutCancel(r.Context()),
+				userID,
+				generation.Run.ID,
+				lastSequence,
+			); reconcileErr != nil {
+				h.logger.Warn(
+					"agent_sequence_reconcile_mark_failed",
+					"error", reconcileErr,
+					"run_id", generation.Run.ID,
+					"resolved_sequence", lastSequence,
+				)
+			}
+			reconciliationTarget = 0
+			sequenceResumeAttempts = 0
+		}
 		if agenttrace.ShouldPersist(event.Type) {
 			storedEvent := event
 			storedEvent.Data = agenttrace.Sanitize(event.Data)
@@ -902,6 +994,44 @@ func (h *conversationHTTP) streamV1(
 			}
 		}
 	}
+}
+
+func (h *conversationHTTP) abortV1SequenceGap(
+	r *http.Request,
+	userID string,
+	generation conversation.Generation,
+	firstTokenAt *time.Time,
+	detail string,
+) {
+	timeout := h.reconcileTimeout
+	if timeout <= 0 {
+		timeout = h.cancelTimeout
+	}
+	cancelCtx, cancel := context.WithTimeout(
+		context.WithoutCancel(r.Context()),
+		timeout,
+	)
+	defer cancel()
+	_ = h.service.RequestCancellation(
+		cancelCtx,
+		userID,
+		generation.Run.ID,
+	)
+	_, _ = h.v1Client.Cancel(
+		cancelCtx,
+		userID,
+		generation.Run.RequestID,
+		generation.Run.ExecutionID,
+	)
+	h.finishDetached(
+		userID,
+		generation,
+		"",
+		"failed",
+		"agent_event_sequence_gap",
+		detail,
+		firstTokenAt,
+	)
 }
 
 func (h *conversationHTTP) cancelV1Run(

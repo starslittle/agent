@@ -250,6 +250,46 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 	); !errors.Is(err, conversation.ErrNotFound) {
 		t.Fatalf("cross-user RunDetail() error = %v, want not found", err)
 	}
+	if err := service.MarkSequenceGap(
+		ctx,
+		userID,
+		generation.Run.ID,
+		7,
+		9,
+	); err != nil {
+		t.Fatalf("MarkSequenceGap() error = %v", err)
+	}
+	if err := service.MarkSequenceReconciled(
+		ctx,
+		userID,
+		generation.Run.ID,
+		9,
+	); err != nil {
+		t.Fatalf("MarkSequenceReconciled() error = %v", err)
+	}
+	var (
+		reconciliationRequired bool
+		resolvedSequence       int64
+	)
+	if err := store.pool.QueryRow(ctx, `
+		SELECT
+			(metadata->'reconciliation'->>'required')::boolean,
+			(metadata->'reconciliation'->>'resolved_sequence')::bigint
+		FROM app_core.agent_runs
+		WHERE id = $1
+	`, generation.Run.ID).Scan(
+		&reconciliationRequired,
+		&resolvedSequence,
+	); err != nil {
+		t.Fatalf("query reconciliation metadata: %v", err)
+	}
+	if reconciliationRequired || resolvedSequence != 9 {
+		t.Fatalf(
+			"unexpected reconciliation state: required=%v sequence=%d",
+			reconciliationRequired,
+			resolvedSequence,
+		)
+	}
 	if _, err := service.Start(ctx, conversation.StartGenerationParams{
 		UserID:          userID,
 		ConversationID:  item.ID,

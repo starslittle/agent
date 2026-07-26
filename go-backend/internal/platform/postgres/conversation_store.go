@@ -1151,8 +1151,8 @@ func (s *Store) MarkSequenceGap(
 			'{reconciliation}',
 			jsonb_build_object(
 				'required', true,
-				'expected_sequence', $3,
-				'received_sequence', $4,
+				'expected_sequence', $3::bigint,
+				'received_sequence', $4::bigint,
 				'detected_at', NOW()
 			),
 			true
@@ -1160,6 +1160,37 @@ func (s *Store) MarkSequenceGap(
 		FROM app_core.conversations c
 		WHERE r.id = $1 AND c.id = r.conversation_id AND c.user_id = $2
 	`, runID, userID, expected, received)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() == 0 {
+		return conversation.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) MarkSequenceReconciled(
+	ctx context.Context,
+	userID string,
+	runID string,
+	resolvedSequence int64,
+) error {
+	command, err := s.pool.Exec(ctx, `
+		UPDATE app_core.agent_runs r
+		SET metadata = jsonb_set(
+			metadata,
+			'{reconciliation}',
+			COALESCE(metadata->'reconciliation', '{}'::jsonb)
+				|| jsonb_build_object(
+					'required', false,
+					'resolved_sequence', $3::bigint,
+					'resolved_at', NOW()
+				),
+			true
+		)
+		FROM app_core.conversations c
+		WHERE r.id = $1 AND c.id = r.conversation_id AND c.user_id = $2
+	`, runID, userID, resolvedSequence)
 	if err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package agentclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -88,4 +89,161 @@ func TestV1ClientStreamsTypedEvents(t *testing.T) {
 	if _, err := stream.Next(); err != io.EOF {
 		t.Fatalf("final error = %v, want EOF", err)
 	}
+}
+
+func TestV1ClientResumeStartsAfterConfirmedSequence(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		if got := r.URL.Query().Get("starting_after"); got != "2" {
+			t.Fatalf("starting_after = %q, want 2", got)
+		}
+		var request agent.RunRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		writeAgentEvent(t, w, request, 3, "answer.delta", `{"text":"ok"}`)
+	}))
+	defer upstream.Close()
+
+	client, err := NewV1(
+		upstream.URL,
+		upstream.Client(),
+		"test-secret-that-is-at-least-32-characters",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := testRunRequest()
+	stream, err := client.Resume(context.Background(), run, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	event, err := stream.Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Sequence != 3 {
+		t.Fatalf("sequence = %d, want 3", event.Sequence)
+	}
+}
+
+func TestV1EventStreamGapDoesNotAdvanceConfirmedCursor(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		var request agent.RunRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		writeAgentEvent(t, w, request, 1, "run.started", `{}`)
+		writeAgentEvent(t, w, request, 3, "answer.delta", `{"text":"late"}`)
+		writeAgentEvent(t, w, request, 2, "answer.delta", `{"text":"replayed"}`)
+	}))
+	defer upstream.Close()
+
+	client, err := NewV1(
+		upstream.URL,
+		upstream.Client(),
+		"test-secret-that-is-at-least-32-characters",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := client.Start(context.Background(), testRunRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	if event, err := stream.Next(); err != nil || event.Sequence != 1 {
+		t.Fatalf("first event = %#v, error = %v", event, err)
+	}
+	if event, err := stream.Next(); !errors.Is(err, agent.ErrSequenceGap) ||
+		event.Sequence != 3 {
+		t.Fatalf("gap event = %#v, error = %v", event, err)
+	}
+	if event, err := stream.Next(); err != nil || event.Sequence != 2 {
+		t.Fatalf("replayed event = %#v, error = %v", event, err)
+	}
+}
+
+func TestV1EventStreamDetectsGapAtFirstEvent(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		var request agent.RunRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		writeAgentEvent(t, w, request, 2, "answer.delta", `{"text":"late"}`)
+	}))
+	defer upstream.Close()
+
+	client, err := NewV1(
+		upstream.URL,
+		upstream.Client(),
+		"test-secret-that-is-at-least-32-characters",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := client.Start(context.Background(), testRunRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	event, err := stream.Next()
+	if !errors.Is(err, agent.ErrSequenceGap) || event.Sequence != 2 {
+		t.Fatalf("first event = %#v, error = %v", event, err)
+	}
+}
+
+func testRunRequest() agent.RunRequest {
+	return agent.RunRequest{
+		ProtocolVersion: agent.ProtocolVersion,
+		ExecutionID:     "exec-replay",
+		RunID:           "run-replay",
+		RequestID:       "req-replay",
+		IdempotencyKey:  "exec-replay",
+		ConversationID:  "conv-replay",
+		AgentName:       "default_llm_agent",
+		Query:           "hello",
+		DeadlineMS:      1000,
+		UserID:          "user-replay",
+	}
+}
+
+func writeAgentEvent(
+	t *testing.T,
+	w http.ResponseWriter,
+	request agent.RunRequest,
+	sequence int64,
+	eventType string,
+	data string,
+) {
+	t.Helper()
+	event := agent.Event{
+		ProtocolVersion: agent.ProtocolVersion,
+		ExecutionID:     request.ExecutionID,
+		RunID:           request.RunID,
+		Sequence:        sequence,
+		Type:            eventType,
+		OccurredAt:      time.Now().UTC(),
+		Data:            json.RawMessage(data),
+	}
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = fmt.Fprintf(
+		w,
+		"event: %s\nid: %s\ndata: %s\n\n",
+		event.Type,
+		event.SSEID(),
+		encoded,
+	)
 }

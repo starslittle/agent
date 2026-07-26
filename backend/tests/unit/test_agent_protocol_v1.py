@@ -65,6 +65,14 @@ def test_registry_streams_terminal_run_and_reuses_idempotent_execution():
             "answer.delta",
             "run.completed",
         ]
+        replayed = [
+            event
+            async for event in registry.events(
+                execution,
+                starting_after=1,
+            )
+        ]
+        assert [event.sequence for event in replayed] == [2, 3]
         snapshot = await registry.snapshot(request.execution_id)
         assert snapshot.status == RunStatus.COMPLETED
         assert snapshot.last_sequence == 3
