@@ -56,6 +56,8 @@ def prompt_version_entry(
     }
     if rendered_prompt is not None:
         entry["rendered_sha256"] = text_sha256(rendered_prompt)
+        entry["rendered_characters"] = len(rendered_prompt)
+        entry["content_capture_level"] = "hashed"
     if iteration is not None:
         entry["iteration"] = iteration
     return entry

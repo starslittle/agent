@@ -1,11 +1,13 @@
 """生成节点 - 整合上下文生成最终答案"""
 
 import sys
+import time
 from typing import Dict, Any, AsyncIterator
 from graph.state import GraphState
 from langchain_community.chat_models import ChatTongyi
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from agent.prompts import append_prompt_version, load_prompt
+from app.observability import append_model_trace, build_model_trace
 from app.core.settings import settings
 
 
@@ -39,8 +41,9 @@ async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
 
     try:
         # 创建LLM（默认用于非流式回退）
+        model_name = settings.LLM_MODEL_NAME or "deepseek-v4-flash"
         llm = ChatTongyi(
-            model=settings.LLM_MODEL_NAME or "deepseek-v4-flash",
+            model=model_name,
             temperature=0.2,
             dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
         )
@@ -98,18 +101,21 @@ async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
             try:
                 # 显式开启 provider 流式；流式模式下禁止回退为一次性 ainvoke
                 llm_stream = ChatTongyi(
-                    model=settings.LLM_MODEL_NAME or "deepseek-v4-flash",
+                    model=model_name,
                     temperature=0.2,
                     dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
                     streaming=True,
                 )
                 stream_chain = prompt | llm_stream
+                model_started = time.perf_counter()
+                last_chunk = None
 
                 async for chunk in stream_chain.astream({
                     "query": query,
                     "context": full_context,
                     "chat_history": messages
                 }):
+                    last_chunk = chunk
                     piece = getattr(chunk, "content", None)
                     if piece is None:
                         piece = str(chunk)
@@ -122,9 +128,38 @@ async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
                         "final_answer": answer,
                         "output": answer,
                     }
+                state = append_model_trace(
+                    state,
+                    build_model_trace(
+                        stage="generate",
+                        model_name=model_name,
+                        started_at=model_started,
+                        response=last_chunk,
+                        iteration=int(state.get("plan_iteration", 0)),
+                    ),
+                )
+                yield {
+                    **state,
+                    "final_answer": "".join(answer_parts),
+                    "output": "".join(answer_parts),
+                }
                 return
             except Exception as stream_err:
                 print(f"[Generate] 流式 astream 失败（已禁用非流式回退）: {stream_err}")
+                state = append_model_trace(
+                    state,
+                    build_model_trace(
+                        stage="generate",
+                        model_name=model_name,
+                        started_at=locals().get(
+                            "model_started",
+                            time.perf_counter(),
+                        ),
+                        status="failed",
+                        error_code=type(stream_err).__name__,
+                        iteration=int(state.get("plan_iteration", 0)),
+                    ),
+                )
                 error_text = f"抱歉，流式生成失败：{stream_err}"
                 partial = ""
                 step = 12
@@ -140,6 +175,7 @@ async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
 
         # 非流式模式（仅用于同步调用路径）
         chain = prompt | llm
+        model_started = time.perf_counter()
         response = await chain.ainvoke({
             "query": query,
             "context": full_context,
@@ -147,6 +183,16 @@ async def generate_node(state: GraphState) -> AsyncIterator[Dict[str, Any]]:
         })
 
         answer = response.content if hasattr(response, 'content') else str(response)
+        state = append_model_trace(
+            state,
+            build_model_trace(
+                stage="generate",
+                model_name=model_name,
+                started_at=model_started,
+                response=response,
+                iteration=int(state.get("plan_iteration", 0)),
+            ),
+        )
 
         print(f"[Generate] 生成答案: {_safe_preview(answer)}...")
 

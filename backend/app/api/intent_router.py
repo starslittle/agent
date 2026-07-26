@@ -10,11 +10,13 @@
 基于判断结果，将请求路由到合适的 Agent。
 """
 
+import time
 from typing import Literal, Dict, Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.chat_models import ChatTongyi
 from langchain_core.output_parsers import StrOutputParser
 from agent.prompts import load_prompt, prompt_version_entry
+from app.observability import build_model_trace
 from app.core.settings import settings
 
 
@@ -240,10 +242,18 @@ def classify_and_route(user_input: str, mode_hint: str = None) -> Dict[str, Any]
         路由结果字典
     """
     router = get_intent_router()
+    classifier_started = time.perf_counter()
     intent, prompt_version = router.classify_intent_with_trace(user_input)
     routing_result = router.route_to_agent(intent, user_input, mode_hint)
     if prompt_version is not None:
         routing_result["_prompt_versions"] = [prompt_version]
+        routing_result["_model_traces"] = [
+            build_model_trace(
+                stage="intent_classification",
+                model_name=settings.LLM_MODEL_NAME or "deepseek-v4-flash",
+                started_at=classifier_started,
+            )
+        ]
     
     mode_info = f" (模式: {mode_hint})" if mode_hint else ""
     print(f"[INTENT_ROUTER] 输入: {user_input[:50]}{'...' if len(user_input) > 50 else ''}{mode_info}")

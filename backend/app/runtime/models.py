@@ -119,6 +119,13 @@ class AgentEvent(BaseModel):
     sequence: int = Field(ge=1)
     type: str = Field(min_length=1, max_length=64)
     occurred_at: datetime
+    trace_id: str = ""
+    span_id: str | None = None
+    parent_span_id: str | None = None
+    category: str = "runtime"
+    stage: str | None = None
+    event_schema_version: int = 1
+    content_capture_level: Literal["off", "hashed", "sampled"] = "hashed"
     data: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
@@ -131,13 +138,24 @@ class AgentEvent(BaseModel):
         event_type: str,
         data: dict[str, Any] | None = None,
     ) -> "AgentEvent":
+        event_data = data or {}
+        category = event_type.split(".", 1)[0]
         return cls(
             execution_id=execution_id,
             run_id=run_id,
             sequence=sequence,
             type=event_type,
             occurred_at=datetime.now(timezone.utc),
-            data=data or {},
+            trace_id=execution_id,
+            span_id=event_data.get("span_id"),
+            parent_span_id=event_data.get("parent_span_id"),
+            category=category,
+            stage=event_data.get("stage"),
+            content_capture_level=event_data.get(
+                "content_capture_level",
+                "hashed",
+            ),
+            data=event_data,
         )
 
     @property

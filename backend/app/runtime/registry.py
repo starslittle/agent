@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import AsyncIterator
 
+from app.observability import sanitize_event_data
+
 from .models import (
     AgentEvent,
     AgentRunRequest,
@@ -236,7 +238,7 @@ class ExecutionRegistry:
             run_id=execution.request.run_id,
             sequence=execution.last_sequence + 1,
             event_type=event_type,
-            data=data,
+            data=sanitize_event_data(data or {}),
         )
         async with execution.condition:
             execution.events.append(event)

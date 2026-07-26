@@ -112,6 +112,144 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 	if err != nil || inserted {
 		t.Fatalf("duplicate RecordEvent() inserted=%v error=%v", inserted, err)
 	}
+	observabilityEvents := []agent.Event{
+		{
+			ProtocolVersion: agent.ProtocolVersion,
+			ExecutionID:     generation.Run.ExecutionID,
+			RunID:           generation.Run.ID,
+			Sequence:        2,
+			Type:            "prompt.used",
+			OccurredAt:      time.Now().UTC(),
+			Stage:           "generate",
+			Data: json.RawMessage(`{
+				"stage":"generate",
+				"path":"agent/prompts/generate_default_system.txt",
+				"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"rendered_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+				"rendered_characters":128,
+				"content_capture_level":"hashed"
+			}`),
+		},
+		{
+			ProtocolVersion: agent.ProtocolVersion,
+			ExecutionID:     generation.Run.ExecutionID,
+			RunID:           generation.Run.ID,
+			Sequence:        3,
+			Type:            "model.completed",
+			OccurredAt:      time.Now().UTC(),
+			SpanID:          "model-span-1",
+			Category:        "model",
+			Stage:           "generate",
+			Data: json.RawMessage(`{
+				"span_id":"model-span-1",
+				"name":"model-test",
+				"stage":"generate",
+				"status":"completed",
+				"duration_ms":32,
+				"input_tokens":11,
+				"output_tokens":7,
+				"total_tokens":18
+			}`),
+		},
+		{
+			ProtocolVersion: agent.ProtocolVersion,
+			ExecutionID:     generation.Run.ExecutionID,
+			RunID:           generation.Run.ID,
+			Sequence:        4,
+			Type:            "tool.started",
+			OccurredAt:      time.Now().UTC(),
+			SpanID:          "tool-span-1",
+			Category:        "tool",
+			Stage:           "tool",
+			Data: json.RawMessage(`{
+				"span_id":"tool-span-1",
+				"name":"get_current_date",
+				"stage":"tool",
+				"status":"started",
+				"input":{"sha256":"safe"}
+			}`),
+		},
+		{
+			ProtocolVersion: agent.ProtocolVersion,
+			ExecutionID:     generation.Run.ExecutionID,
+			RunID:           generation.Run.ID,
+			Sequence:        5,
+			Type:            "tool.completed",
+			OccurredAt:      time.Now().UTC(),
+			SpanID:          "tool-span-1",
+			Category:        "tool",
+			Stage:           "tool",
+			Data: json.RawMessage(`{
+				"span_id":"tool-span-1",
+				"name":"get_current_date",
+				"stage":"tool",
+				"status":"completed",
+				"duration_ms":8,
+				"output":{"sha256":"safe"}
+			}`),
+		},
+		{
+			ProtocolVersion: agent.ProtocolVersion,
+			ExecutionID:     generation.Run.ExecutionID,
+			RunID:           generation.Run.ID,
+			Sequence:        6,
+			Type:            "usage",
+			OccurredAt:      time.Now().UTC(),
+			Category:        "usage",
+			Data: json.RawMessage(`{
+				"model_name":"model-test",
+				"agent_version":"agent-test",
+				"graph_version":"graph-test",
+				"prompt_bundle_hash":"bundle-test",
+				"input_tokens":11,
+				"output_tokens":7,
+				"total_tokens":18,
+				"total_ms":45
+			}`),
+		},
+	}
+	for _, event := range observabilityEvents {
+		inserted, err = service.RecordEvent(
+			ctx,
+			userID,
+			generation.Run.ID,
+			event,
+		)
+		if err != nil || !inserted {
+			t.Fatalf(
+				"observability RecordEvent(%s) inserted=%v error=%v",
+				event.Type,
+				inserted,
+				err,
+			)
+		}
+	}
+	runs, err := service.ListRuns(ctx, userID, "", 10, nil)
+	if err != nil {
+		t.Fatalf("ListRuns() error = %v", err)
+	}
+	if len(runs) != 1 ||
+		runs[0].TotalTokens != 18 ||
+		runs[0].ModelCallCount != 1 ||
+		runs[0].ToolCallCount != 1 {
+		t.Fatalf("unexpected run summaries: %#v", runs)
+	}
+	detail, err := service.RunDetail(ctx, userID, generation.Run.ID)
+	if err != nil {
+		t.Fatalf("RunDetail() error = %v", err)
+	}
+	if len(detail.Spans) != 2 ||
+		len(detail.Prompts) != 1 ||
+		len(detail.Events) != 6 {
+		t.Fatalf("unexpected run detail: %#v", detail)
+	}
+	if _, err := service.RunDetail(
+		ctx,
+		otherUserID,
+		generation.Run.ID,
+	); !errors.Is(err, conversation.ErrNotFound) {
+		t.Fatalf("cross-user RunDetail() error = %v, want not found", err)
+	}
 	if _, err := service.Start(ctx, conversation.StartGenerationParams{
 		UserID:          userID,
 		ConversationID:  item.ID,

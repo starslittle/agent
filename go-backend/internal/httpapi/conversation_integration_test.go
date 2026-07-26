@@ -180,6 +180,48 @@ func TestPersistentConversationStreamIntegration(t *testing.T) {
 		}
 	}
 
+	runsRequest := authenticatedRequest(
+		http.MethodGet,
+		"/api/v1/agent-runs?limit=10&status=completed",
+		"",
+		cookies[0],
+		"",
+	)
+	runsResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(runsResponse, runsRequest)
+	if runsResponse.Code != http.StatusOK {
+		t.Fatalf(
+			"runs status = %d, body = %s",
+			runsResponse.Code,
+			runsResponse.Body.String(),
+		)
+	}
+	var runsPayload struct {
+		Items []conversation.RunSummary `json:"items"`
+	}
+	if err := json.Unmarshal(runsResponse.Body.Bytes(), &runsPayload); err != nil {
+		t.Fatalf("decode runs response: %v", err)
+	}
+	if len(runsPayload.Items) != 2 {
+		t.Fatalf("completed run count = %d, want 2", len(runsPayload.Items))
+	}
+	detailRequest := authenticatedRequest(
+		http.MethodGet,
+		"/api/v1/agent-runs/"+runsPayload.Items[0].ID,
+		"",
+		cookies[0],
+		"",
+	)
+	detailResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(detailResponse, detailRequest)
+	if detailResponse.Code != http.StatusOK {
+		t.Fatalf(
+			"run detail status = %d, body = %s",
+			detailResponse.Code,
+			detailResponse.Body.String(),
+		)
+	}
+
 	liveGateway := httptest.NewServer(server.Handler())
 	cancelCtx, cancelStream := context.WithCancel(context.Background())
 	cancelBody, _ := json.Marshal(map[string]string{

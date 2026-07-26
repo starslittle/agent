@@ -126,6 +126,14 @@ func New(
 			authAPI.requireSession(http.HandlerFunc(conversationAPI.messages)),
 		)
 		mux.Handle(
+			"GET /api/v1/agent-runs",
+			authAPI.requireSession(http.HandlerFunc(conversationAPI.runs)),
+		)
+		mux.Handle(
+			"GET /api/v1/agent-runs/{runID}",
+			authAPI.requireSession(http.HandlerFunc(conversationAPI.runDetail)),
+		)
+		mux.Handle(
 			"POST /api/v1/conversations/{conversationID}/messages/stream",
 			authAPI.protectMutation(
 				authAPI.requireSession(

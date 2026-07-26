@@ -5,6 +5,8 @@
 - 注册、登录、退出和会话恢复；
 - PostgreSQL 用户、身份凭据与服务端 Session；
 - PostgreSQL 用户级会话、消息与 Agent 运行记录；
+- Agent Run 摘要、Prompt 版本、模型/工具 Span 和关键事件投影；
+- 关键事件二次脱敏，高频 `answer.delta` / `progress` 不写事件表；
 - 会话列表、搜索、重命名、软删除和消息分页；
 - 新会话流式请求的历史组装、检查点与完成/停止/失败落库；
 - HttpOnly Cookie、CSRF 校验、登录限流和登录审计；
@@ -121,6 +123,18 @@ SSE 契约样例位于
 首帧返回会话、消息与运行 ID，并在完成、断流或失败时保存最终状态。
 
 旧 `/query_stream` 继续保留为兼容入口。
+
+## Agent Run 可观测 API
+
+| 方法与路径 | 作用 | 保护 |
+|---|---|---|
+| `GET /api/v1/agent-runs` | 按状态分页查看当前用户的运行摘要 | Session |
+| `GET /api/v1/agent-runs/{run_id}` | 查看运行、Span、关键事件和 Prompt 版本 | Session |
+
+运行详情默认只记录排障所需的结构化元数据。Prompt 记录文件与渲染后哈希，
+工具记录输入输出指纹，模型记录耗时和 token 用量；不保存完整 Prompt、工具
+输入输出、Authorization、Cookie、密钥或模型隐式思维链。Python 在事件发布前
+脱敏，Go 在写 PostgreSQL 前再次脱敏。
 
 浏览器不保存 Session Token；它只保存由服务端设置的 HttpOnly Cookie。详细
 边界和扩展方式见根目录 `AUTHENTICATION.md`。

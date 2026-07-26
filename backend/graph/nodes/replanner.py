@@ -1,9 +1,11 @@
 """重计划节点 - 更新任务清单（Plan-and-Execute）"""
 
 from typing import Dict, Any, List
+import time
 
 from langchain_community.chat_models import ChatTongyi
 from agent.prompts import append_prompt_version, render_prompt
+from app.observability import append_model_trace, build_model_trace
 from graph.state import GraphState
 from app.core.settings import settings
 
@@ -44,8 +46,9 @@ async def replanner_node(state: GraphState) -> Dict[str, Any]:
         print("[Replanner] 已达最大轮次，强制结束。")
         return {**state, "plan_done": True}
 
+    model_name = settings.LLM_MODEL_NAME or "deepseek-v4-flash"
     llm = ChatTongyi(
-        model=settings.LLM_MODEL_NAME or "deepseek-v4-flash",
+        model=model_name,
         temperature=0.2,
         dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
     )
@@ -69,12 +72,34 @@ async def replanner_node(state: GraphState) -> Dict[str, Any]:
         iteration=iteration,
     )
 
+    model_started = time.perf_counter()
     try:
         res = await llm.ainvoke(prompt)
         text = getattr(res, "content", str(res)).strip()
+        state = append_model_trace(
+            state,
+            build_model_trace(
+                stage="replanner",
+                model_name=model_name,
+                started_at=model_started,
+                response=res,
+                iteration=iteration,
+            ),
+        )
     except Exception as e:
         print(f"[Replanner] 错误: {e}")
         text = "【保持原计划】"
+        state = append_model_trace(
+            state,
+            build_model_trace(
+                stage="replanner",
+                model_name=model_name,
+                started_at=model_started,
+                status="failed",
+                error_code=type(e).__name__,
+                iteration=iteration,
+            ),
+        )
 
     if "已完成" in text:
         print("[Replanner] 目标已达成，进入生成阶段。")

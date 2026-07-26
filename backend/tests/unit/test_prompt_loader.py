@@ -99,5 +99,7 @@ def test_append_prompt_version_preserves_history_and_hashes_rendered_text():
         "path": "agent/prompts/planner_research.txt",
         "sha256": prompt_sha256("agent/prompts/planner_research.txt"),
         "rendered_sha256": text_sha256(rendered),
+        "rendered_characters": len(rendered),
+        "content_capture_level": "hashed",
         "iteration": 2,
     }

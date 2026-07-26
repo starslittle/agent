@@ -48,6 +48,7 @@ async def router_node(state: GraphState) -> Dict[str, Any]:
             mode_hint,
         )
         prompt_versions = list(routing_result.pop("_prompt_versions", []))
+        model_traces = list(routing_result.pop("_model_traces", []))
 
         route = routing_result.get("agent_name", "default_llm_agent")
         # 映射到我们的路由类型
@@ -71,6 +72,10 @@ async def router_node(state: GraphState) -> Dict[str, Any]:
                 "prompt_versions": [
                     *state.get("metadata", {}).get("prompt_versions", []),
                     *prompt_versions,
+                ],
+                "model_traces": [
+                    *state.get("metadata", {}).get("model_traces", []),
+                    *model_traces,
                 ],
             }
         }

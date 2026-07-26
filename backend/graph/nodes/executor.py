@@ -8,6 +8,7 @@ import time
 from langchain_core.messages import HumanMessage
 from langchain_community.chat_models import ChatTongyi
 from agent.prompts import append_prompt_version, render_prompt
+from app.observability import append_model_trace, build_model_trace
 from graph.state import GraphState
 from app.core.settings import settings
 from agent.tools.registry import get_tool_registry
@@ -39,6 +40,51 @@ def _normalize_tool_name(raw: str) -> str:
             return name
     return "tavily_search"
 
+
+async def _invoke_traced(
+    llm,
+    prompt,
+    state: dict[str, Any],
+    *,
+    stage: str,
+    model_name: str,
+    iteration: int,
+):
+    started = time.perf_counter()
+    try:
+        response = await llm.ainvoke(prompt)
+    except Exception as exc:
+        return (
+            None,
+            append_model_trace(
+                state,
+                build_model_trace(
+                    stage=stage,
+                    model_name=model_name,
+                    started_at=started,
+                    status="failed",
+                    error_code=type(exc).__name__,
+                    iteration=iteration,
+                ),
+            ),
+            exc,
+        )
+    return (
+        response,
+        append_model_trace(
+            state,
+            build_model_trace(
+                stage=stage,
+                model_name=model_name,
+                started_at=started,
+                response=response,
+                iteration=iteration,
+            ),
+        ),
+        None,
+    )
+
+
 async def executor_node(state: GraphState) -> Dict[str, Any]:
     """
     执行节点：负责执行清单中的第一条任务。
@@ -56,8 +102,9 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
     print(f"\n[Executor] 正在处理子任务: {current_task}")
 
     # 使用 LLM 决定该任务最适合哪个工具
+    model_name = settings.LLM_MODEL_NAME or "deepseek-v4-flash"
     llm = ChatTongyi(
-        model=settings.LLM_MODEL_NAME or "deepseek-v4-flash",
+        model=model_name,
         temperature=0, # 决策需要高确定性
         dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
     )
@@ -97,10 +144,17 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
         iteration=iteration + 1,
     )
 
-    try:
-        res = await llm.ainvoke([HumanMessage(content=decision_prompt)])
+    res, state, decision_error = await _invoke_traced(
+        llm,
+        [HumanMessage(content=decision_prompt)],
+        state,
+        stage="executor_tool_selection",
+        model_name=model_name,
+        iteration=iteration + 1,
+    )
+    if decision_error is None and res is not None:
         tool_name = _normalize_tool_name(str(res.content))
-    except Exception:
+    else:
         tool_name = "tavily_search" # 默认兜底
 
     print(f"[Executor] 决策工具: {tool_name}")
@@ -111,6 +165,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
     execution_id = str(runtime_metadata.get("execution_id") or "legacy")
     cancel_event = runtime_metadata.get("cancel_event")
     shadow = bool(runtime_metadata.get("shadow", False))
+    tool_audit_events = list(runtime_metadata.get("tool_audit_events", []))
     # 执行选定的工具
     if tool_name == "get_lunar_chart":
         # 尝试从查询或任务中提取出生日期/时间/性别/出生地
@@ -128,7 +183,16 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
             iteration=iteration + 1,
         )
         try:
-            info_res = await llm.ainvoke([HumanMessage(content=extract_prompt)])
+            info_res, state, extract_error = await _invoke_traced(
+                llm,
+                [HumanMessage(content=extract_prompt)],
+                state,
+                stage="executor_birth_extract",
+                model_name=model_name,
+                iteration=iteration + 1,
+            )
+            if extract_error is not None or info_res is None:
+                raise extract_error or RuntimeError("birth extraction failed")
             raw = str(info_res.content).strip()
             data = {}
             try:
@@ -158,6 +222,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
                     execution_id=execution_id,
                     shadow=shadow,
                     cancel_event=cancel_event,
+                    audit_events=tool_audit_events,
                 )
         except Exception as e:
             note = f"执行排盘失败: {e}"
@@ -176,7 +241,16 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
             iteration=iteration + 1,
         )
         try:
-            info_res = await llm.ainvoke([HumanMessage(content=extract_prompt)])
+            info_res, state, extract_error = await _invoke_traced(
+                llm,
+                [HumanMessage(content=extract_prompt)],
+                state,
+                stage="executor_birth_extract",
+                model_name=model_name,
+                iteration=iteration + 1,
+            )
+            if extract_error is not None or info_res is None:
+                raise extract_error or RuntimeError("birth extraction failed")
             raw = str(info_res.content).strip()
             data = {}
             try:
@@ -208,6 +282,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
                     execution_id=execution_id,
                     shadow=shadow,
                     cancel_event=cancel_event,
+                    audit_events=tool_audit_events,
                 )
         except Exception as e:
             note = f"执行紫微排盘失败: {e}"
@@ -219,6 +294,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
                 execution_id=execution_id,
                 shadow=shadow,
                 cancel_event=cancel_event,
+                audit_events=tool_audit_events,
             )
         except Exception as e:
             note = f"日期查询失败: {e}"
@@ -230,6 +306,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
                 execution_id=execution_id,
                 shadow=shadow,
                 cancel_event=cancel_event,
+                audit_events=tool_audit_events,
             )
         except Exception as e:
             note = f"天气查询失败: {e}"
@@ -241,6 +318,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
                 execution_id=execution_id,
                 shadow=shadow,
                 cancel_event=cancel_event,
+                audit_events=tool_audit_events,
             )
         except Exception as e:
             note = f"搜索失败: {e}"
@@ -271,6 +349,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
             }
         )
     final_metadata["tool_traces"] = tool_traces
+    final_metadata["tool_audit_events"] = tool_audit_events
 
     return {
         **state,

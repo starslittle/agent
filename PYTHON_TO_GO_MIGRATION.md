@@ -1120,6 +1120,48 @@ query_stream
   └── go.persist_result
 ```
 
+### 13.4 当前落地：结构化执行记录 V1
+
+当前实现采用“Python 产生事实，Go 持久化并提供查询”的单一事实源模型：
+
+```text
+Python Graph 节点
+  -> prompt.used / model.* / tool.* / usage
+  -> Python 出境脱敏
+  -> Go 内网协议
+  -> Go 入库前二次脱敏
+  -> PostgreSQL Run / Span / Event / Prompt 投影
+```
+
+数据库职责：
+
+- `agent_runs`：一行运行摘要、版本、终态、token、调用次数和总耗时；
+- `agent_run_spans`：模型与工具调用的开始、结束、耗时和错误；
+- `agent_run_events`：状态、路由、Prompt、模型、工具、用量和终态等关键事件；
+- `prompt_artifacts`：Prompt 文件哈希与相对路径；
+- `agent_run_prompts`：某次运行实际使用的 Prompt、阶段和渲染后哈希。
+
+为控制存储量，`answer.delta` 和 `progress` 只用于实时 SSE，不进入
+`agent_run_events`。最终回答继续由消息表保存，运行详情不会复制一份回答正文。
+
+内容采集默认是 `hashed`：
+
+- Prompt 不保存正文；
+- 工具输入输出不保存原值，只保存 SHA-256、字节数和类型；
+- 模型只保存模型名、耗时与用量；
+- Python 与 Go 都对认证、Cookie、密码、密钥和连接串字段执行脱敏；
+- `input_tokens`、`output_tokens` 等用量字段不按认证令牌处理。
+
+公网查询由 Go 提供，并按登录用户隔离：
+
+```text
+GET /api/v1/agent-runs?status=failed&limit=30
+GET /api/v1/agent-runs/{run_id}
+```
+
+V1 暂不实现完整 OpenTelemetry Exporter；数据库中的 `trace_id`、`span_id` 与
+事件顺序已经固定，可在后续接入 OTLP 时保持现有公网 API 和数据库事实源不变。
+
 ---
 
 ## 14. 测试策略

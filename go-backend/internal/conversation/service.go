@@ -179,6 +179,47 @@ func (s *Service) Recover(ctx context.Context) error {
 	return s.store.InterruptStaleGenerations(ctx)
 }
 
+func (s *Service) ListRuns(
+	ctx context.Context,
+	userID string,
+	status string,
+	limit int,
+	before *time.Time,
+) ([]RunSummary, error) {
+	status = strings.TrimSpace(status)
+	if status != "" {
+		switch status {
+		case "queued", "running", "cancel_requested", "completed",
+			"cancelled", "failed", "timed_out":
+		default:
+			return nil, ErrInvalidInput
+		}
+	}
+	if limit <= 0 {
+		limit = 30
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return s.store.ListAgentRuns(ctx, RunListParams{
+		UserID: userID,
+		Status: status,
+		Limit:  limit,
+		Before: before,
+	})
+}
+
+func (s *Service) RunDetail(
+	ctx context.Context,
+	userID string,
+	runID string,
+) (RunDetail, error) {
+	if strings.TrimSpace(runID) == "" {
+		return RunDetail{}, ErrInvalidInput
+	}
+	return s.store.FindAgentRunDetail(ctx, userID, runID)
+}
+
 func newID() string {
 	value := make([]byte, 16)
 	if _, err := rand.Read(value); err != nil {

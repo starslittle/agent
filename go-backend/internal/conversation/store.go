@@ -29,4 +29,6 @@ type Store interface {
 	MarkSequenceGap(context.Context, string, string, int64, int64) error
 	RequestRunCancellation(context.Context, string, string) error
 	InterruptStaleGenerations(context.Context) error
+	ListAgentRuns(context.Context, RunListParams) ([]RunSummary, error)
+	FindAgentRunDetail(context.Context, string, string) (RunDetail, error)
 }

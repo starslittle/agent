@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/starslittle/agent/go-backend/internal/agent"
+	"github.com/starslittle/agent/go-backend/internal/agenttrace"
 	"github.com/starslittle/agent/go-backend/internal/auth"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
 )
@@ -356,9 +357,9 @@ func (s *Store) StartGeneration(
 		INSERT INTO app_core.agent_runs (
 			id, conversation_id, user_message_id, assistant_message_id,
 			request_id, execution_id, idempotency_key, agent_name,
-			protocol_version, status
+			protocol_version, status, trace_id
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, 'queued')
+		VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, 'queued', $6)
 	`,
 		runID,
 		params.ConversationID,
@@ -585,6 +586,18 @@ func (s *Store) RecordAgentEvent(
 	runID string,
 	event agent.Event,
 ) (bool, error) {
+	if event.TraceID == "" {
+		event.TraceID = event.ExecutionID
+	}
+	if event.Category == "" {
+		event.Category = strings.SplitN(event.Type, ".", 2)[0]
+	}
+	if event.EventSchemaVersion < 1 {
+		event.EventSchemaVersion = 1
+	}
+	event.ContentCapture = agenttrace.CaptureLevel(event.ContentCapture)
+	event.Data = agenttrace.Sanitize(event.Data)
+
 	transaction, err := s.pool.Begin(ctx)
 	if err != nil {
 		return false, err
@@ -593,9 +606,14 @@ func (s *Store) RecordAgentEvent(
 
 	command, err := transaction.Exec(ctx, `
 		INSERT INTO app_core.agent_run_events (
-			run_id, execution_id, sequence, event_type, occurred_at, data
+			run_id, execution_id, sequence, event_type, occurred_at,
+			trace_id, span_id, parent_span_id, category, stage,
+			event_schema_version, content_capture_level, data
 		)
-		SELECT r.id, $3, $4, $5, $6, $7
+		SELECT
+			r.id, $3, $4, $5, $6,
+			$7, NULLIF($8, ''), NULLIF($9, ''), $10, NULLIF($11, ''),
+			$12, $13, $14
 		FROM app_core.agent_runs r
 		JOIN app_core.conversations c ON c.id = r.conversation_id
 		WHERE r.id = $1
@@ -609,6 +627,13 @@ func (s *Store) RecordAgentEvent(
 		event.Sequence,
 		event.Type,
 		event.OccurredAt,
+		event.TraceID,
+		event.SpanID,
+		event.ParentSpanID,
+		event.Category,
+		event.Stage,
+		event.EventSchemaVersion,
+		event.ContentCapture,
 		event.Data,
 	)
 	if err != nil {
@@ -673,13 +698,443 @@ func (s *Store) RecordAgentEvent(
 				WHEN $3 IN ('completed', 'cancelled', 'failed', 'timed_out')
 					THEN COALESCE(completed_at, $5)
 				ELSE completed_at
-			END
+			END,
+			trace_id = COALESCE(NULLIF($6, ''), trace_id)
 		WHERE id = $1
-	`, runID, event.Sequence, status, event.Data, event.OccurredAt)
+	`,
+		runID,
+		event.Sequence,
+		status,
+		event.Data,
+		event.OccurredAt,
+		event.TraceID,
+	)
 	if err != nil {
 		return false, err
 	}
+	if err := projectAgentEvent(ctx, transaction, runID, event); err != nil {
+		return false, err
+	}
 	return true, transaction.Commit(ctx)
+}
+
+func scanRunSummary(row rowScanner) (conversation.RunSummary, error) {
+	var item conversation.RunSummary
+	err := row.Scan(
+		&item.ID,
+		&item.ExecutionID,
+		&item.TraceID,
+		&item.ConversationID,
+		&item.AgentName,
+		&item.ActualRoute,
+		&item.ModelName,
+		&item.Status,
+		&item.ProtocolVersion,
+		&item.ServiceVersion,
+		&item.AgentVersion,
+		&item.GraphVersion,
+		&item.PromptBundleHash,
+		&item.InputTokens,
+		&item.OutputTokens,
+		&item.CachedTokens,
+		&item.TotalTokens,
+		&item.ModelCallCount,
+		&item.ToolCallCount,
+		&item.RetrievalCount,
+		&item.TotalDurationMS,
+		&item.ErrorCode,
+		&item.ErrorDetail,
+		&item.FirstTokenAt,
+		&item.StartedAt,
+		&item.CompletedAt,
+		&item.CreatedAt,
+	)
+	return item, err
+}
+
+const runSummaryColumns = `
+	r.id::text,
+	r.execution_id,
+	r.trace_id,
+	r.conversation_id::text,
+	r.agent_name,
+	r.actual_route,
+	r.model_name,
+	r.status,
+	r.protocol_version,
+	r.service_version,
+	r.agent_version,
+	r.graph_version,
+	r.prompt_bundle_hash,
+	r.input_tokens,
+	r.output_tokens,
+	r.cached_tokens,
+	r.total_tokens,
+	r.model_call_count,
+	r.tool_call_count,
+	r.retrieval_count,
+	r.total_duration_ms,
+	r.error_code,
+	r.error_detail,
+	r.first_token_at,
+	r.started_at,
+	r.completed_at,
+	r.started_at
+`
+
+func (s *Store) ListAgentRuns(
+	ctx context.Context,
+	params conversation.RunListParams,
+) ([]conversation.RunSummary, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT `+runSummaryColumns+`
+		FROM app_core.agent_runs r
+		JOIN app_core.conversations c ON c.id = r.conversation_id
+		WHERE c.user_id = $1
+			AND ($2 = '' OR r.status = $2)
+			AND ($3::timestamptz IS NULL OR r.started_at < $3)
+		ORDER BY r.started_at DESC, r.id DESC
+		LIMIT $4
+	`, params.UserID, params.Status, params.Before, params.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]conversation.RunSummary, 0, params.Limit)
+	for rows.Next() {
+		item, scanErr := scanRunSummary(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Store) FindAgentRunDetail(
+	ctx context.Context,
+	userID string,
+	runID string,
+) (conversation.RunDetail, error) {
+	detail := conversation.RunDetail{
+		Spans:   []conversation.RunSpan{},
+		Events:  []conversation.RunEvent{},
+		Prompts: []conversation.RunPrompt{},
+	}
+	item, err := scanRunSummary(s.pool.QueryRow(ctx, `
+		SELECT `+runSummaryColumns+`
+		FROM app_core.agent_runs r
+		JOIN app_core.conversations c ON c.id = r.conversation_id
+		WHERE r.id = $1 AND c.user_id = $2
+	`, runID, userID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return detail, conversation.ErrNotFound
+	}
+	if err != nil {
+		return detail, err
+	}
+	detail.Run = item
+
+	spanRows, err := s.pool.Query(ctx, `
+		SELECT
+			span_id, parent_span_id, span_type, name, stage, status,
+			started_at, completed_at, duration_ms,
+			input_tokens, output_tokens, cached_tokens, total_tokens,
+			error_code, attributes
+		FROM app_core.agent_run_spans
+		WHERE run_id = $1
+		ORDER BY started_at, id
+	`, runID)
+	if err != nil {
+		return detail, err
+	}
+	defer spanRows.Close()
+	for spanRows.Next() {
+		var span conversation.RunSpan
+		if err := spanRows.Scan(
+			&span.SpanID,
+			&span.ParentSpanID,
+			&span.Type,
+			&span.Name,
+			&span.Stage,
+			&span.Status,
+			&span.StartedAt,
+			&span.CompletedAt,
+			&span.DurationMS,
+			&span.InputTokens,
+			&span.OutputTokens,
+			&span.CachedTokens,
+			&span.TotalTokens,
+			&span.ErrorCode,
+			&span.Attributes,
+		); err != nil {
+			return detail, err
+		}
+		detail.Spans = append(detail.Spans, span)
+	}
+	if err := spanRows.Err(); err != nil {
+		return detail, err
+	}
+
+	eventRows, err := s.pool.Query(ctx, `
+		SELECT
+			sequence, event_type, occurred_at, trace_id, span_id,
+			parent_span_id, category, stage, event_schema_version,
+			content_capture_level, data
+		FROM app_core.agent_run_events
+		WHERE run_id = $1
+		ORDER BY sequence
+	`, runID)
+	if err != nil {
+		return detail, err
+	}
+	defer eventRows.Close()
+	for eventRows.Next() {
+		var event conversation.RunEvent
+		if err := eventRows.Scan(
+			&event.Sequence,
+			&event.Type,
+			&event.OccurredAt,
+			&event.TraceID,
+			&event.SpanID,
+			&event.ParentSpanID,
+			&event.Category,
+			&event.Stage,
+			&event.EventSchemaVersion,
+			&event.ContentCaptureLevel,
+			&event.Data,
+		); err != nil {
+			return detail, err
+		}
+		detail.Events = append(detail.Events, event)
+	}
+	if err := eventRows.Err(); err != nil {
+		return detail, err
+	}
+
+	promptRows, err := s.pool.Query(ctx, `
+		SELECT
+			p.sequence, p.stage, a.relative_path, p.prompt_hash,
+			p.rendered_hash, p.rendered_characters, p.iteration
+		FROM app_core.agent_run_prompts p
+		JOIN app_core.prompt_artifacts a
+			ON a.prompt_hash = p.prompt_hash
+		WHERE p.run_id = $1
+		ORDER BY p.sequence
+	`, runID)
+	if err != nil {
+		return detail, err
+	}
+	defer promptRows.Close()
+	for promptRows.Next() {
+		var prompt conversation.RunPrompt
+		if err := promptRows.Scan(
+			&prompt.Sequence,
+			&prompt.Stage,
+			&prompt.Path,
+			&prompt.PromptHash,
+			&prompt.RenderedHash,
+			&prompt.RenderedCharacters,
+			&prompt.Iteration,
+		); err != nil {
+			return detail, err
+		}
+		detail.Prompts = append(detail.Prompts, prompt)
+	}
+	if err := promptRows.Err(); err != nil {
+		return detail, err
+	}
+	return detail, nil
+}
+
+func projectAgentEvent(
+	ctx context.Context,
+	transaction pgx.Tx,
+	runID string,
+	event agent.Event,
+) error {
+	switch event.Type {
+	case "prompt.used":
+		if _, err := transaction.Exec(ctx, `
+			INSERT INTO app_core.prompt_artifacts (
+				prompt_hash, relative_path, metadata
+			)
+			SELECT
+				$1::jsonb->>'sha256',
+				COALESCE(NULLIF($1::jsonb->>'path', ''), 'unknown'),
+				jsonb_build_object(
+					'content_capture_level',
+					COALESCE($1::jsonb->>'content_capture_level', 'hashed')
+				)
+			WHERE COALESCE($1::jsonb->>'sha256', '') <> ''
+			ON CONFLICT (prompt_hash) DO UPDATE
+			SET relative_path = EXCLUDED.relative_path
+		`, event.Data); err != nil {
+			return err
+		}
+		_, err := transaction.Exec(ctx, `
+			INSERT INTO app_core.agent_run_prompts (
+				run_id, sequence, prompt_hash, stage,
+				rendered_hash, rendered_characters, iteration
+			)
+			SELECT
+				$1,
+				$2,
+				$3::jsonb->>'sha256',
+				COALESCE(NULLIF($3::jsonb->>'stage', ''), 'unknown'),
+				NULLIF($3::jsonb->>'rendered_sha256', ''),
+				NULLIF($3::jsonb->>'rendered_characters', '')::integer,
+				NULLIF($3::jsonb->>'iteration', '')::integer
+			WHERE COALESCE($3::jsonb->>'sha256', '') <> ''
+			ON CONFLICT (run_id, sequence) DO NOTHING
+		`, runID, event.Sequence, event.Data)
+		return err
+	case "model.started", "model.completed", "model.failed", "model.cancelled",
+		"tool.started", "tool.completed", "tool.failed", "tool.cancelled":
+		if event.SpanID == "" {
+			return nil
+		}
+		status := strings.TrimPrefix(
+			event.Type,
+			strings.SplitN(event.Type, ".", 2)[0]+".",
+		)
+		spanType := strings.SplitN(event.Type, ".", 2)[0]
+		_, err := transaction.Exec(ctx, `
+			INSERT INTO app_core.agent_run_spans (
+				run_id, execution_id, trace_id, span_id, parent_span_id,
+				span_type, name, stage, status, started_at, completed_at,
+				duration_ms, input_tokens, output_tokens, cached_tokens,
+				total_tokens, error_code, attributes
+			)
+			VALUES (
+				$1, $2, $3, $4, NULLIF($5, ''),
+				$6,
+				COALESCE(NULLIF($7::jsonb->>'name', ''), 'unknown'),
+				NULLIF(COALESCE($8, $7::jsonb->>'stage'), ''),
+				$9,
+				CASE
+					WHEN $9 = 'started' THEN $10::timestamptz
+					ELSE $10::timestamptz - (
+						COALESCE(NULLIF($7::jsonb->>'duration_ms', '')::bigint, 0)
+						* INTERVAL '1 millisecond'
+					)
+				END,
+				CASE
+					WHEN $9 = 'started' THEN NULL
+					ELSE $10::timestamptz
+				END,
+				NULLIF($7::jsonb->>'duration_ms', '')::bigint,
+				COALESCE(NULLIF($7::jsonb->>'input_tokens', '')::bigint, 0),
+				COALESCE(NULLIF($7::jsonb->>'output_tokens', '')::bigint, 0),
+				COALESCE(NULLIF($7::jsonb->>'cached_tokens', '')::bigint, 0),
+				COALESCE(NULLIF($7::jsonb->>'total_tokens', '')::bigint, 0),
+				NULLIF($7::jsonb->>'error_code', ''),
+				$7
+			)
+			ON CONFLICT (execution_id, span_id) DO UPDATE
+			SET status = EXCLUDED.status,
+				completed_at = COALESCE(
+					EXCLUDED.completed_at,
+					app_core.agent_run_spans.completed_at
+				),
+				duration_ms = COALESCE(
+					EXCLUDED.duration_ms,
+					app_core.agent_run_spans.duration_ms
+				),
+				input_tokens = EXCLUDED.input_tokens,
+				output_tokens = EXCLUDED.output_tokens,
+				cached_tokens = EXCLUDED.cached_tokens,
+				total_tokens = EXCLUDED.total_tokens,
+				error_code = COALESCE(
+					EXCLUDED.error_code,
+					app_core.agent_run_spans.error_code
+				),
+				attributes = app_core.agent_run_spans.attributes || EXCLUDED.attributes
+		`,
+			runID,
+			event.ExecutionID,
+			event.TraceID,
+			event.SpanID,
+			event.ParentSpanID,
+			spanType,
+			event.Data,
+			event.Stage,
+			status,
+			event.OccurredAt,
+		)
+		if err != nil {
+			return err
+		}
+		if event.Type == "tool.started" {
+			_, err = transaction.Exec(ctx, `
+				UPDATE app_core.agent_runs
+				SET tool_call_count = tool_call_count + 1
+				WHERE id = $1
+			`, runID)
+			return err
+		}
+		if spanType == "model" && status != "started" {
+			_, err = transaction.Exec(ctx, `
+				UPDATE app_core.agent_runs
+				SET model_call_count = model_call_count + 1,
+					input_tokens = input_tokens
+						+ COALESCE(NULLIF($2::jsonb->>'input_tokens', '')::bigint, 0),
+					output_tokens = output_tokens
+						+ COALESCE(NULLIF($2::jsonb->>'output_tokens', '')::bigint, 0),
+					cached_tokens = cached_tokens
+						+ COALESCE(NULLIF($2::jsonb->>'cached_tokens', '')::bigint, 0),
+					total_tokens = total_tokens
+						+ COALESCE(NULLIF($2::jsonb->>'total_tokens', '')::bigint, 0)
+				WHERE id = $1
+			`, runID, event.Data)
+		}
+		return err
+	case "usage":
+		_, err := transaction.Exec(ctx, `
+			UPDATE app_core.agent_runs
+			SET agent_version = COALESCE(
+					NULLIF($2::jsonb->>'agent_version', ''),
+					agent_version
+				),
+				graph_version = COALESCE(
+					NULLIF($2::jsonb->>'graph_version', ''),
+					graph_version
+				),
+				prompt_bundle_hash = COALESCE(
+					NULLIF($2::jsonb->>'prompt_bundle_hash', ''),
+					prompt_bundle_hash
+				),
+				model_name = COALESCE(
+					NULLIF($2::jsonb->>'model_name', ''),
+					model_name
+				),
+				input_tokens = GREATEST(
+					input_tokens,
+					COALESCE(NULLIF($2::jsonb->>'input_tokens', '')::bigint, 0)
+				),
+				output_tokens = GREATEST(
+					output_tokens,
+					COALESCE(NULLIF($2::jsonb->>'output_tokens', '')::bigint, 0)
+				),
+				cached_tokens = GREATEST(
+					cached_tokens,
+					COALESCE(NULLIF($2::jsonb->>'cached_tokens', '')::bigint, 0)
+				),
+				total_tokens = GREATEST(
+					total_tokens,
+					COALESCE(NULLIF($2::jsonb->>'total_tokens', '')::bigint, 0)
+				),
+				total_duration_ms = COALESCE(
+					NULLIF($2::jsonb->>'total_ms', '')::bigint,
+					total_duration_ms
+				)
+			WHERE id = $1
+		`, runID, event.Data)
+		return err
+	default:
+		return nil
+	}
 }
 
 func (s *Store) MarkSequenceGap(

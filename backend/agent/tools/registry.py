@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+import time
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 from agent.worker import heavy_worker_manager
+from app.observability import new_span_id, payload_fingerprint
 
 
 Effect = Literal["read", "write", "destructive"]
@@ -66,6 +68,7 @@ class ToolRegistry:
         execution_id: str,
         shadow: bool = False,
         cancel_event: asyncio.Event | None = None,
+        audit_events: list[dict[str, Any]] | None = None,
     ) -> str:
         definition = self.get(name)
         if shadow and not (
@@ -76,22 +79,74 @@ class ToolRegistry:
         if len(encoded) > definition.max_input_bytes:
             raise ValueError(f"tool {name} input exceeds limit")
 
-        if definition.concurrency_class == "process":
-            result = await heavy_worker_manager.run(
-                execution_id=execution_id,
-                tool_name=name,
-                arguments=arguments,
-                timeout_seconds=definition.timeout_seconds,
-                cancel_event=cancel_event,
+        span_id = new_span_id()
+        started_at = time.perf_counter()
+        audit_base = {
+            "span_id": span_id,
+            "span_type": "tool",
+            "stage": "tool",
+            "name": name,
+            "effect": definition.effect,
+            "idempotent": definition.idempotent,
+            "concurrency_class": definition.concurrency_class,
+            "content_capture_level": "hashed",
+            "input": payload_fingerprint(arguments),
+        }
+        if audit_events is not None:
+            audit_events.append({**audit_base, "status": "started"})
+        try:
+            if definition.concurrency_class == "process":
+                result = await heavy_worker_manager.run(
+                    execution_id=execution_id,
+                    tool_name=name,
+                    arguments=arguments,
+                    timeout_seconds=definition.timeout_seconds,
+                    cancel_event=cancel_event,
+                )
+            else:
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(invoke_tool_sync, name, arguments),
+                    timeout=definition.timeout_seconds,
+                )
+            text = str(result)
+            if len(text.encode("utf-8")) > definition.max_output_bytes:
+                raise ValueError(f"tool {name} output exceeds limit")
+        except asyncio.CancelledError:
+            if audit_events is not None:
+                audit_events.append(
+                    {
+                        **audit_base,
+                        "status": "cancelled",
+                        "duration_ms": int(
+                            (time.perf_counter() - started_at) * 1000
+                        ),
+                    }
+                )
+            raise
+        except Exception as exc:
+            if audit_events is not None:
+                audit_events.append(
+                    {
+                        **audit_base,
+                        "status": "failed",
+                        "duration_ms": int(
+                            (time.perf_counter() - started_at) * 1000
+                        ),
+                        "error_code": type(exc).__name__[:128],
+                    }
+                )
+            raise
+        if audit_events is not None:
+            audit_events.append(
+                {
+                    **audit_base,
+                    "status": "completed",
+                    "duration_ms": int(
+                        (time.perf_counter() - started_at) * 1000
+                    ),
+                    "output": payload_fingerprint(text),
+                }
             )
-        else:
-            result = await asyncio.wait_for(
-                asyncio.to_thread(invoke_tool_sync, name, arguments),
-                timeout=definition.timeout_seconds,
-            )
-        text = str(result)
-        if len(text.encode("utf-8")) > definition.max_output_bytes:
-            raise ValueError(f"tool {name} output exceeds limit")
         return text
 
     async def cancel_execution(self, execution_id: str) -> None:

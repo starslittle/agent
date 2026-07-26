@@ -28,13 +28,23 @@ def test_registry_exposes_resource_and_side_effect_metadata():
 
 def test_registry_executes_date_without_loading_heavy_rag_modules():
     async def scenario():
+        audit_events = []
         result = await get_tool_registry().execute(
             "get_current_date",
             {},
             execution_id="exec-test",
             shadow=True,
+            audit_events=audit_events,
         )
         assert "年" in result and "月" in result and "日" in result
+        assert [event["status"] for event in audit_events] == [
+            "started",
+            "completed",
+        ]
+        assert audit_events[0]["span_id"] == audit_events[1]["span_id"]
+        assert audit_events[0]["input"]["sha256"]
+        assert "result" not in audit_events[1]
+        assert audit_events[1]["output"]["sha256"]
 
     asyncio.run(scenario())
 

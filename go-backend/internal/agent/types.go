@@ -90,13 +90,20 @@ func (r RunRequest) Validate() error {
 }
 
 type Event struct {
-	ProtocolVersion int             `json:"protocol_version"`
-	ExecutionID     string          `json:"execution_id"`
-	RunID           string          `json:"run_id"`
-	Sequence        int64           `json:"sequence"`
-	Type            string          `json:"type"`
-	OccurredAt      time.Time       `json:"occurred_at"`
-	Data            json.RawMessage `json:"data"`
+	ProtocolVersion    int             `json:"protocol_version"`
+	ExecutionID        string          `json:"execution_id"`
+	RunID              string          `json:"run_id"`
+	Sequence           int64           `json:"sequence"`
+	Type               string          `json:"type"`
+	OccurredAt         time.Time       `json:"occurred_at"`
+	TraceID            string          `json:"trace_id,omitempty"`
+	SpanID             string          `json:"span_id,omitempty"`
+	ParentSpanID       string          `json:"parent_span_id,omitempty"`
+	Category           string          `json:"category,omitempty"`
+	Stage              string          `json:"stage,omitempty"`
+	EventSchemaVersion int             `json:"event_schema_version,omitempty"`
+	ContentCapture     string          `json:"content_capture_level,omitempty"`
+	Data               json.RawMessage `json:"data"`
 }
 
 func (e Event) Validate(expectedExecutionID string) error {

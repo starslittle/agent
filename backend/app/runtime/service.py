@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 from typing import AsyncIterator
 
@@ -44,6 +45,11 @@ class GraphAgentRuntime:
         last_route: str | None = None
         last_plan_current: str | None = None
         answer_deltas = 0
+        seen_prompts = 0
+        seen_models = 0
+        seen_tool_audit = 0
+        seen_legacy_tools: set[str] = set()
+        last_state: dict = {}
         try:
             async for state in stream_graph(
                 query=request.query,
@@ -59,6 +65,7 @@ class GraphAgentRuntime:
                     raise asyncio.CancelledError
                 if not isinstance(state, dict):
                     continue
+                last_state = state
 
                 route = str(state.get("route") or "default")
                 if route != last_route:
@@ -76,18 +83,39 @@ class GraphAgentRuntime:
                         "message": last_plan_current,
                     }
 
-                tool_traces = (
-                    state.get("metadata", {}).get("tool_traces", [])
+                metadata = (
+                    state.get("metadata", {})
                     if isinstance(state.get("metadata"), dict)
-                    else []
+                    else {}
                 )
-                for trace in tool_traces:
-                    trace_key = f"{trace.get('iteration')}:{trace.get('name')}"
-                    seen_key = f"_emitted_{trace_key}"
-                    if state.get("metadata", {}).get(seen_key):
-                        continue
-                    state["metadata"][seen_key] = True
-                    yield "tool.completed", trace
+                prompt_versions = list(metadata.get("prompt_versions") or [])
+                for prompt in prompt_versions[seen_prompts:]:
+                    yield "prompt.used", prompt
+                seen_prompts = len(prompt_versions)
+
+                model_traces = list(metadata.get("model_traces") or [])
+                for trace in model_traces[seen_models:]:
+                    status = str(trace.get("status") or "completed")
+                    yield f"model.{status}", trace
+                seen_models = len(model_traces)
+
+                tool_audit_events = list(
+                    metadata.get("tool_audit_events") or []
+                )
+                for trace in tool_audit_events[seen_tool_audit:]:
+                    status = str(trace.get("status") or "completed")
+                    yield f"tool.{status}", trace
+                seen_tool_audit = len(tool_audit_events)
+
+                if not tool_audit_events:
+                    for trace in list(metadata.get("tool_traces") or []):
+                        trace_key = (
+                            f"{trace.get('iteration')}:{trace.get('name')}"
+                        )
+                        if trace_key in seen_legacy_tools:
+                            continue
+                        seen_legacy_tools.add(trace_key)
+                        yield "tool.completed", trace
 
                 current_output = state.get("final_answer") or state.get("output", "")
                 if current_output and current_output.startswith(accumulated_output):
@@ -104,12 +132,43 @@ class GraphAgentRuntime:
                 if first_delta_at is not None
                 else None
             )
+            final_metadata = (
+                last_state.get("metadata", {})
+                if isinstance(last_state.get("metadata"), dict)
+                else {}
+            )
+            model_traces = list(final_metadata.get("model_traces") or [])
+            token_totals = {
+                name: sum(int(trace.get(name) or 0) for trace in model_traces)
+                for name in (
+                    "input_tokens",
+                    "output_tokens",
+                    "cached_tokens",
+                    "total_tokens",
+                )
+            }
+            prompt_hashes = [
+                str(item.get("sha256") or "")
+                for item in final_metadata.get("prompt_versions", [])
+                if item.get("sha256")
+            ]
+            prompt_bundle_hash = (
+                hashlib.sha256(
+                    "\n".join(prompt_hashes).encode("utf-8")
+                ).hexdigest()
+                if prompt_hashes
+                else ""
+            )
             yield "usage", {
                 "model_name": self.model_name,
+                "agent_version": settings.AGENT_SERVICE_VERSION,
+                "graph_version": "stream_graph-v1",
+                "prompt_bundle_hash": prompt_bundle_hash,
                 "first_token_ms": first_token_ms,
                 "total_ms": elapsed_ms,
                 "answer_deltas": answer_deltas,
                 "output_characters": len(accumulated_output),
+                **token_totals,
             }
         finally:
             self._active_tasks.pop(request.execution_id, None)

@@ -65,6 +65,13 @@ async def test_router_moves_intent_prompt_trace_into_state_metadata(monkeypatch)
             "reason": "test",
             "intent": "chat",
             "_prompt_versions": [prompt_version],
+            "_model_traces": [
+                {
+                    "span_id": "router-model",
+                    "status": "completed",
+                    "stage": "intent_classification",
+                }
+            ],
         },
     )
 
@@ -79,7 +86,9 @@ async def test_router_moves_intent_prompt_trace_into_state_metadata(monkeypatch)
 
     assert result["route"] == "default"
     assert result["metadata"]["prompt_versions"] == [prompt_version]
+    assert result["metadata"]["model_traces"][0]["span_id"] == "router-model"
     assert "_prompt_versions" not in result["metadata"]["route"]
+    assert "_model_traces" not in result["metadata"]["route"]
 
 
 class _FakeExecutorLLM:

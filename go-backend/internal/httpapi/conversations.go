@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/starslittle/agent/go-backend/internal/agent"
+	"github.com/starslittle/agent/go-backend/internal/agenttrace"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
 )
 
@@ -238,6 +239,69 @@ func (h *conversationHTTP) messages(w http.ResponseWriter, r *http.Request) {
 		"items":       items,
 		"next_before": nextBefore,
 	})
+}
+
+func (h *conversationHTTP) runs(w http.ResponseWriter, r *http.Request) {
+	session, ok := sessionFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required")
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	effectiveLimit := limit
+	if effectiveLimit <= 0 {
+		effectiveLimit = 30
+	}
+	if effectiveLimit > 100 {
+		effectiveLimit = 100
+	}
+	var before *time.Time
+	if raw := strings.TrimSpace(r.URL.Query().Get("before")); raw != "" {
+		value, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid_cursor")
+			return
+		}
+		before = &value
+	}
+	items, err := h.service.ListRuns(
+		r.Context(),
+		session.User.ID,
+		r.URL.Query().Get("status"),
+		effectiveLimit,
+		before,
+	)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var nextBefore *time.Time
+	if len(items) == effectiveLimit {
+		value := items[len(items)-1].StartedAt
+		nextBefore = &value
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":       items,
+		"next_before": nextBefore,
+	})
+}
+
+func (h *conversationHTTP) runDetail(w http.ResponseWriter, r *http.Request) {
+	session, ok := sessionFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required")
+		return
+	}
+	item, err := h.service.RunDetail(
+		r.Context(),
+		session.User.ID,
+		r.PathValue("runID"),
+	)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
 }
 
 func (h *conversationHTTP) stream(w http.ResponseWriter, r *http.Request) {
@@ -693,15 +757,19 @@ func (h *conversationHTTP) streamV1(
 			continue
 		}
 		lastSequence = event.Sequence
-		if _, err := h.service.RecordEvent(
-			context.WithoutCancel(r.Context()),
-			userID,
-			generation.Run.ID,
-			event,
-		); err != nil {
-			terminalDetail = err.Error()
-			terminalCode = "event_persistence_failed"
-			return
+		if agenttrace.ShouldPersist(event.Type) {
+			storedEvent := event
+			storedEvent.Data = agenttrace.Sanitize(event.Data)
+			if _, err := h.service.RecordEvent(
+				context.WithoutCancel(r.Context()),
+				userID,
+				generation.Run.ID,
+				storedEvent,
+			); err != nil {
+				terminalDetail = err.Error()
+				terminalCode = "event_persistence_failed"
+				return
+			}
 		}
 
 		var data map[string]any
