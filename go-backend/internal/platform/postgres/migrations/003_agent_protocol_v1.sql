@@ -1,11 +1,11 @@
 DROP INDEX IF EXISTS app_core.agent_runs_one_active_per_conversation_idx;
 
+ALTER TABLE app_core.agent_runs
+    DROP CONSTRAINT IF EXISTS agent_runs_status_check;
+
 UPDATE app_core.agent_runs
 SET status = 'cancelled'
 WHERE status = 'stopped';
-
-ALTER TABLE app_core.agent_runs
-    DROP CONSTRAINT IF EXISTS agent_runs_status_check;
 
 ALTER TABLE app_core.agent_runs
     ADD CONSTRAINT agent_runs_status_check
