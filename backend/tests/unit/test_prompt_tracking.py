@@ -99,9 +99,22 @@ class _FakeExecutorLLM:
             )
         )
 
+    async def ainvoke(self, prompt):
+        return self.invoke(prompt)
 
-class _FakeLunarTool:
-    def invoke(self, _payload):
+
+class _FakeToolRegistry:
+    def capabilities(self):
+        return [
+            {
+                "name": "get_lunar_chart",
+                "description": "生成八字和农历排盘。",
+            }
+        ]
+
+    async def execute(self, name, arguments, **_kwargs):
+        assert name == "get_lunar_chart"
+        assert arguments["birth_date"] == "2001-05-14"
         return "排盘结果"
 
 
@@ -109,7 +122,11 @@ class _FakeLunarTool:
 async def test_executor_tracks_selection_and_birth_extraction_prompts(monkeypatch):
     _FakeExecutorLLM.calls = 0
     monkeypatch.setattr(executor_module, "ChatTongyi", _FakeExecutorLLM)
-    monkeypatch.setattr(executor_module, "get_lunar_chart", _FakeLunarTool())
+    monkeypatch.setattr(
+        executor_module,
+        "get_tool_registry",
+        lambda: _FakeToolRegistry(),
+    )
 
     result = await executor_module.executor_node(
         {

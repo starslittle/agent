@@ -1,0 +1,253 @@
+from __future__ import annotations
+
+import asyncio
+import importlib
+import json
+from dataclasses import asdict, dataclass
+from typing import Any, Literal
+
+from agent.worker import heavy_worker_manager
+
+
+Effect = Literal["read", "write", "destructive"]
+ConcurrencyClass = Literal["thread", "process"]
+
+
+@dataclass(frozen=True)
+class ToolDefinition:
+    name: str
+    description: str
+    handler: str
+    effect: Effect
+    idempotent: bool
+    shadow_allowed: bool
+    timeout_seconds: int
+    max_input_bytes: int
+    max_output_bytes: int
+    concurrency_class: ConcurrencyClass
+
+
+class ToolRegistry:
+    def __init__(self, definitions: list[ToolDefinition]) -> None:
+        self._definitions = {item.name: item for item in definitions}
+        if len(self._definitions) != len(definitions):
+            raise ValueError("duplicate tool name")
+        for item in definitions:
+            if item.effect == "destructive" and item.shadow_allowed:
+                raise ValueError(f"destructive tool {item.name} cannot allow shadow")
+            if min(
+                item.timeout_seconds,
+                item.max_input_bytes,
+                item.max_output_bytes,
+            ) <= 0:
+                raise ValueError(f"tool {item.name} requires finite resource limits")
+
+    def get(self, name: str) -> ToolDefinition:
+        try:
+            return self._definitions[name]
+        except KeyError as exc:
+            raise LookupError(f"unknown tool: {name}") from exc
+
+    def capabilities(self) -> list[dict[str, Any]]:
+        return [
+            {
+                key: value
+                for key, value in asdict(item).items()
+                if key != "handler"
+            }
+            for item in sorted(self._definitions.values(), key=lambda item: item.name)
+        ]
+
+    async def execute(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        execution_id: str,
+        shadow: bool = False,
+        cancel_event: asyncio.Event | None = None,
+    ) -> str:
+        definition = self.get(name)
+        if shadow and not (
+            definition.effect == "read" and definition.shadow_allowed
+        ):
+            raise PermissionError(f"tool {name} is not allowed in shadow runs")
+        encoded = json.dumps(arguments, ensure_ascii=False, default=str).encode("utf-8")
+        if len(encoded) > definition.max_input_bytes:
+            raise ValueError(f"tool {name} input exceeds limit")
+
+        if definition.concurrency_class == "process":
+            result = await heavy_worker_manager.run(
+                execution_id=execution_id,
+                tool_name=name,
+                arguments=arguments,
+                timeout_seconds=definition.timeout_seconds,
+                cancel_event=cancel_event,
+            )
+        else:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(invoke_tool_sync, name, arguments),
+                timeout=definition.timeout_seconds,
+            )
+        text = str(result)
+        if len(text.encode("utf-8")) > definition.max_output_bytes:
+            raise ValueError(f"tool {name} output exceeds limit")
+        return text
+
+    async def cancel_execution(self, execution_id: str) -> None:
+        await heavy_worker_manager.cancel_execution(execution_id)
+
+
+def _load_handler(path: str):
+    module_name, attribute = path.rsplit(":", 1)
+    return getattr(importlib.import_module(module_name), attribute)
+
+
+def _tavily_search(query: str, max_results: int = 5) -> str:
+    from langchain_tavily import TavilySearch
+
+    tool = TavilySearch(max_results=max(1, min(int(max_results), 10)))
+    results = tool.invoke({"query": query})
+    items = results.get("results", []) if isinstance(results, dict) else results or []
+    lines: list[str] = []
+    for item in items:
+        if isinstance(item, dict):
+            title = item.get("title") or ""
+            content = item.get("content") or item.get("snippet") or ""
+            url = item.get("url") or item.get("link") or ""
+            lines.append(f"- {title}: {content} ({url})")
+        else:
+            lines.append(f"- {item}")
+    return "\n".join(lines)
+
+
+def invoke_tool_sync(name: str, arguments: dict[str, Any]) -> Any:
+    definition = get_tool_registry().get(name)
+    handler = _load_handler(definition.handler)
+    if name == "tavily_search":
+        return handler(**arguments)
+    if hasattr(handler, "invoke"):
+        return handler.invoke(arguments)
+    return handler(**arguments)
+
+
+_REGISTRY: ToolRegistry | None = None
+
+
+def get_tool_registry() -> ToolRegistry:
+    global _REGISTRY
+    if _REGISTRY is None:
+        standard_limit = 256 * 1024
+        _REGISTRY = ToolRegistry(
+            [
+                ToolDefinition(
+                    "get_current_date",
+                    "返回服务端当前日期。",
+                    "agent.tools.date:get_current_date",
+                    "read",
+                    True,
+                    True,
+                    15,
+                    1024,
+                    4096,
+                    "thread",
+                ),
+                ToolDefinition(
+                    "get_seniverse_weather",
+                    "查询指定城市的当前天气和当日温度。",
+                    "agent.tools.weather:get_seniverse_weather",
+                    "read",
+                    True,
+                    True,
+                    25,
+                    4096,
+                    32 * 1024,
+                    "thread",
+                ),
+                ToolDefinition(
+                    "tavily_search",
+                    "通用互联网搜索。",
+                    "agent.tools.registry:_tavily_search",
+                    "read",
+                    True,
+                    True,
+                    45,
+                    32 * 1024,
+                    standard_limit,
+                    "thread",
+                ),
+                ToolDefinition(
+                    "get_lunar_chart",
+                    "生成八字和农历排盘。",
+                    "agent.tools.lunar_chart:get_lunar_chart",
+                    "read",
+                    True,
+                    False,
+                    30,
+                    32 * 1024,
+                    standard_limit,
+                    "thread",
+                ),
+                ToolDefinition(
+                    "get_ziwei_chart",
+                    "生成紫微斗数排盘。",
+                    "agent.tools.ziwei_chart:get_ziwei_chart",
+                    "read",
+                    True,
+                    False,
+                    30,
+                    32 * 1024,
+                    standard_limit,
+                    "thread",
+                ),
+                ToolDefinition(
+                    "query_local_kb",
+                    "查询本地知识库；未初始化时可能触发索引加载。",
+                    "agent.tools.local_kb:query_local_kb",
+                    "read",
+                    True,
+                    False,
+                    180,
+                    64 * 1024,
+                    1024 * 1024,
+                    "process",
+                ),
+                ToolDefinition(
+                    "init_local_rag",
+                    "初始化或重建本地知识库。",
+                    "agent.tools.local_kb:init_local_rag",
+                    "destructive",
+                    False,
+                    False,
+                    600,
+                    4096,
+                    standard_limit,
+                    "process",
+                ),
+                ToolDefinition(
+                    "query_pandas_data",
+                    "在隔离进程中查询 Pandas 数据。",
+                    "agent.tools.pandas_kb:query_pandas_data",
+                    "read",
+                    True,
+                    False,
+                    300,
+                    64 * 1024,
+                    1024 * 1024,
+                    "process",
+                ),
+                ToolDefinition(
+                    "init_pandas_rag",
+                    "初始化 Pandas 数据引擎。",
+                    "agent.tools.pandas_kb:init_pandas_rag",
+                    "write",
+                    True,
+                    False,
+                    600,
+                    4096,
+                    standard_limit,
+                    "process",
+                ),
+            ]
+        )
+    return _REGISTRY

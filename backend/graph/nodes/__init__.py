@@ -1,21 +1,32 @@
-"""Graph 节点 - 所有节点的统一导出"""
+"""Graph node package with lazy compatibility exports.
 
-from .router import router_node
-from .direct_llm import direct_llm_node
-from .tool_router import tool_router_node
-from .tools_exec import tools_node
-from .rag import rag_node
-from .retrieval import retrieval_node  # 兼容旧版本
-from .generate import generate_node
-from .generation import generation_node  # 兼容旧版本
+The public streaming path imports only router/planner/executor/replanner/generate.
+Keeping every historical node eager here would also load disabled RAG, Pandas and
+Chroma dependencies during an ordinary Agent Service startup.
+"""
 
-__all__ = [
-    "router_node",
-    "direct_llm_node",
-    "tool_router_node",
-    "tools_node",
-    "rag_node",
-    "retrieval_node",
-    "generate_node",
-    "generation_node",
-]
+from importlib import import_module
+
+
+_EXPORTS = {
+    "router_node": ("graph.nodes.router", "router_node"),
+    "direct_llm_node": ("graph.nodes.direct_llm", "direct_llm_node"),
+    "tool_router_node": ("graph.nodes.tool_router", "tool_router_node"),
+    "tools_node": ("graph.nodes.tools_exec", "tools_node"),
+    "rag_node": ("graph.nodes.rag", "rag_node"),
+    "retrieval_node": ("graph.nodes.retrieval", "retrieval_node"),
+    "generate_node": ("graph.nodes.generate", "generate_node"),
+    "generation_node": ("graph.nodes.generation", "generation_node"),
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name: str):
+    try:
+        module_name, attribute = _EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(name) from exc
+    value = getattr(import_module(module_name), attribute)
+    globals()[name] = value
+    return value

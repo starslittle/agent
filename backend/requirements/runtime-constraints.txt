@@ -1,0 +1,32 @@
+# Known-compatible versions used by the current Python Agent implementation.
+# Keeping the LangChain/LlamaIndex families together prevents pip from
+# backtracking across multiple incompatible major-version generations.
+langchain==0.3.27
+langchain-community==0.3.27
+langchain-core==0.3.83
+langchain-dashscope==0.1.8
+langchain-tavily==0.2.11
+langchain-text-splitters==0.3.9
+langgraph==0.3.34
+langsmith==0.4.8
+
+llama-index-core==0.12.52.post1
+llama-index-embeddings-huggingface==0.5.5
+llama-index-experimental==0.6.0
+llama-index-llms-dashscope==0.4.1
+llama-index-readers-file==0.4.11
+llama-index-vector-stores-chroma==0.4.2
+llama-index-workflows==1.2.0
+chromadb==1.0.15
+
+fastapi==0.115.11
+pydantic==2.11.7
+pydantic-settings==2.10.1
+pythonmonkey==1.3.2
+sse-starlette==1.8.2
+unstructured==0.18.11
+uvicorn==0.34.0
+
+numpy==1.26.4
+pandas==2.2.3
+protobuf==6.31.1

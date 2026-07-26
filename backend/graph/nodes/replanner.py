@@ -70,7 +70,7 @@ async def replanner_node(state: GraphState) -> Dict[str, Any]:
     )
 
     try:
-        res = llm.invoke(prompt)
+        res = await llm.ainvoke(prompt)
         text = getattr(res, "content", str(res)).strip()
     except Exception as e:
         print(f"[Replanner] 错误: {e}")

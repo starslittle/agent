@@ -67,7 +67,11 @@ Browser :5173 -> Vite -> Go :8000 -> Python :8000 (Compose 内部)
 |---|---|---|
 | `APP_ENV` | `ENVIRONMENT`，再回退 `development` | Go 运行环境；迁移期兼容 Python 变量名 |
 | `HTTP_ADDR` | 由 `PORT` 生成，默认 `:8080` | Go 监听地址 |
-| `PYTHON_BASE_URL` | `http://127.0.0.1:8000` | Python Legacy API |
+| `PYTHON_BASE_URL` | `http://127.0.0.1:8000` | Python Agent Service；Legacy/V1 共用 |
+| `AGENT_PROTOCOL_MODE` | `legacy` | `legacy` 或版本化 Agent Service `v1` |
+| `AGENT_RUN_DEADLINE` | `5m` | Python Runtime 硬截止时间 |
+| `AGENT_CANCEL_TIMEOUT` | `5s` | 浏览器断开后独立取消请求时限 |
+| `AGENT_RECONCILE_TIMEOUT` | `5s` | 事件序号缺失时的状态对账时限 |
 | `GO_DATABASE_URL` | 从 `POSTGRES_*` 生成 | Go 用户与 Session 数据库；优先于 `DATABASE_URL` |
 | `PUBLIC_ORIGINS` | 本地 5173 地址 | 允许发起状态变更请求的前端 Origin |
 | `COOKIE_SECURE` | 开发 `false` | 生产必须为 `true` |

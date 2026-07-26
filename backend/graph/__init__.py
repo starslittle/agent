@@ -1,5 +1,7 @@
 """LangGraph 图与节点"""
 
+from importlib import import_module
+
 __all__ = [
     "GraphState",
     "build_graph",
@@ -8,8 +10,7 @@ __all__ = [
     "stream_graph",
 ]
 
-from .state import GraphState
-from .builder import build_graph, create_graph_state
+from .state import GraphState, create_graph_state
 from .nodes.router import router_node
 from .nodes.planner import planner_node
 from .nodes.executor import executor_node
@@ -25,6 +26,8 @@ def get_graph():
     """获取全局Graph实例（单例）"""
     global _graph_instance
     if _graph_instance is None:
+        from .builder import build_graph
+
         _graph_instance = build_graph()
     return _graph_instance
 
@@ -59,6 +62,7 @@ async def stream_graph(
     chat_history: list = None,
     mode_hint: str = None,
     force_route: str | None = None,
+    runtime_metadata: dict | None = None,
 ):
     """
     流式运行Graph
@@ -72,7 +76,11 @@ async def stream_graph(
         dict: 流式输出片段
     """
     state = create_graph_state(query, chat_history, mode_hint, force_route)
-    state["metadata"] = {**state.get("metadata", {}), "streaming": True}
+    state["metadata"] = {
+        **state.get("metadata", {}),
+        **(runtime_metadata or {}),
+        "streaming": True,
+    }
     # 统一走手写流式编排，确保所有模式都可增量输出
     state = await router_node(state)
     route = state.get("route", "default")
@@ -104,3 +112,11 @@ async def stream_graph(
     async for update in generate_node(state):
         state = update
         yield state
+
+
+def __getattr__(name: str):
+    if name == "build_graph":
+        value = getattr(import_module("graph.builder"), name)
+        globals()[name] = value
+        return value
+    raise AttributeError(name)

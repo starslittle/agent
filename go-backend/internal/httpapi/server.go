@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/starslittle/agent/go-backend/internal/agentclient"
 	"github.com/starslittle/agent/go-backend/internal/auth"
 	"github.com/starslittle/agent/go-backend/internal/config"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
@@ -34,6 +35,14 @@ func New(
 		cfg.UpstreamHeaderTimeout,
 		cfg.InternalAgentSecret,
 		logger,
+	)
+	if err != nil {
+		return nil, err
+	}
+	v1Client, err := agentclient.NewV1(
+		cfg.PythonBaseURL,
+		proxy.client,
+		cfg.InternalAgentSecret,
 	)
 	if err != nil {
 		return nil, err
@@ -72,8 +81,13 @@ func New(
 		conversationAPI := newConversationHTTP(
 			conversationServices[0],
 			proxy,
+			v1Client,
 			logger,
 			cfg.MaxRequestBytes,
+			cfg.AgentProtocolMode,
+			cfg.AgentRunDeadline,
+			cfg.AgentCancelTimeout,
+			cfg.AgentReconcileTimeout,
 		)
 		mux.Handle(
 			"POST /api/v1/conversations",

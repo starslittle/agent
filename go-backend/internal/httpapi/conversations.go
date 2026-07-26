@@ -14,14 +14,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/starslittle/agent/go-backend/internal/agent"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
 )
 
 type conversationHTTP struct {
-	service         *conversation.Service
-	proxy           *streamProxy
-	logger          *slog.Logger
-	maxRequestBytes int64
+	service          *conversation.Service
+	proxy            *streamProxy
+	v1Client         agent.Client
+	logger           *slog.Logger
+	maxRequestBytes  int64
+	protocolMode     string
+	runDeadline      time.Duration
+	cancelTimeout    time.Duration
+	reconcileTimeout time.Duration
 }
 
 type createConversationRequest struct {
@@ -52,14 +58,24 @@ type upstreamConversationRequest struct {
 func newConversationHTTP(
 	service *conversation.Service,
 	proxy *streamProxy,
+	v1Client agent.Client,
 	logger *slog.Logger,
 	maxRequestBytes int64,
+	protocolMode string,
+	runDeadline time.Duration,
+	cancelTimeout time.Duration,
+	reconcileTimeout time.Duration,
 ) *conversationHTTP {
 	return &conversationHTTP{
-		service:         service,
-		proxy:           proxy,
-		logger:          logger,
-		maxRequestBytes: maxRequestBytes,
+		service:          service,
+		proxy:            proxy,
+		v1Client:         v1Client,
+		logger:           logger,
+		maxRequestBytes:  maxRequestBytes,
+		protocolMode:     protocolMode,
+		runDeadline:      runDeadline,
+		cancelTimeout:    cancelTimeout,
+		reconcileTimeout: reconcileTimeout,
 	}
 }
 
@@ -233,6 +249,10 @@ func (h *conversationHTTP) stream(w http.ResponseWriter, r *http.Request) {
 	var input streamConversationRequest
 	if err := decodeJSONBody(r, &input, h.maxRequestBytes); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid_json")
+		return
+	}
+	if h.protocolMode == "v1" {
+		h.streamV1(w, r, session.User.ID, input)
 		return
 	}
 
@@ -487,6 +507,400 @@ func (h *conversationHTTP) stream(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+func (h *conversationHTTP) streamV1(
+	w http.ResponseWriter,
+	r *http.Request,
+	userID string,
+	input streamConversationRequest,
+) {
+	requestID := r.Header.Get(requestIDHeader)
+	generation, err := h.service.Start(r.Context(), conversation.StartGenerationParams{
+		UserID:          userID,
+		ConversationID:  r.PathValue("conversationID"),
+		ClientMessageID: input.ClientMessageID,
+		RequestID:       requestID,
+		Content:         input.Content,
+		AgentName:       input.AgentName,
+		ProtocolVersion: agent.ProtocolVersion,
+	})
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+
+	history, err := h.service.History(
+		r.Context(),
+		userID,
+		generation.Conversation.ID,
+	)
+	if err != nil {
+		h.finishDetached(
+			userID,
+			generation,
+			"",
+			"failed",
+			"history_load_failed",
+			err.Error(),
+			nil,
+		)
+		h.writeError(w, err)
+		return
+	}
+	messages := make([]agent.Message, 0, len(history))
+	for _, message := range history {
+		if message.ID == generation.UserMessage.ID {
+			continue
+		}
+		messages = append(messages, agent.Message{
+			Role:    message.Role,
+			Content: message.Content,
+		})
+	}
+	runRequest := agent.RunRequest{
+		ProtocolVersion: agent.ProtocolVersion,
+		ExecutionID:     generation.Run.ExecutionID,
+		RunID:           generation.Run.ID,
+		RequestID:       generation.Run.RequestID,
+		IdempotencyKey:  generation.Run.ExecutionID,
+		ConversationID:  generation.Conversation.ID,
+		AgentName:       generation.Run.AgentName,
+		Query:           generation.UserMessage.Content,
+		Messages:        messages,
+		DeadlineMS:      h.runDeadline.Milliseconds(),
+		UserID:          userID,
+	}
+	stream, err := h.v1Client.Start(r.Context(), runRequest)
+	if err != nil {
+		h.finishDetached(
+			userID,
+			generation,
+			"",
+			"failed",
+			"python_upstream_unavailable",
+			err.Error(),
+			nil,
+		)
+		writeJSONError(w, http.StatusBadGateway, "python_upstream_unavailable")
+		return
+	}
+	defer stream.Close()
+
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		h.finishDetached(
+			userID,
+			generation,
+			"",
+			"failed",
+			"streaming_not_supported",
+			"",
+			nil,
+		)
+		return
+	}
+	writeSSEJSON(w, map[string]any{
+		"type":                 "meta",
+		"conversation_id":      generation.Conversation.ID,
+		"user_message_id":      generation.UserMessage.ID,
+		"assistant_message_id": generation.Assistant.ID,
+		"run_id":               generation.Run.ID,
+		"execution_id":         generation.Run.ExecutionID,
+		"title":                generation.Conversation.Title,
+	})
+	flusher.Flush()
+
+	var (
+		answer             strings.Builder
+		firstTokenAt       *time.Time
+		lastCheckpoint     = time.Now()
+		checkpointLength   int
+		lastSequence       int64
+		finished           bool
+		terminalStatus     = "failed"
+		terminalCode       = "python_stream_closed"
+		terminalDetail     string
+		checkpointInterval = 2 * time.Second
+	)
+	defer func() {
+		if finished {
+			return
+		}
+		if r.Context().Err() != nil {
+			terminalStatus = string(agent.StatusCancelled)
+			terminalCode = "client_cancelled"
+		}
+		h.cancelV1Run(
+			r,
+			userID,
+			generation,
+			answer.String(),
+			firstTokenAt,
+			terminalStatus,
+			terminalCode,
+			terminalDetail,
+		)
+	}()
+
+	for {
+		event, nextErr := stream.Next()
+		if nextErr != nil && !errors.Is(nextErr, agent.ErrSequenceGap) {
+			if !agent.IsStreamDone(nextErr) {
+				terminalDetail = nextErr.Error()
+			}
+			if r.Context().Err() != nil {
+				terminalStatus = string(agent.StatusCancelled)
+				terminalCode = "client_cancelled"
+			}
+			return
+		}
+		if errors.Is(nextErr, agent.ErrSequenceGap) {
+			expected := lastSequence + 1
+			_ = h.service.MarkSequenceGap(
+				context.WithoutCancel(r.Context()),
+				userID,
+				generation.Run.ID,
+				expected,
+				event.Sequence,
+			)
+			reconcileCtx, cancel := context.WithTimeout(
+				context.WithoutCancel(r.Context()),
+				h.reconcileTimeout,
+			)
+			_, reconcileErr := h.v1Client.Get(
+				reconcileCtx,
+				userID,
+				requestID,
+				generation.Run.ExecutionID,
+			)
+			cancel()
+			if reconcileErr != nil {
+				h.logger.Warn(
+					"agent_sequence_reconcile_failed",
+					"error", reconcileErr,
+					"run_id", generation.Run.ID,
+					"expected", expected,
+					"received", event.Sequence,
+				)
+			}
+		}
+		if event.Sequence <= lastSequence {
+			continue
+		}
+		lastSequence = event.Sequence
+		if _, err := h.service.RecordEvent(
+			context.WithoutCancel(r.Context()),
+			userID,
+			generation.Run.ID,
+			event,
+		); err != nil {
+			terminalDetail = err.Error()
+			terminalCode = "event_persistence_failed"
+			return
+		}
+
+		var data map[string]any
+		_ = json.Unmarshal(event.Data, &data)
+		switch event.Type {
+		case "progress":
+			message, _ := data["message"].(string)
+			if message != "" {
+				writeSSEJSON(w, map[string]any{
+					"type":             "delta",
+					"data":             message + "\n",
+					"isThinking":       true,
+					"thinkingFinished": false,
+				})
+				flusher.Flush()
+			}
+		case "tool.completed":
+			name, _ := data["name"].(string)
+			if name != "" {
+				writeSSEJSON(w, map[string]any{
+					"type":             "delta",
+					"data":             "已完成工具：" + name + "\n",
+					"isThinking":       true,
+					"thinkingFinished": false,
+				})
+				flusher.Flush()
+			}
+		case "answer.delta":
+			text, _ := data["text"].(string)
+			if text != "" {
+				answer.WriteString(text)
+				if firstTokenAt == nil {
+					now := time.Now().UTC()
+					firstTokenAt = &now
+				}
+				writeSSEJSON(w, map[string]any{
+					"type":             "delta",
+					"data":             text,
+					"isThinking":       false,
+					"thinkingFinished": true,
+				})
+				flusher.Flush()
+			}
+		case "run.completed":
+			if strings.TrimSpace(answer.String()) == "" {
+				terminalStatus = "failed"
+				terminalCode = "empty_agent_response"
+				terminalDetail = "Python Agent completed without an answer"
+				writeSSEJSON(w, map[string]any{
+					"type":    "error",
+					"message": "Agent 未返回有效回答，请重试",
+				})
+				flusher.Flush()
+				return
+			}
+			if err := h.finishGeneration(
+				userID,
+				generation,
+				answer.String(),
+				"completed",
+				"",
+				"",
+				firstTokenAt,
+			); err != nil {
+				terminalDetail = err.Error()
+				terminalCode = "persistence_failed"
+				return
+			}
+			finished = true
+			writeSSEJSON(w, map[string]any{
+				"type":       "done",
+				"message_id": generation.Assistant.ID,
+				"status":     "completed",
+			})
+			flusher.Flush()
+			return
+		case "run.cancelled":
+			_ = h.finishGeneration(
+				userID,
+				generation,
+				answer.String(),
+				string(agent.StatusCancelled),
+				"generation_cancelled",
+				"",
+				firstTokenAt,
+			)
+			finished = true
+			writeSSEJSON(w, map[string]any{
+				"type":       "done",
+				"message_id": generation.Assistant.ID,
+				"status":     "stopped",
+			})
+			flusher.Flush()
+			return
+		case "run.failed", "run.timed_out":
+			code, _ := data["code"].(string)
+			message, _ := data["message"].(string)
+			status := "failed"
+			if event.Type == "run.timed_out" {
+				status = string(agent.StatusTimedOut)
+			}
+			_ = h.finishGeneration(
+				userID,
+				generation,
+				answer.String(),
+				status,
+				code,
+				message,
+				firstTokenAt,
+			)
+			finished = true
+			writeSSEJSON(w, map[string]any{
+				"type":    "error",
+				"message": "Agent 执行失败，请稍后重试",
+			})
+			flusher.Flush()
+			return
+		}
+
+		if answer.Len()-checkpointLength >= 2048 ||
+			time.Since(lastCheckpoint) >= checkpointInterval {
+			if err := h.service.Checkpoint(
+				r.Context(),
+				userID,
+				generation.Assistant.ID,
+				answer.String(),
+			); err == nil {
+				checkpointLength = answer.Len()
+				lastCheckpoint = time.Now()
+			}
+		}
+	}
+}
+
+func (h *conversationHTTP) cancelV1Run(
+	r *http.Request,
+	userID string,
+	generation conversation.Generation,
+	content string,
+	firstTokenAt *time.Time,
+	fallbackStatus string,
+	fallbackCode string,
+	fallbackDetail string,
+) {
+	cancelCtx, cancel := context.WithTimeout(
+		context.WithoutCancel(r.Context()),
+		h.cancelTimeout,
+	)
+	defer cancel()
+	_ = h.service.RequestCancellation(
+		cancelCtx,
+		userID,
+		generation.Run.ID,
+	)
+	snapshot, err := h.v1Client.Cancel(
+		cancelCtx,
+		userID,
+		generation.Run.RequestID,
+		generation.Run.ExecutionID,
+	)
+	if err == nil {
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+		for !snapshot.Status.Terminal() {
+			select {
+			case <-cancelCtx.Done():
+				err = cancelCtx.Err()
+			case <-ticker.C:
+				snapshot, err = h.v1Client.Get(
+					cancelCtx,
+					userID,
+					generation.Run.RequestID,
+					generation.Run.ExecutionID,
+				)
+			}
+			if err != nil {
+				break
+			}
+		}
+	}
+	status := fallbackStatus
+	code := fallbackCode
+	detail := fallbackDetail
+	if err == nil && snapshot.Status.Terminal() {
+		status = string(snapshot.Status)
+		if status == string(agent.StatusCompleted) && strings.TrimSpace(content) == "" {
+			status = "failed"
+			code = "empty_agent_response"
+		}
+	}
+	h.finishDetached(
+		userID,
+		generation,
+		content,
+		status,
+		code,
+		detail,
+		firstTokenAt,
+	)
 }
 
 type parsedSSEEvent struct {

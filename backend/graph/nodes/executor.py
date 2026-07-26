@@ -2,33 +2,42 @@
 
 from typing import Dict, Any
 import json
+import re
+import time
 
 from langchain_core.messages import HumanMessage
 from langchain_community.chat_models import ChatTongyi
 from agent.prompts import append_prompt_version, render_prompt
 from graph.state import GraphState
 from app.core.settings import settings
+from agent.tools.registry import get_tool_registry
 
-# 导入可用工具
-from agent.tools import (
-    get_current_date,
-    get_seniverse_weather,
-    get_lunar_chart,
-    get_ziwei_chart,
-    deep_research,
-)
-from langchain_community.tools.tavily_search import TavilySearchResults
 
-def _get_tool_by_name(name: str):
-    tools_map = {
-        "get_current_date": get_current_date,
-        "get_seniverse_weather": get_seniverse_weather,
-        "get_lunar_chart": get_lunar_chart,
-        "get_ziwei_chart": get_ziwei_chart,
-        "deep_research": deep_research,
-        "tavily_search": TavilySearchResults(max_results=5)
-    }
-    return tools_map.get(name)
+def _weather_location(text: str) -> str:
+    value = re.sub(
+        r"(请|帮我|查询|查看|了解|一下|当前|今天|明天|后天|"
+        r"未来[一二三四五六七八九十\d]+天|天气|气温|温度|的)",
+        "",
+        text,
+    )
+    value = re.sub(r"[，。！？,.!?\s]", "", value)
+    return value[:32] or text.strip()
+
+
+def _normalize_tool_name(raw: str) -> str:
+    value = raw.strip().lower().strip("`\"' ")
+    allowed = (
+        "get_lunar_chart",
+        "get_ziwei_chart",
+        "get_seniverse_weather",
+        "get_current_date",
+        "tavily_search",
+        "none",
+    )
+    for name in allowed:
+        if value == name or re.search(rf"\b{re.escape(name)}\b", value):
+            return name
+    return "tavily_search"
 
 async def executor_node(state: GraphState) -> Dict[str, Any]:
     """
@@ -53,14 +62,26 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
         dashscope_api_key=settings.DASHSCOPE_API_KEY or "",
     )
 
-    tools_desc = """
-    1. get_lunar_chart: 用于获取八字、排盘、农历信息。参数需要出生日期等。
-    2. get_ziwei_chart: 用于获取紫微斗数排盘信息（命盘、十二宫）。
-    3. tavily_search: 用于通用互联网搜索、查询新闻、事实、资料。
-    4. get_current_date: 获取当前日期时间。
-    5. get_seniverse_weather: 查询天气。
-    6. none: 如果不需要工具，直接根据已有信息回答。
-    """
+    tool_registry = get_tool_registry()
+    selectable_tools = {
+        "get_lunar_chart",
+        "get_ziwei_chart",
+        "tavily_search",
+        "get_current_date",
+        "get_seniverse_weather",
+    }
+    tools_desc = "\n".join(
+        f"{index}. {item['name']}: {item['description']}"
+        for index, item in enumerate(
+            (
+                item
+                for item in tool_registry.capabilities()
+                if item["name"] in selectable_tools
+            ),
+            start=1,
+        )
+    )
+    tools_desc += "\n6. none: 如果不需要工具，直接根据已有信息回答。"
 
     selection_prompt_path = "agent/prompts/executor_tool_selection.txt"
     decision_prompt = render_prompt(
@@ -77,14 +98,19 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
     )
 
     try:
-        res = llm.invoke([HumanMessage(content=decision_prompt)])
-        tool_name = str(res.content).strip().lower()
+        res = await llm.ainvoke([HumanMessage(content=decision_prompt)])
+        tool_name = _normalize_tool_name(str(res.content))
     except Exception:
         tool_name = "tavily_search" # 默认兜底
 
     print(f"[Executor] 决策工具: {tool_name}")
 
     note = ""
+    tool_started = time.perf_counter()
+    runtime_metadata = dict(state.get("metadata", {}))
+    execution_id = str(runtime_metadata.get("execution_id") or "legacy")
+    cancel_event = runtime_metadata.get("cancel_event")
+    shadow = bool(runtime_metadata.get("shadow", False))
     # 执行选定的工具
     if tool_name == "get_lunar_chart":
         # 尝试从查询或任务中提取出生日期/时间/性别/出生地
@@ -102,7 +128,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
             iteration=iteration + 1,
         )
         try:
-            info_res = llm.invoke([HumanMessage(content=extract_prompt)])
+            info_res = await llm.ainvoke([HumanMessage(content=extract_prompt)])
             raw = str(info_res.content).strip()
             data = {}
             try:
@@ -126,7 +152,13 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
                     "gender": gender or None,
                     "birthplace": birthplace or None,
                 }
-                note = get_lunar_chart.invoke(payload)
+                note = await tool_registry.execute(
+                    "get_lunar_chart",
+                    payload,
+                    execution_id=execution_id,
+                    shadow=shadow,
+                    cancel_event=cancel_event,
+                )
         except Exception as e:
             note = f"执行排盘失败: {e}"
     elif tool_name == "get_ziwei_chart":
@@ -144,7 +176,7 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
             iteration=iteration + 1,
         )
         try:
-            info_res = llm.invoke([HumanMessage(content=extract_prompt)])
+            info_res = await llm.ainvoke([HumanMessage(content=extract_prompt)])
             raw = str(info_res.content).strip()
             data = {}
             try:
@@ -170,19 +202,46 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
                     "gender": gender,
                     "birthplace": birthplace or None,
                 }
-                note = get_ziwei_chart.invoke(payload)
+                note = await tool_registry.execute(
+                    "get_ziwei_chart",
+                    payload,
+                    execution_id=execution_id,
+                    shadow=shadow,
+                    cancel_event=cancel_event,
+                )
         except Exception as e:
             note = f"执行紫微排盘失败: {e}"
-    elif "search" in tool_name or tool_name == "tavily_search":
-        from langchain_tavily import TavilySearch
-        t = TavilySearch(max_results=5)
+    elif tool_name == "get_current_date":
         try:
-            results = t.invoke({"query": current_task})
-            # 格式化搜索结果
-            lines = []
-            for r in (results if isinstance(results, list) else []):
-                lines.append(f"- {r.get('title')}: {r.get('content')} ({r.get('url')})")
-            note = "\n".join(lines)
+            note = await tool_registry.execute(
+                "get_current_date",
+                {},
+                execution_id=execution_id,
+                shadow=shadow,
+                cancel_event=cancel_event,
+            )
+        except Exception as e:
+            note = f"日期查询失败: {e}"
+    elif tool_name == "get_seniverse_weather":
+        try:
+            note = await tool_registry.execute(
+                "get_seniverse_weather",
+                {"location": _weather_location(current_task)},
+                execution_id=execution_id,
+                shadow=shadow,
+                cancel_event=cancel_event,
+            )
+        except Exception as e:
+            note = f"天气查询失败: {e}"
+    elif "search" in tool_name or tool_name == "tavily_search":
+        try:
+            note = await tool_registry.execute(
+                "tavily_search",
+                {"query": current_task, "max_results": 5},
+                execution_id=execution_id,
+                shadow=shadow,
+                cancel_event=cancel_event,
+            )
         except Exception as e:
             note = f"搜索失败: {e}"
     else:
@@ -196,6 +255,22 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
     context = (context + "\n\n" if context else "") + f"【子任务执行结果】\n{current_task}: {note}"
 
     plan_completed.append(current_task)
+    final_metadata = dict(state.get("metadata", {}))
+    tool_traces = list(final_metadata.get("tool_traces", []))
+    if tool_name != "none":
+        tool_traces.append(
+            {
+                "name": tool_name,
+                "iteration": iteration + 1,
+                "status": (
+                    "failed"
+                    if "失败" in note or note.startswith("错误")
+                    else "completed"
+                ),
+                "duration_ms": int((time.perf_counter() - tool_started) * 1000),
+            }
+        )
+    final_metadata["tool_traces"] = tool_traces
 
     return {
         **state,
@@ -205,4 +280,5 @@ async def executor_node(state: GraphState) -> Dict[str, Any]:
         "plan_notes": plan_notes,
         "plan_iteration": iteration + 1,
         "context": context,
+        "metadata": final_metadata,
     }

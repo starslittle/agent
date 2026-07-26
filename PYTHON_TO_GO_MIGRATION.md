@@ -1491,7 +1491,7 @@ Agent 的节点或工具。开关由 Go 加载，生产动态配置需要版本�
 - [x] 固化实际 Prompt 来源、路径基准和 SHA-256
 - [x] 修正文档中的公网实际执行链和 Agent 基线矩阵
 - [x] 固化 `/query_stream` 请求和 SSE 响应契约
-- [ ] 增加 Python 服务协议回归测试
+- [x] 增加 Python 服务协议回归测试
 - [x] 修复前端 SSE `error` 被吞掉的问题
 - [x] 统一 Docker 开发和部署端口为 8000
 - [x] 初始化 `go-backend` 工程
@@ -1501,17 +1501,23 @@ Agent 的节点或工具。开关由 Go 加载，生产动态配置需要版本�
 - [x] 实现透传式 SSE Writer；阶段 1 不注入心跳，避免改变 Python 原始帧
 - [x] 实现 Go 到 Python 的 SSE 代理
 - [x] 实现 Go 用户、Session、会话、消息和 Agent Run 持久化
-- [ ] 定义 `AgentRunRequest` / `AgentEvent` v1
-- [ ] 实现 Python `AgentRuntime` 和内部流式接口
-- [ ] 实现 `execution_id`、状态查询、执行级取消和终态保护
-- [ ] 实现 Go Agent Client 和事件幂等落库
+- [x] 定义 `AgentRunRequest` / `AgentEvent` v1
+- [x] 实现 Python `AgentRuntime` 和内部流式接口
+- [x] 实现 `execution_id`、状态查询、执行级取消和终态保护
+- [x] 实现 Go Legacy/V1 Agent Client 和事件幂等落库
 - [ ] 填充模型、Prompt、工具、Token 和耗时轨迹
-- [ ] 建立 Python Agent Service 协议回归测试
-- [ ] 把阻塞工具隔离到可终止 Worker
-- [ ] 增加 Agent Service 版本灰度开关
+- [x] 建立 Python Agent Service 协议回归测试
+- [x] 把阻塞工具隔离到可终止的进程 Worker
+- [x] 增加 Legacy/V1 协议切换开关
 
 完成这一轮后，系统具备稳定的 Go 控制面和可独立演进、扩容的 Python Agent
 执行面。
+
+当前 V1 的 Runtime Registry 是单副本、内存保留终态的实现；Compose 和生产
+配置默认仍使用 `AGENT_PROTOCOL_MODE=legacy`，需要在联调环境显式切换为
+`v1`。Heavy Worker V1 采用按任务生成、可被终止的独立进程，已经隔离
+Chroma/Pandas/索引构建等阻塞任务；需要多副本与跨机器调度时，再把 Registry
+和 Worker 任务归属迁入 Redis/NATS 等共享协调层，不改变 Agent Protocol v1。
 
 ---
 

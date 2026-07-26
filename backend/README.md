@@ -6,12 +6,11 @@
 
 ```
 backend/
-├── app/                     # 应用层（API/服务启动/路由）
+├── app/                     # 内部 Agent API、Runtime 与服务启动
 ├── graph/                   # LangGraph 图与节点
-├── agent/                   # 智能体能力层（工具/提示词/策略）
+├── agent/                   # 智能体能力层（工具注册表/Worker/提示词）
 ├── rag/                     # RAG 体系（引擎/检索器/管线）
 ├── infra/                   # 基础设施（数据库/缓存/存储/日志）
-├── workers/                 # 异步/批处理任务
 ├── configs/                 # 配置文件
 ├── scripts/                 # 运维/迁移脚本
 ├── tests/                   # 单测/集成测试
@@ -44,32 +43,46 @@ pip install -r requirements/dev.txt
 
 ### 2. 配置环境变量
 
-在仓库根目录复制并编辑唯一的 `.env` 文件：
+本地直接运行 Python 时，在 `backend` 目录创建独立的 `.env`：
 
 ```bash
-cp ../.env.example ../.env
+cp ../.env.example .env
 ```
 
 主要配置项：
 - `DASHSCOPE_API_KEY`: 通义千问 API 密钥
-- `DATABASE_URL`: PostgreSQL 数据库连接字符串
-- `REDIS_URL`: Redis 连接字符串（可选）
+- `TAVILY_API_KEY`: Tavily 搜索密钥（可选）
+- `SENIVERSE_API_KEY`: 心知天气密钥（可选）
+- `INTERNAL_AGENT_SECRET`: 与 Go 网关一致的内部 HMAC 密钥
+- `AGENT_SERVICE_VERSION`: Agent Service 发布版本
 - `PORT`: 服务端口（默认 8000）
+
+Python Agent Service 不负责用户、会话、消息或 Run 的业务数据写入；这些数据
+只由 Go 网关写入 PostgreSQL。
 
 ### 3. 启动服务
 
 ```bash
-# 方式1：使用 run.py
-python run.py
-
-# 方式2：使用 uvicorn
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 4. 访问服务
+也可以完全以 `backend` 为构建上下文：
 
-- API 文档: http://localhost:8000/docs
-- 健康检查: http://localhost:8000/healthz
+```bash
+docker build -t qidian-python-agent .
+```
+
+### 4. 内部接口
+
+- 健康检查: `GET /internal/health`
+- 能力清单: `GET /internal/v1/capabilities`
+- 开始/续接执行: `POST /internal/v1/agent-runs:stream`
+- 执行状态: `GET /internal/v1/agent-runs/{execution_id}`
+- 幂等取消: `DELETE /internal/v1/agent-runs/{execution_id}`
+- Legacy 回滚入口: `POST /query_stream`
+
+除健康检查与能力清单外，内部接口要求 Go 生成的 HMAC v1 签名。生产部署只应
+通过内部网络暴露 Python 服务。
 
 ## 核心模块说明
 
@@ -117,9 +130,12 @@ LangGraph 工作流层，负责：
 
 ### 添加新工具
 
-1. 在 `agent/tools/` 创建工具文件
-2. 在 `agent/tools/__init__.py` 中导出
-3. 在 `configs/agents.yaml` 中配置
+1. 在 `agent/tools/` 创建工具实现
+2. 在 `agent/tools/registry.py` 注册唯一名称、用途、副作用、幂等性、影子权限、
+   超时、输入输出上限和并发类型
+3. 阻塞、高内存或不可协作取消的实现使用 `process`，由可终止 Heavy Worker
+   隔离执行
+4. 为能力清单、影子限制、超时与取消补充契约测试
 
 ### 添加新的 RAG 管线
 
@@ -130,19 +146,8 @@ LangGraph 工作流层，负责：
 ### 运行测试
 
 ```bash
-# 运行所有测试
-pytest tests/
-
-# 运行特定测试
-pytest tests/api/
-pytest tests/agents/
-pytest tests/rag/
-
-# 运行单元测试
-pytest tests/unit/
-
-# 运行集成测试
-pytest tests/integration/
+# 快速协议、Runtime、签名和工具回归集
+pytest tests/unit -q
 ```
 
 ## 配置文件

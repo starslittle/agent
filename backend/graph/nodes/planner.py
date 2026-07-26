@@ -52,7 +52,7 @@ async def planner_node(state: GraphState) -> Dict[str, Any]:
         iteration=0,
     )
     try:
-        res = llm.invoke(prompt)
+        res = await llm.ainvoke(prompt)
         text = getattr(res, "content", str(res))
     except Exception as e:
         print(f"[Planner] 计划生成失败: {e}")

@@ -8,6 +8,9 @@ def get_seniverse_weather(location: str) -> str:
     查询中国城市当前天气。参数示例："杭州"、"北京"。
     需要在 .env 设置 SENIVERSE_API_KEY。
     """
+    location = str(location or "").strip()
+    if not location:
+        return "错误：天气查询缺少城市名称。"
     api_key = settings.SENIVERSE_API_KEY or ""
     if not api_key:
         return "错误：未配置 SENIVERSE_API_KEY (天气查询功能暂时不可用)。"
@@ -20,7 +23,11 @@ def get_seniverse_weather(location: str) -> str:
         r_now.raise_for_status()
         data_now = r_now.json()["results"][0]
 
-        r_daily = requests.get({**{"url": daily_url}}.get("url"), params={**common, "start": 0, "days": 1}, timeout=15)
+        r_daily = requests.get(
+            daily_url,
+            params={**common, "start": 0, "days": 1},
+            timeout=15,
+        )
         r_daily.raise_for_status()
         data_daily = r_daily.json()["results"][0]
         city = data_now["location"]["name"]

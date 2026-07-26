@@ -2,11 +2,13 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/starslittle/agent/go-backend/internal/agent"
 	"github.com/starslittle/agent/go-backend/internal/auth"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
 )
@@ -75,12 +77,40 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 		RequestID:       auth.NewID(),
 		Content:         "这是第一条需要被持久化的消息",
 		AgentName:       conversation.DefaultAgent,
+		ProtocolVersion: agent.ProtocolVersion,
 	})
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	if generation.Conversation.Title == conversation.DefaultTitle {
 		t.Fatal("first message did not generate a conversation title")
+	}
+	startedEvent := agent.Event{
+		ProtocolVersion: agent.ProtocolVersion,
+		ExecutionID:     generation.Run.ExecutionID,
+		RunID:           generation.Run.ID,
+		Sequence:        1,
+		Type:            "run.started",
+		OccurredAt:      time.Now().UTC(),
+		Data:            json.RawMessage(`{"service_version":"integration-test"}`),
+	}
+	inserted, err := service.RecordEvent(
+		ctx,
+		userID,
+		generation.Run.ID,
+		startedEvent,
+	)
+	if err != nil || !inserted {
+		t.Fatalf("RecordEvent() inserted=%v error=%v", inserted, err)
+	}
+	inserted, err = service.RecordEvent(
+		ctx,
+		userID,
+		generation.Run.ID,
+		startedEvent,
+	)
+	if err != nil || inserted {
+		t.Fatalf("duplicate RecordEvent() inserted=%v error=%v", inserted, err)
 	}
 	if _, err := service.Start(ctx, conversation.StartGenerationParams{
 		UserID:          userID,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/starslittle/agent/go-backend/internal/agent"
 	"github.com/starslittle/agent/go-backend/internal/auth"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
 )
@@ -175,7 +176,7 @@ func (s *Store) DeleteConversation(
 				SELECT 1
 				FROM app_core.agent_runs r
 				WHERE r.conversation_id = c.id
-					AND r.status IN ('queued', 'running')
+					AND r.status IN ('queued', 'running', 'cancel_requested')
 			)
 	`, id, userID)
 	if err != nil {
@@ -190,7 +191,7 @@ func (s *Store) DeleteConversation(
 				JOIN app_core.agent_runs r ON r.conversation_id = c.id
 				WHERE c.id = $1 AND c.user_id = $2
 					AND c.deleted_at IS NULL
-					AND r.status IN ('queued', 'running')
+					AND r.status IN ('queued', 'running', 'cancel_requested')
 			)
 		`, id, userID).Scan(&active)
 		if err != nil {
@@ -354,10 +355,20 @@ func (s *Store) StartGeneration(
 	_, err = transaction.Exec(ctx, `
 		INSERT INTO app_core.agent_runs (
 			id, conversation_id, user_message_id, assistant_message_id,
-			request_id, agent_name, status
+			request_id, execution_id, idempotency_key, agent_name,
+			protocol_version, status
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, 'running')
-	`, runID, params.ConversationID, userMessageID, assistantMessageID, params.RequestID, agentName)
+		VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, 'queued')
+	`,
+		runID,
+		params.ConversationID,
+		userMessageID,
+		assistantMessageID,
+		params.RequestID,
+		params.ExecutionID,
+		agentName,
+		params.ProtocolVersion,
+	)
 	if err != nil {
 		var pgError *pgconn.PgError
 		if errors.As(err, &pgError) && pgError.Code == "23505" {
@@ -396,12 +407,14 @@ func (s *Store) StartGeneration(
 
 	result.Run = conversation.Run{
 		ID:                 runID,
+		ExecutionID:        params.ExecutionID,
 		ConversationID:     params.ConversationID,
 		UserMessageID:      userMessageID,
 		AssistantMessageID: assistantMessageID,
 		RequestID:          params.RequestID,
 		AgentName:          agentName,
-		Status:             "running",
+		Status:             "queued",
+		ProtocolVersion:    params.ProtocolVersion,
 	}
 	if err := transaction.Commit(ctx); err != nil {
 		return conversation.Generation{}, err
@@ -522,7 +535,7 @@ func (s *Store) FinishGeneration(
 		params.AssistantMessageID,
 		params.UserID,
 		params.Content,
-		params.Status,
+		messageStatus(params.Status),
 		params.GenerationCompleted,
 	).Scan(&conversationID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -534,15 +547,19 @@ func (s *Store) FinishGeneration(
 
 	_, err = transaction.Exec(ctx, `
 		UPDATE app_core.agent_runs
-		SET status = $2,
+		SET status = CASE
+				WHEN status IN ('completed', 'cancelled', 'failed', 'timed_out')
+					THEN status
+				ELSE $2
+			END,
 			error_code = NULLIF($3, ''),
 			error_detail = NULLIF($4, ''),
 			first_token_at = COALESCE(first_token_at, $5),
-			completed_at = $6
-		WHERE id = $1 AND status IN ('queued', 'running')
+			completed_at = COALESCE(completed_at, $6)
+		WHERE id = $1
 	`,
 		params.RunID,
-		params.Status,
+		runStatus(params.Status),
 		params.ErrorCode,
 		truncateRunes(params.ErrorDetail, 1000),
 		params.FirstTokenAt,
@@ -562,6 +579,183 @@ func (s *Store) FinishGeneration(
 	return transaction.Commit(ctx)
 }
 
+func (s *Store) RecordAgentEvent(
+	ctx context.Context,
+	userID string,
+	runID string,
+	event agent.Event,
+) (bool, error) {
+	transaction, err := s.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = transaction.Rollback(ctx) }()
+
+	command, err := transaction.Exec(ctx, `
+		INSERT INTO app_core.agent_run_events (
+			run_id, execution_id, sequence, event_type, occurred_at, data
+		)
+		SELECT r.id, $3, $4, $5, $6, $7
+		FROM app_core.agent_runs r
+		JOIN app_core.conversations c ON c.id = r.conversation_id
+		WHERE r.id = $1
+			AND c.user_id = $2
+			AND r.execution_id = $3
+		ON CONFLICT (execution_id, sequence) DO NOTHING
+	`,
+		runID,
+		userID,
+		event.ExecutionID,
+		event.Sequence,
+		event.Type,
+		event.OccurredAt,
+		event.Data,
+	)
+	if err != nil {
+		return false, err
+	}
+	if command.RowsAffected() == 0 {
+		var exists bool
+		if err := transaction.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1
+				FROM app_core.agent_runs r
+				JOIN app_core.conversations c ON c.id = r.conversation_id
+				WHERE r.id = $1 AND c.user_id = $2
+					AND r.execution_id = $3
+			)
+		`, runID, userID, event.ExecutionID).Scan(&exists); err != nil {
+			return false, err
+		}
+		if !exists {
+			return false, conversation.ErrNotFound
+		}
+		return false, transaction.Commit(ctx)
+	}
+
+	status := statusForEvent(event.Type)
+	_, err = transaction.Exec(ctx, `
+		UPDATE app_core.agent_runs
+		SET last_sequence = GREATEST(last_sequence, $2),
+			status = CASE
+				WHEN status IN ('completed', 'cancelled', 'failed', 'timed_out')
+					THEN status
+				WHEN $3 = '' THEN status
+				ELSE $3
+			END,
+			service_version = COALESCE(
+				NULLIF($4::jsonb->>'service_version', ''),
+				service_version
+			),
+			actual_route = COALESCE(
+				NULLIF($4::jsonb->>'actual_route', ''),
+				actual_route
+			),
+			model_name = COALESCE(
+				NULLIF($4::jsonb->>'model_name', ''),
+				model_name
+			),
+			error_code = CASE
+				WHEN $3 IN ('failed', 'timed_out')
+					THEN NULLIF($4::jsonb->>'code', '')
+				ELSE error_code
+			END,
+			error_detail = CASE
+				WHEN $3 IN ('failed', 'timed_out')
+					THEN LEFT(COALESCE($4::jsonb->>'message', ''), 1000)
+				ELSE error_detail
+			END,
+			started_at = CASE
+				WHEN $3 = 'running' THEN LEAST(started_at, $5)
+				ELSE started_at
+			END,
+			completed_at = CASE
+				WHEN $3 IN ('completed', 'cancelled', 'failed', 'timed_out')
+					THEN COALESCE(completed_at, $5)
+				ELSE completed_at
+			END
+		WHERE id = $1
+	`, runID, event.Sequence, status, event.Data, event.OccurredAt)
+	if err != nil {
+		return false, err
+	}
+	return true, transaction.Commit(ctx)
+}
+
+func (s *Store) MarkSequenceGap(
+	ctx context.Context,
+	userID string,
+	runID string,
+	expected int64,
+	received int64,
+) error {
+	command, err := s.pool.Exec(ctx, `
+		UPDATE app_core.agent_runs r
+		SET metadata = jsonb_set(
+			metadata,
+			'{reconciliation}',
+			jsonb_build_object(
+				'required', true,
+				'expected_sequence', $3,
+				'received_sequence', $4,
+				'detected_at', NOW()
+			),
+			true
+		)
+		FROM app_core.conversations c
+		WHERE r.id = $1 AND c.id = r.conversation_id AND c.user_id = $2
+	`, runID, userID, expected, received)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() == 0 {
+		return conversation.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) RequestRunCancellation(
+	ctx context.Context,
+	userID string,
+	runID string,
+) error {
+	command, err := s.pool.Exec(ctx, `
+		UPDATE app_core.agent_runs r
+		SET status = 'cancel_requested',
+			metadata = jsonb_set(
+				metadata,
+				'{cancel_requested_at}',
+				to_jsonb(NOW()),
+				true
+			)
+		FROM app_core.conversations c
+		WHERE r.id = $1
+			AND c.id = r.conversation_id
+			AND c.user_id = $2
+			AND r.status IN ('queued', 'running', 'cancel_requested')
+	`, runID, userID)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() == 0 {
+		var exists bool
+		if err := s.pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1
+				FROM app_core.agent_runs r
+				JOIN app_core.conversations c ON c.id = r.conversation_id
+				WHERE r.id = $1 AND c.user_id = $2
+			)
+		`, runID, userID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return conversation.ErrNotFound
+		}
+	}
+	return nil
+}
+
 func (s *Store) InterruptStaleGenerations(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, `
 		WITH stale AS (
@@ -570,7 +764,7 @@ func (s *Store) InterruptStaleGenerations(ctx context.Context) error {
 				error_code = 'generation_interrupted',
 				error_detail = 'Generation did not finish before the service restarted',
 				completed_at = NOW()
-			WHERE status IN ('queued', 'running')
+			WHERE status IN ('queued', 'running', 'cancel_requested')
 			RETURNING assistant_message_id
 		)
 		UPDATE app_core.messages m
@@ -628,6 +822,39 @@ func truncateRunes(value string, max int) string {
 		return value
 	}
 	return string(runes[:max])
+}
+
+func statusForEvent(eventType string) string {
+	switch eventType {
+	case "run.started":
+		return string(agent.StatusRunning)
+	case "run.cancel_requested":
+		return string(agent.StatusCancelRequested)
+	case "run.completed":
+		return string(agent.StatusCompleted)
+	case "run.cancelled":
+		return string(agent.StatusCancelled)
+	case "run.failed":
+		return string(agent.StatusFailed)
+	case "run.timed_out":
+		return string(agent.StatusTimedOut)
+	default:
+		return ""
+	}
+}
+
+func runStatus(status string) string {
+	if status == "stopped" {
+		return string(agent.StatusCancelled)
+	}
+	return status
+}
+
+func messageStatus(status string) string {
+	if status == string(agent.StatusCancelled) || status == string(agent.StatusTimedOut) {
+		return "stopped"
+	}
+	return status
 }
 
 func newPostgresID() string {

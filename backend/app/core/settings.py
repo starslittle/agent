@@ -7,12 +7,12 @@ from urllib.parse import quote_plus
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-ENV_FILE = REPO_ROOT / ".env"
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+ENV_FILE = BACKEND_ROOT / ".env"
 
 
 class Settings(BaseSettings):
-    # 所有启动方式统一读取仓库根目录 .env；系统环境变量优先级更高。
+    # 独立 Agent Service 仅从 backend/.env（若存在）和系统环境变量读取。
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
         env_file_encoding="utf-8",
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     """
-    集中化配置入口：统一从仓库根目录 .env / 系统环境变量读取。
+    集中化配置入口：统一从 backend/.env / 系统环境变量读取。
     """
 
     # 基础与密钥
@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     TAVILY_API_KEY: str = ""
     SENIVERSE_API_KEY: str = ""
     INTERNAL_AGENT_SECRET: str = ""
+    AGENT_SERVICE_VERSION: str = "dev"
+    AGENT_PROTOCOL_VERSION: int = 1
+    AGENT_RUNTIME_RETENTION_SECONDS: int = 1800
+    AGENT_MAX_REQUEST_BYTES: int = 1048576
+    APP_TIMEZONE: str = "Asia/Shanghai"
 
     # RAG / 模型相关（默认值与现有代码保持一致）
     LLM_MODEL_NAME: str = "deepseek-v4-flash"

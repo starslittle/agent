@@ -38,12 +38,15 @@ type Message struct {
 
 type Run struct {
 	ID                 string
+	ExecutionID        string
 	ConversationID     string
 	UserMessageID      string
 	AssistantMessageID string
 	RequestID          string
 	AgentName          string
 	Status             string
+	ProtocolVersion    int
+	LastSequence       int64
 }
 
 type Generation struct {
@@ -72,8 +75,10 @@ type StartGenerationParams struct {
 	ConversationID  string
 	ClientMessageID string
 	RequestID       string
+	ExecutionID     string
 	Content         string
 	AgentName       string
+	ProtocolVersion int
 }
 
 type FinishGenerationParams struct {

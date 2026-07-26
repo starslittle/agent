@@ -39,3 +39,34 @@ class GraphState(TypedDict):
     metadata: Dict[str, Any]            # 元数据（包含路由决策信息等）
     intermediate_steps: List[tuple[str, str]]  # 中间步骤
     error: Optional[str]                # 错误信息
+
+
+def create_graph_state(
+    query: str,
+    chat_history: list | None = None,
+    mode_hint: str | None = None,
+    force_route: str | None = None,
+) -> GraphState:
+    """Create the lightweight runtime state without importing compiled nodes."""
+    return {
+        "query": query,
+        "chat_history": chat_history or [],
+        "mode_hint": mode_hint,
+        "force_route": force_route,
+        "route": "",
+        "context_docs": [],
+        "context": "",
+        "tool_results": {},
+        "final_answer": "",
+        "output": "",
+        "metadata": {},
+        "intermediate_steps": [],
+        "error": None,
+        "plan_tasks": [],
+        "plan_completed": [],
+        "plan_current": None,
+        "plan_notes": [],
+        "plan_done": False,
+        "plan_iteration": 0,
+        "plan_max_iterations": 6,
+    }

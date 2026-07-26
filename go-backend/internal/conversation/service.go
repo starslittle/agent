@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/starslittle/agent/go-backend/internal/agent"
 )
 
 type Service struct {
@@ -113,6 +115,9 @@ func (s *Service) Start(
 	if params.RequestID == "" {
 		params.RequestID = newID()
 	}
+	if params.ExecutionID == "" {
+		params.ExecutionID = "exec_" + strings.ReplaceAll(newID(), "-", "")
+	}
 	return s.store.StartGeneration(ctx, params)
 }
 
@@ -141,6 +146,33 @@ func (s *Service) Finish(
 		params.GenerationCompleted = s.now().UTC()
 	}
 	return s.store.FinishGeneration(ctx, params)
+}
+
+func (s *Service) RecordEvent(
+	ctx context.Context,
+	userID string,
+	runID string,
+	event agent.Event,
+) (bool, error) {
+	return s.store.RecordAgentEvent(ctx, userID, runID, event)
+}
+
+func (s *Service) MarkSequenceGap(
+	ctx context.Context,
+	userID string,
+	runID string,
+	expected int64,
+	received int64,
+) error {
+	return s.store.MarkSequenceGap(ctx, userID, runID, expected, received)
+}
+
+func (s *Service) RequestCancellation(
+	ctx context.Context,
+	userID string,
+	runID string,
+) error {
+	return s.store.RequestRunCancellation(ctx, userID, runID)
 }
 
 func (s *Service) Recover(ctx context.Context) error {

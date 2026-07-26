@@ -26,6 +26,10 @@ type Config struct {
 	CookieSecure          bool
 	SessionTTL            time.Duration
 	InternalAgentSecret   string
+	AgentProtocolMode     string
+	AgentRunDeadline      time.Duration
+	AgentCancelTimeout    time.Duration
+	AgentReconcileTimeout time.Duration
 	MaxRequestBytes       int64
 	UpstreamHeaderTimeout time.Duration
 	ShutdownTimeout       time.Duration
@@ -43,6 +47,10 @@ func Load() (Config, error) {
 		CookieSecure:          strings.EqualFold(appEnv, "production"),
 		SessionTTL:            7 * 24 * time.Hour,
 		InternalAgentSecret:   strings.TrimSpace(os.Getenv("INTERNAL_AGENT_SECRET")),
+		AgentProtocolMode:     strings.ToLower(envOr("AGENT_PROTOCOL_MODE", "legacy")),
+		AgentRunDeadline:      5 * time.Minute,
+		AgentCancelTimeout:    5 * time.Second,
+		AgentReconcileTimeout: 5 * time.Second,
 		MaxRequestBytes:       defaultMaxRequestBytes,
 		UpstreamHeaderTimeout: 30 * time.Second,
 		ShutdownTimeout:       10 * time.Second,
@@ -81,6 +89,24 @@ func Load() (Config, error) {
 	if cfg.SessionTTL, err = durationOr("SESSION_TTL", cfg.SessionTTL); err != nil {
 		return Config{}, err
 	}
+	if cfg.AgentRunDeadline, err = durationOr(
+		"AGENT_RUN_DEADLINE",
+		cfg.AgentRunDeadline,
+	); err != nil {
+		return Config{}, err
+	}
+	if cfg.AgentCancelTimeout, err = durationOr(
+		"AGENT_CANCEL_TIMEOUT",
+		cfg.AgentCancelTimeout,
+	); err != nil {
+		return Config{}, err
+	}
+	if cfg.AgentReconcileTimeout, err = durationOr(
+		"AGENT_RECONCILE_TIMEOUT",
+		cfg.AgentReconcileTimeout,
+	); err != nil {
+		return Config{}, err
+	}
 
 	if raw := strings.TrimSpace(os.Getenv("COOKIE_SECURE")); raw != "" {
 		cfg.CookieSecure, err = strconv.ParseBool(raw)
@@ -98,6 +124,9 @@ func Load() (Config, error) {
 	}
 	if len(cfg.InternalAgentSecret) < 32 {
 		return Config{}, fmt.Errorf("INTERNAL_AGENT_SECRET must contain at least 32 characters")
+	}
+	if cfg.AgentProtocolMode != "legacy" && cfg.AgentProtocolMode != "v1" {
+		return Config{}, fmt.Errorf("AGENT_PROTOCOL_MODE must be legacy or v1")
 	}
 	if strings.EqualFold(cfg.AppEnv, "production") {
 		if len(cfg.PublicOrigins) == 0 {

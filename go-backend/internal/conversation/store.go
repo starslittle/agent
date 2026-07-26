@@ -3,6 +3,8 @@ package conversation
 import (
 	"context"
 	"errors"
+
+	"github.com/starslittle/agent/go-backend/internal/agent"
 )
 
 var (
@@ -23,5 +25,8 @@ type Store interface {
 	LoadHistory(context.Context, string, string, int, int) ([]Message, error)
 	CheckpointGeneration(context.Context, string, string, string) error
 	FinishGeneration(context.Context, FinishGenerationParams) error
+	RecordAgentEvent(context.Context, string, string, agent.Event) (bool, error)
+	MarkSequenceGap(context.Context, string, string, int64, int64) error
+	RequestRunCancellation(context.Context, string, string) error
 	InterruptStaleGenerations(context.Context) error
 }

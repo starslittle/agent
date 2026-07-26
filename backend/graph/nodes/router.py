@@ -1,5 +1,6 @@
 """路由节点 - 意图识别和模式路由"""
 
+import asyncio
 from typing import Dict, Any
 from graph.state import GraphState
 from app.api.intent_router import classify_and_route
@@ -39,7 +40,13 @@ async def router_node(state: GraphState) -> Dict[str, Any]:
             }
 
         # 使用现有的意图路由器
-        routing_result = classify_and_route(query, mode_hint)
+        # Legacy classifier is synchronous; isolate it so Agent cancellation and
+        # health/status endpoints remain responsive while provider I/O is active.
+        routing_result = await asyncio.to_thread(
+            classify_and_route,
+            query,
+            mode_hint,
+        )
         prompt_versions = list(routing_result.pop("_prompt_versions", []))
 
         route = routing_result.get("agent_name", "default_llm_agent")

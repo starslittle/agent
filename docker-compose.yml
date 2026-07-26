@@ -36,43 +36,34 @@ services:
 
   python:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: qidian-python
     expose:
       - "8000"
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-production}
       PORT: "8000"
-      POSTGRES_DB: ${POSTGRES_DB:-agent_db}
-      POSTGRES_USER: ${POSTGRES_USER:-qidian_agent}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?Set DASHSCOPE_API_KEY in .env}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       SENIVERSE_API_KEY: ${SENIVERSE_API_KEY:-}
       INTERNAL_AGENT_SECRET: ${INTERNAL_AGENT_SECRET:?Set INTERNAL_AGENT_SECRET in .env}
+      AGENT_SERVICE_VERSION: ${AGENT_SERVICE_VERSION:-local}
+      AGENT_RUNTIME_RETENTION_SECONDS: ${AGENT_RUNTIME_RETENTION_SECONDS:-1800}
       LLM_MODEL_NAME: ${LLM_MODEL_NAME:-deepseek-v4-flash}
-      REDIS_URL: redis://redis:6379/0
       HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
     dns:
       - 223.5.5.5
     volumes:
-      - ./backend/data:/app/backend/data
-      - ./backend/storage:/app/backend/storage
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      - ./backend/data:/app/data
+      - ./backend/storage:/app/storage
     healthcheck:
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/internal/health', timeout=3)",
         ]
       interval: 15s
       timeout: 5s

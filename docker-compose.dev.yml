@@ -32,6 +32,10 @@ services:
       COOKIE_SECURE: "false"
       SESSION_TTL: ${SESSION_TTL:-168h}
       INTERNAL_AGENT_SECRET: ${INTERNAL_AGENT_SECRET:-development-only-agent-secret-change-me}
+      AGENT_PROTOCOL_MODE: ${AGENT_PROTOCOL_MODE:-legacy}
+      AGENT_RUN_DEADLINE: ${AGENT_RUN_DEADLINE:-5m}
+      AGENT_CANCEL_TIMEOUT: ${AGENT_CANCEL_TIMEOUT:-5s}
+      AGENT_RECONCILE_TIMEOUT: ${AGENT_RECONCILE_TIMEOUT:-5s}
       MAX_REQUEST_BYTES: ${MAX_REQUEST_BYTES:-1048576}
       UPSTREAM_HEADER_TIMEOUT: ${UPSTREAM_HEADER_TIMEOUT:-30s}
       SHUTDOWN_TIMEOUT: ${SHUTDOWN_TIMEOUT:-10s}
@@ -54,42 +58,33 @@ services:
 
   python:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend
+      context: ./backend
+      dockerfile: Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-development}
       PORT: "8000"
-      POSTGRES_DB: ${POSTGRES_DB:-agent_db}
-      POSTGRES_USER: ${POSTGRES_USER:-qidian_agent}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?Set DASHSCOPE_API_KEY in .env}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       SENIVERSE_API_KEY: ${SENIVERSE_API_KEY:-}
       INTERNAL_AGENT_SECRET: ${INTERNAL_AGENT_SECRET:-development-only-agent-secret-change-me}
+      AGENT_SERVICE_VERSION: ${AGENT_SERVICE_VERSION:-dev}
+      AGENT_RUNTIME_RETENTION_SECONDS: ${AGENT_RUNTIME_RETENTION_SECONDS:-1800}
       LLM_MODEL_NAME: ${LLM_MODEL_NAME:-deepseek-v4-flash}
-      REDIS_URL: redis://redis:6379/0
       HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
     dns:
       - 223.5.5.5
     volumes:
-      - ./backend:/app/backend
+      - ./backend:/app
     expose:
       - "8000"
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
     healthcheck:
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/internal/health', timeout=3)",
         ]
       interval: 15s
       timeout: 5s
