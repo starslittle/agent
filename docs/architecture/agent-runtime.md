@@ -12,9 +12,9 @@
 
 本文档定义启点 Agent 下一阶段唯一的 Agent Runtime 目标架构。
 
-- `PRODUCT_POSITIONING.md` 定义产品为什么存在、为谁服务和先做什么。
+- [`产品定位`](../product/positioning.md) 定义产品为什么存在、为谁服务和先做什么。
 - 本文档定义 Agent Runtime 如何支撑该产品。
-- `PYTHON_TO_GO_MIGRATION.md` 保留历史决策、协议设计和迁移背景；当其中的 Python
+- [`Go/Python 迁移背景`](go-python-migration-history.md) 保留历史决策、协议设计和迁移背景；当其中的 Python
   内部执行路径与本文档冲突时，以本文档为准。
 - HTTP、数据库迁移和部署文档继续描述各自领域，但不得重新定义第二套 Agent
   编排路径。
@@ -97,7 +97,7 @@ V1 Agent Run API ────┘
 
 ### 3.1 产品优先
 
-架构首先服务 `PRODUCT_POSITIONING.md` 中的产品路线：
+架构首先服务 [`产品定位`](../product/positioning.md) 中的产品路线：
 
 ```text
 命理与性格探索
