@@ -10,6 +10,13 @@
 - API 速览
 - 部署与持久化
 
+## 架构文档
+
+- [产品定位](PRODUCT_POSITIONING.md)：产品目标、MVP 与长期闭环。
+- [Agent Runtime 目标架构](AGENT_RUNTIME_ARCHITECTURE.md)：本轮全面迁移的唯一
+  架构基线、模块边界、迁移阶段和验收标准。
+- [Go/Python 迁移背景](PYTHON_TO_GO_MIGRATION.md)：历史决策、协议设计和迁移记录。
+
 ## 项目概述
 - 名称：奇点AI Agent
 - 一句话：简单问题直答，复杂任务智能分流（命理/研究/RAG），前后端一体化、流式反馈。
