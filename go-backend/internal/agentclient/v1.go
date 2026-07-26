@@ -47,6 +47,25 @@ func (c *V1Client) Start(
 	ctx context.Context,
 	run agent.RunRequest,
 ) (agent.EventStream, error) {
+	return c.start(ctx, run, 0)
+}
+
+func (c *V1Client) Resume(
+	ctx context.Context,
+	run agent.RunRequest,
+	startingAfter int64,
+) (agent.EventStream, error) {
+	if startingAfter < 0 {
+		return nil, errors.New("starting_after cannot be negative")
+	}
+	return c.start(ctx, run, startingAfter)
+}
+
+func (c *V1Client) start(
+	ctx context.Context,
+	run agent.RunRequest,
+	startingAfter int64,
+) (agent.EventStream, error) {
 	if err := run.Validate(); err != nil {
 		return nil, err
 	}
@@ -63,6 +82,11 @@ func (c *V1Client) Start(
 	)
 	if err != nil {
 		return nil, err
+	}
+	if startingAfter > 0 {
+		query := request.URL.Query()
+		query.Set("starting_after", strconv.FormatInt(startingAfter, 10))
+		request.URL.RawQuery = query.Encode()
 	}
 	request.Header.Set("Accept", "text/event-stream")
 	request.Header.Set("Content-Type", "application/json")
@@ -84,6 +108,7 @@ func (c *V1Client) Start(
 		body:        response.Body,
 		reader:      bufio.NewReader(response.Body),
 		executionID: run.ExecutionID,
+		last:        startingAfter,
 	}, nil
 }
 
@@ -228,8 +253,7 @@ func (s *v1EventStream) Next() (agent.Event, error) {
 		if event.Sequence <= s.last {
 			continue
 		}
-		if s.last > 0 && event.Sequence != s.last+1 {
-			s.last = event.Sequence
+		if event.Sequence != s.last+1 {
 			return event, agent.ErrSequenceGap
 		}
 		s.last = event.Sequence

@@ -167,6 +167,20 @@ func (s *Service) MarkSequenceGap(
 	return s.store.MarkSequenceGap(ctx, userID, runID, expected, received)
 }
 
+func (s *Service) MarkSequenceReconciled(
+	ctx context.Context,
+	userID string,
+	runID string,
+	resolvedSequence int64,
+) error {
+	return s.store.MarkSequenceReconciled(
+		ctx,
+		userID,
+		runID,
+		resolvedSequence,
+	)
+}
+
 func (s *Service) RequestCancellation(
 	ctx context.Context,
 	userID string,
