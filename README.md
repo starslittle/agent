@@ -39,6 +39,17 @@ docker compose -f docker-compose.dev.yml up --build
 Vite 热更新，日常修改不需要重新构建镜像；只有依赖、Dockerfile 或生产镜像
 内容变化时才需要重新构建。
 
+开发环境还提供只监听本机的 Adminer 数据库查看器：
+
+- 地址：`http://127.0.0.1:8082`
+- 系统：`PostgreSQL`
+- 服务器：`postgres`
+- 用户名、密码、数据库：分别使用 `.env` 中的 `POSTGRES_USER`、
+  `POSTGRES_PASSWORD`、`POSTGRES_DB`
+
+端口可通过 `ADMINER_PORT` 调整。Adminer 只存在于开发 Compose，不包含在
+生产部署中。
+
 也可以手动启动各服务：
 
 1) 安装依赖（建议 Python 3.11+）
