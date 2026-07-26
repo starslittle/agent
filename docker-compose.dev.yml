@@ -69,7 +69,7 @@ services:
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       SENIVERSE_API_KEY: ${SENIVERSE_API_KEY:-}
       INTERNAL_AGENT_SECRET: ${INTERNAL_AGENT_SECRET:-development-only-agent-secret-change-me}
-      LLM_MODEL_NAME: ${LLM_MODEL_NAME:-deepseek-v3.2}
+      LLM_MODEL_NAME: ${LLM_MODEL_NAME:-deepseek-v4-flash}
       REDIS_URL: redis://redis:6379/0
       HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
     dns:
