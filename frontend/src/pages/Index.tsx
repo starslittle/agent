@@ -29,6 +29,8 @@ const Index = () => {
   const [messagesLoading, setMessagesLoading] = useState(Boolean(conversationId));
   const [earlierCursor, setEarlierCursor] = useState<number | null>(null);
   const [earlierLoading, setEarlierLoading] = useState(false);
+  const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
+  const [draftKey, setDraftKey] = useState(0);
 
   const refreshConversations = useCallback(async (query = searchQuery) => {
     try {
@@ -56,6 +58,7 @@ const Index = () => {
       setActiveConversation(null);
       setInitialMessages([]);
       setEarlierCursor(null);
+      setLoadedConversationId(null);
       setMessagesLoading(false);
       return () => {
         cancelled = true;
@@ -63,6 +66,7 @@ const Index = () => {
     }
 
     setMessagesLoading(true);
+    setLoadedConversationId(null);
     const refreshStreamingMessages = async (attempt: number) => {
       if (cancelled || attempt > 6) return;
       try {
@@ -89,6 +93,7 @@ const Index = () => {
       setActiveConversation(conversation);
       setInitialMessages(messageResponse.items);
       setEarlierCursor(messageResponse.next_before ?? null);
+      setLoadedConversationId(conversationId);
       if (messageResponse.items.some((message) => message.status === "streaming")) {
         retryTimer = window.setTimeout(
           () => void refreshStreamingMessages(1),
@@ -97,6 +102,7 @@ const Index = () => {
       }
     }).catch((error) => {
       if (cancelled) return;
+      setLoadedConversationId(null);
       toast.error((error as Error).message || "无法加载这个会话");
       navigate("/", { replace: true });
     }).finally(() => {
@@ -128,6 +134,16 @@ const Index = () => {
       setEarlierLoading(false);
     }
   }, [conversationId, earlierCursor, earlierLoading]);
+
+  const handleNewChat = useCallback(() => {
+    setActiveConversation(null);
+    setInitialMessages([]);
+    setEarlierCursor(null);
+    setLoadedConversationId(null);
+    setMessagesLoading(false);
+    setDraftKey((current) => current + 1);
+    navigate("/");
+  }, [navigate]);
 
   const handleConversationCreated = useCallback((conversation: Conversation) => {
     setConversations((current) => [
@@ -161,19 +177,26 @@ const Index = () => {
         current.filter((item) => item.id !== conversation.id),
       );
       if (conversation.id === conversationId) {
-        navigate("/", { replace: true });
+        handleNewChat();
       }
       toast.success("会话已删除");
     } catch (error) {
       toast.error((error as Error).message || "删除失败");
     }
-  }, [conversationId, csrfToken, navigate]);
+  }, [conversationId, csrfToken, handleNewChat]);
+
+  const displayedConversation = conversationId &&
+    activeConversation?.id === conversationId
+    ? activeConversation
+    : null;
+  const isConversationLoading = Boolean(conversationId) &&
+    (messagesLoading || loadedConversationId !== conversationId);
 
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full overflow-hidden bg-[#f5f7fb] dark:bg-[#080a13]">
         <ChatSidebar
-          onNewChat={() => navigate("/")}
+          onNewChat={handleNewChat}
           conversations={conversations}
           activeConversationId={conversationId}
           searchQuery={searchQuery}
@@ -192,7 +215,7 @@ const Index = () => {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h1 className="truncate text-sm font-semibold sm:text-base">
-                      {activeConversation?.title || "新的对话"}
+                      {displayedConversation?.title || "新的对话"}
                     </h1>
                     <span className="hidden items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 sm:inline-flex dark:text-emerald-300">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -235,16 +258,20 @@ const Index = () => {
               <div className="absolute left-1/2 top-[38%] h-[24rem] w-[38rem] -translate-x-1/2 -translate-y-1/2 rotate-[11deg] rounded-[50%] border border-blue-300/15 dark:border-blue-400/[0.06]" />
               <div className="absolute left-1/2 top-[35%] h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-300/10 blur-3xl dark:bg-violet-600/[0.06]" />
             </div>
-            {messagesLoading ? (
+            {isConversationLoading ? (
               <div className="relative z-10 flex h-full items-center justify-center text-muted-foreground">
                 <LoaderCircle className="h-5 w-5 animate-spin" />
                 <span className="ml-2 text-xs">正在恢复会话</span>
               </div>
             ) : (
               <ChatContainer
-                key={conversationId || "new-conversation"}
+                key={conversationId || `new-conversation-${draftKey}`}
                 conversationId={conversationId}
-                initialMessages={initialMessages}
+                initialMessages={
+                  conversationId && loadedConversationId === conversationId
+                    ? initialMessages
+                    : []
+                }
                 onConversationCreated={handleConversationCreated}
                 onConversationChanged={() => void refreshConversations()}
                 hasEarlierMessages={earlierCursor !== null}

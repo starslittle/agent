@@ -70,6 +70,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const isFollowingLatestRef = useRef(true);
   const lastScrollTopRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     setMessages((current) => {
@@ -152,7 +154,15 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   }, [setFollowingLatest]);
 
   const [isGenerating, setIsGenerating] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    };
+  }, []);
 
   const handleStop = useCallback(() => {
     if (abortControllerRef.current) {
@@ -284,12 +294,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           : m
       ));
     } finally {
-      setIsGenerating(false);
       abortControllerRef.current = null;
-      if (createdConversation) {
-        onConversationCreated?.(createdConversation);
+      if (mountedRef.current) {
+        setIsGenerating(false);
+        if (createdConversation) {
+          onConversationCreated?.(createdConversation);
+        }
+        onConversationChanged?.();
       }
-      onConversationChanged?.();
     }
   }, [
     conversationId,
