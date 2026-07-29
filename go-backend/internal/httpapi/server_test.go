@@ -136,7 +136,7 @@ func TestQueryStreamValidatesRequest(t *testing.T) {
 
 func TestHealthAndReadiness(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/healthz" {
+		if r.URL.Path != "/internal/ready" {
 			http.NotFound(w, r)
 			return
 		}

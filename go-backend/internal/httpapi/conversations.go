@@ -306,6 +306,96 @@ func (h *conversationHTTP) runDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
+func (h *conversationHTTP) cancelRun(w http.ResponseWriter, r *http.Request) {
+	session, ok := sessionFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required")
+		return
+	}
+	runID := r.PathValue("runID")
+	detail, err := h.service.RunDetail(
+		r.Context(),
+		session.User.ID,
+		runID,
+	)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	if runStatusTerminal(detail.Run.Status) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"run_id": runID,
+			"status": detail.Run.Status,
+		})
+		return
+	}
+	if detail.Run.ProtocolVersion != agent.ProtocolVersion {
+		writeJSONError(w, http.StatusConflict, "run_cancel_not_supported")
+		return
+	}
+
+	cancelCtx, cancel := context.WithTimeout(r.Context(), h.cancelTimeout)
+	defer cancel()
+	if err := h.service.RequestCancellation(
+		cancelCtx,
+		session.User.ID,
+		runID,
+	); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	if _, err := h.v1Client.Cancel(
+		cancelCtx,
+		session.User.ID,
+		r.Header.Get(requestIDHeader),
+		detail.Run.ExecutionID,
+	); err != nil {
+		h.logger.Error(
+			"cancel Agent Run",
+			"run_id", runID,
+			"error", err,
+		)
+		writeJSONError(w, http.StatusBadGateway, "agent_cancel_failed")
+		return
+	}
+
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		current, err := h.service.RunDetail(
+			cancelCtx,
+			session.User.ID,
+			runID,
+		)
+		if err != nil {
+			h.writeError(w, err)
+			return
+		}
+		if runStatusTerminal(current.Run.Status) {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"run_id": runID,
+				"status": current.Run.Status,
+			})
+			return
+		}
+		select {
+		case <-cancelCtx.Done():
+			writeJSONError(w, http.StatusGatewayTimeout, "agent_cancel_timeout")
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func runStatusTerminal(status string) bool {
+	switch status {
+	case "completed", "cancelled", "failed", "timed_out":
+		return true
+	default:
+		return false
+	}
+}
+
 func (h *conversationHTTP) stream(w http.ResponseWriter, r *http.Request) {
 	session, ok := sessionFromContext(r.Context())
 	if !ok {
@@ -433,6 +523,7 @@ func (h *conversationHTTP) stream(w http.ResponseWriter, r *http.Request) {
 		"user_message_id":      generation.UserMessage.ID,
 		"assistant_message_id": generation.Assistant.ID,
 		"run_id":               generation.Run.ID,
+		"protocol_version":     generation.Run.ProtocolVersion,
 		"title":                generation.Conversation.Title,
 	})
 	flusher.Flush()
@@ -677,6 +768,7 @@ func (h *conversationHTTP) streamV1(
 		"assistant_message_id": generation.Assistant.ID,
 		"run_id":               generation.Run.ID,
 		"execution_id":         generation.Run.ExecutionID,
+		"protocol_version":     generation.Run.ProtocolVersion,
 		"title":                generation.Conversation.Title,
 	})
 	flusher.Flush()
@@ -700,8 +792,15 @@ func (h *conversationHTTP) streamV1(
 			return
 		}
 		if r.Context().Err() != nil {
-			terminalStatus = string(agent.StatusCancelled)
-			terminalCode = "client_cancelled"
+			h.continueV1Detached(
+				userID,
+				generation,
+				runRequest,
+				answer.String(),
+				firstTokenAt,
+				lastSequence,
+			)
+			return
 		}
 		h.cancelV1Run(
 			r,
@@ -719,8 +818,6 @@ func (h *conversationHTTP) streamV1(
 		event, nextErr := stream.Next()
 		if nextErr != nil && !errors.Is(nextErr, agent.ErrSequenceGap) {
 			if r.Context().Err() != nil {
-				terminalStatus = string(agent.StatusCancelled)
-				terminalCode = "client_cancelled"
 				return
 			}
 			if reconciliationTarget > 0 {
@@ -994,6 +1091,172 @@ func (h *conversationHTTP) streamV1(
 			}
 		}
 	}
+}
+
+func (h *conversationHTTP) continueV1Detached(
+	userID string,
+	generation conversation.Generation,
+	runRequest agent.RunRequest,
+	content string,
+	firstTokenAt *time.Time,
+	lastSequence int64,
+) {
+	go func() {
+		timeout := h.runDeadline
+		if timeout <= 0 {
+			timeout = 5 * time.Minute
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		stream, err := h.v1Client.Resume(ctx, runRequest, lastSequence)
+		if err != nil {
+			h.finishDetached(
+				userID,
+				generation,
+				content,
+				"failed",
+				"detached_resume_failed",
+				err.Error(),
+				firstTokenAt,
+			)
+			return
+		}
+		defer func() { _ = stream.Close() }()
+
+		var answer strings.Builder
+		answer.WriteString(content)
+		for {
+			event, nextErr := stream.Next()
+			if nextErr != nil {
+				code := "detached_stream_closed"
+				detail := ""
+				if !agent.IsStreamDone(nextErr) {
+					detail = nextErr.Error()
+				}
+				if errors.Is(nextErr, agent.ErrSequenceGap) {
+					code = "agent_event_sequence_gap"
+				}
+				h.finishDetached(
+					userID,
+					generation,
+					answer.String(),
+					"failed",
+					code,
+					detail,
+					firstTokenAt,
+				)
+				return
+			}
+			if event.Sequence <= lastSequence {
+				continue
+			}
+			if event.Sequence != lastSequence+1 {
+				h.finishDetached(
+					userID,
+					generation,
+					answer.String(),
+					"failed",
+					"agent_event_sequence_gap",
+					fmt.Sprintf(
+						"expected sequence %d, received %d",
+						lastSequence+1,
+						event.Sequence,
+					),
+					firstTokenAt,
+				)
+				return
+			}
+			lastSequence = event.Sequence
+
+			if agenttrace.ShouldPersist(event.Type) {
+				storedEvent := event
+				storedEvent.Data = agenttrace.Sanitize(event.Data)
+				if _, err := h.service.RecordEvent(
+					ctx,
+					userID,
+					generation.Run.ID,
+					storedEvent,
+				); err != nil {
+					h.finishDetached(
+						userID,
+						generation,
+						answer.String(),
+						"failed",
+						"event_persistence_failed",
+						err.Error(),
+						firstTokenAt,
+					)
+					return
+				}
+			}
+
+			var data map[string]any
+			_ = json.Unmarshal(event.Data, &data)
+			switch event.Type {
+			case "answer.delta":
+				text, _ := data["text"].(string)
+				if text != "" {
+					answer.WriteString(text)
+					if firstTokenAt == nil {
+						now := time.Now().UTC()
+						firstTokenAt = &now
+					}
+				}
+			case "run.completed":
+				if strings.TrimSpace(answer.String()) == "" {
+					h.finishDetached(
+						userID,
+						generation,
+						"",
+						"failed",
+						"empty_agent_response",
+						"Python Agent completed without an answer",
+						firstTokenAt,
+					)
+					return
+				}
+				_ = h.finishGeneration(
+					userID,
+					generation,
+					answer.String(),
+					"completed",
+					"",
+					"",
+					firstTokenAt,
+				)
+				return
+			case "run.cancelled":
+				_ = h.finishGeneration(
+					userID,
+					generation,
+					answer.String(),
+					string(agent.StatusCancelled),
+					"generation_cancelled",
+					"",
+					firstTokenAt,
+				)
+				return
+			case "run.failed", "run.timed_out":
+				code, _ := data["code"].(string)
+				message, _ := data["message"].(string)
+				status := "failed"
+				if event.Type == "run.timed_out" {
+					status = string(agent.StatusTimedOut)
+				}
+				_ = h.finishGeneration(
+					userID,
+					generation,
+					answer.String(),
+					status,
+					code,
+					message,
+					firstTokenAt,
+				)
+				return
+			}
+		}
+	}()
 }
 
 func (h *conversationHTTP) abortV1SequenceGap(

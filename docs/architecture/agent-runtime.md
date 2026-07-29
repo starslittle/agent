@@ -1,10 +1,10 @@
 # 启点 Agent Runtime 目标架构
 
-> 版本：v1.0-draft
+> 版本：v1.1
 >
-> 状态：本轮 Python Agent 全面迁移的目标架构基线
+> 状态：已实现的 Agent Runtime 架构基线；生产启用等待人工审核
 >
-> 最后更新：2026-07-26
+> 最后更新：2026-07-29
 >
 > 适用范围：Go Control Plane、Python Agent Service、Agent 工作流、模型、能力、运行状态与观测
 
@@ -16,6 +16,8 @@
 - 本文档定义 Agent Runtime 如何支撑该产品。
 - [`Go/Python 迁移背景`](go-python-migration-history.md) 保留历史决策、协议设计和迁移背景；当其中的 Python
   内部执行路径与本文档冲突时，以本文档为准。
+- [`迁移状态`](agent-runtime-migration-progress.md) 记录当前实现、验证结果、人工
+  审核项和产品后续，不反向修改本文定义的目标边界。
 - HTTP、数据库迁移和部署文档继续描述各自领域，但不得重新定义第二套 Agent
   编排路径。
 
@@ -293,7 +295,8 @@ Legacy 链路不得：
 - HMAC、timestamp、nonce；
 - Pydantic 校验；
 - Legacy/V1 协议转换；
-- 将用户断开转换为取消信号。
+- 区分用户显式取消、浏览器 detached 和 Go/Python 内部流断开；
+- 只有显式取消或 grace period 到期后的产品策略才能转换为 CancellationToken。
 
 禁止：
 
@@ -312,6 +315,9 @@ Legacy 链路不得：
 - deadline；
 - 取消；
 - 事件序号；
+- Runtime execution record；
+- 持久 Runtime Event Outbox；
+- execution lease 与 fencing token；
 - Checkpoint thread_id；
 - 运行保留与清理；
 - 并发额度；
@@ -774,14 +780,43 @@ Python 使用独立 schema 或独立数据库账号：
 
 ```text
 agent_runtime
+├── runtime_executions
+├── runtime_events
 ├── LangGraph checkpoints
 ├── checkpoint writes
-├── Runtime execution lease（需要多副本时）
 └── Runtime artifact staging metadata（如需要）
 ```
 
 Checkpointer 的 `thread_id` 使用 `execution_id`，而不是把整个用户会话作为永久
 Agent Memory。Go 每次提供可信 Chat History。
+
+`runtime_executions` 是 Python 的运行协调记录，至少保存：
+
+- execution_id、run_id 和幂等请求摘要；
+- Runtime 状态、deadline 和 last_sequence；
+- owner_id、lease_epoch 和 lease_expires_at；
+- Graph/Workflow 版本；
+- 创建、开始、完成和清理时间。
+
+`runtime_events` 是短期持久 Runtime Event Outbox。Run Coordinator 必须先按
+`execution_id + sequence` 持久写入事件，再允许 SSE 发布。它是 Python
+`starting_after` 的跨进程、跨副本回放来源，不是用户长期业务历史。
+
+Go 的 `app_core.agent_run_events` 仍是产品侧长期事件事实源。Go 接收 Python 事件后
+继续幂等持久化；Python Outbox 在 Run terminal 且超过运维保留期后清理。两者职责
+不同，不允许依赖 Redis 替代任一持久记录。
+
+多副本通过 PostgreSQL 原子 lease 和单调递增 `lease_epoch` 获得执行所有权。执行
+副本在写 Checkpoint、Runtime Event 或执行带副作用 Capability 前必须校验 fencing
+token。Redis 可以用于通知和降低竞争，但不决定最终所有权。
+
+恢复规则：
+
+1. 已存在 execution_id 且请求摘要不同，返回幂等冲突；
+2. 已存在且 lease 有效，续接同一执行并从 Outbox 回放；
+3. lease 过期后，新副本使用更高 lease_epoch 接管并从 Checkpoint 恢复；
+4. 无法证明副作用可安全恢复时，发布 `runtime_recovery_failed` 并失败关闭；
+5. 禁止为了“继续运行”从头盲目重跑非幂等 Tool。
 
 ### 13.3 Redis
 
@@ -872,14 +907,41 @@ Model Gateway 统一归一化：
 - retrieval_count；
 - Provider 和模型版本。
 
+### 14.5 Run Provenance
+
+每次 Run 在执行所选 Workflow 前生成并封存不可变 `RunProvenance`：
+
+```python
+class RunProvenance(BaseModel):
+    runtime_version: str
+    graph_version: str
+    workflow_name: str
+    workflow_version: str
+    agent_spec_hash: str
+    prompt_bundle_hashes: dict[str, str]
+    model_profile: str
+    model_provider: str
+    model_name: str
+    model_revision: str | None
+    capability_versions: dict[str, str]
+```
+
+`run.started` 携带 Runtime、Root Graph 和 AgentSpec 等路由前即可确定的摘要。
+Root Graph 选定 Workflow 后，`route.selected` 携带完整 Provenance，并且必须发生
+在第一次 Workflow 模型、检索或 Tool 副作用之前。`prompt.used` 记录实际调用使用
+的 Prompt hash。Go 将需要长期查询的字段投影到 Run、Prompt Artifact 和 Span。
+Provenance 封存后不允许因为热更新配置而改变；新配置只影响新 Run。
+
 ## 15. 取消、超时、重试与幂等
 
 ### 15.1 取消链
 
+断开传输连接不等于用户表达了取消意图。必须区分：
+
 ```text
-浏览器断开/用户停止
-→ Go Context Cancel
-→ DELETE Python Execution 或关闭流
+用户显式点击停止
+→ Go 发起 Cancel
+→ DELETE Python Execution
 → Run Coordinator 设置 CancellationToken
 → LangGraph 停止调度后续节点
 → Model Gateway 取消网络流
@@ -887,6 +949,27 @@ Model Gateway 统一归一化：
 → Worker 终止或撤销任务
 → 发布 run.cancelled
 ```
+
+```text
+浏览器 SSE 意外断开
+→ Go 将客户端标记为 detached
+→ 不立即把 Run 解释为 cancelled
+→ 在可配置 grace period 内允许按已确认游标重新附着
+→ grace period 到期后按产品策略继续后台完成或发起 Cancel
+```
+
+```text
+Go ↔ Python 内部事件流断开或发现 sequence gap
+→ Go 保留已确认 last_sequence
+→ 使用同一 execution_id 和 starting_after 重连
+→ Python 先从持久 Runtime Event Outbox 回放
+→ 回放追平后继续消费实时事件
+→ 超过重连预算则最终状态对账并失败关闭
+```
+
+MVP 默认策略为：用户显式停止立即取消；浏览器意外断开提供短暂 grace period；
+Go/Python 内部断线优先续接而不是取消。具体 grace period 由 Go 产品配置控制，
+不得由 LangGraph 节点决定。
 
 ### 15.2 Deadline
 
@@ -954,53 +1037,52 @@ backend/
 ├── app/
 │   ├── main.py
 │   ├── api/
-│   │   ├── legacy_stream.py       # 仅协议适配
+│   │   ├── graph_routes.py        # Legacy，仅协议适配
 │   │   ├── agent_runs.py          # V1 协议
-│   │   ├── internal_auth.py
-│   │   └── health.py
+│   │   └── internal_auth.py
+│   ├── observability/
+│   │   ├── redaction.py
+│   │   └── traces.py
 │   └── runtime/
-│       ├── coordinator.py
-│       ├── execution_store.py
-│       ├── models.py
-│       ├── event_mapper.py
-│       ├── cancellation.py
-│       └── budgets.py
+│       ├── registry.py             # 唯一 Run Coordinator
+│       ├── langgraph_v1.py
+│       ├── store.py
+│       ├── postgres_store.py
+│       ├── checkpointer.py
+│       ├── coordination.py
+│       ├── factory.py
+│       └── models.py
 ├── agent/
 │   ├── application.py             # Runtime 到 Root Graph 的唯一入口
 │   ├── state.py
 │   ├── graph.py                   # 唯一 Root Graph Builder
-│   ├── routing.py
 │   ├── specs.py
+│   ├── context.py
+│   ├── capabilities.py
+│   ├── artifacts.py
+│   ├── events.py
+│   ├── readiness.py
 │   ├── workflows/
 │   │   ├── chat_v1/
 │   │   ├── research_v1/
 │   │   └── fortune_v1/
-│   ├── capabilities/
+│   ├── tools/
 │   │   ├── registry.py
-│   │   ├── executor.py
-│   │   ├── tools/
-│   │   └── knowledge/
+│   │   ├── date.py
+│   │   ├── lunar_chart.py
+│   │   └── ziwei_chart.py
 │   ├── models/
 │   │   ├── gateway.py
 │   │   └── providers/
 │   │       └── dashscope_openai.py
-│   ├── prompts/
-│   └── observability/
-│       ├── middleware.py
-│       └── events.py
-├── infra/
-│   ├── checkpoint/
-│   ├── redis/
-│   ├── workers/
-│   └── storage/
+│   └── prompts/
 ├── configs/
-│   ├── agents.yaml
-│   └── models.yaml
+│   └── agents.yaml
+├── scripts/
+│   └── setup_agent_runtime.py
 └── tests/
-    ├── contracts/
     ├── unit/
-    ├── integration/
-    └── evals/
+    └── integration/
 ```
 
 可以分阶段移动文件，但迁移结束后不得继续保留顶层 `graph/` 作为第二套执行实现。
@@ -1011,17 +1093,18 @@ Python 启动时按顺序完成：
 
 1. 加载 Settings；
 2. 校验 Secret 和环境；
-3. 加载 Model Profiles；
-4. 构造 Model Gateway；
-5. 注册 Capability；
-6. 加载并校验 AgentSpec；
-7. 构建 Frozen Workflows；
-8. 构建唯一 Root Graph；
-9. 使用生产 Checkpointer 编译；
-10. 构造 Agent Application；
-11. 构造 Run Coordinator；
-12. 执行最小自检；
-13. readiness 变为 ready。
+3. 校验 Runtime schema、Event Outbox 和 lease 能力；
+4. 加载 Model Profiles；
+5. 构造 Model Gateway；
+6. 注册 Capability；
+7. 加载并校验 AgentSpec；
+8. 构建 Frozen Workflows；
+9. 构建唯一 Root Graph；
+10. 使用生产 Checkpointer 编译；
+11. 构造 Agent Application；
+12. 构造 Run Coordinator；
+13. 执行最小自检；
+14. readiness 变为 ready。
 
 禁止请求首次到达时才懒加载并编译全局 Graph、下载大型模型或发现配置错误。
 大型知识索引可以延迟加载，但 readiness 必须能说明其能力状态。
@@ -1039,14 +1122,20 @@ Python 启动时按顺序完成：
 - default/research/fortune 路由样例；
 - Mock Model；
 - Mock Tool；
-- 取消、超时、断线样例；
+- 用户停止、浏览器 detached、内部断线、超时样例；
 - 当前 Prompt hash 基线；
+- 当前 AgentSpec、Workflow、Prompt 和模型版本基线；
+- 当前生产容器的 Python、LangGraph、LangChain、OpenAI SDK 和 Pydantic 版本快照；
+- 明确迁移后的唯一依赖锁定来源，并单独生成 LangGraph 1.x 目标依赖环境；
 - 当前测试全部通过。
 
 验收：
 
 - 不需要真实 Provider 即可测试完整 Graph；
 - 关键 SSE/Event fixture 可重复回放；
+- 浏览器断开不会被测试代码含糊地等同为用户显式停止；
+- 当前生产基线环境与 LangGraph 1.x 目标环境可分别重复创建，测试结果不混用；
+- 本地、CI 和容器不得各自解析出未记录的依赖版本；
 - 工作树没有未解释的生成文件。
 
 ### Phase 1：Model Gateway
@@ -1081,6 +1170,7 @@ Python 启动时按顺序完成：
 - `research_v1`；
 - `fortune_v1`；
 - Agent Application；
+- 固定并验证 LangGraph 1.x 目标版本；
 - Legacy/V1 同时调用 Agent Application。
 
 验收：
@@ -1121,6 +1211,9 @@ Python 启动时按顺序完成：
 交付：
 
 - PostgreSQL Checkpointer；
+- `runtime_executions`；
+- 持久 Runtime Event Outbox；
+- PostgreSQL execution lease 与 fencing token；
 - RuntimeEvent Sink；
 - Model/Tool/Retrieval Middleware；
 - 自动 Usage；
@@ -1132,13 +1225,19 @@ Python 启动时按顺序完成：
 
 - Python 进程重启后能识别已有执行并给出一致状态；
 - 同一 execution_id 不重复创建执行；
+- Run 事件可跨进程、跨副本从 starting_after 连续回放；
+- 旧副本失去 lease 后不能继续写 Checkpoint、事件或执行副作用；
 - 并行节点失败后不重复运行已成功的幂等任务；
+- 非幂等副作用无法安全恢复时失败关闭，不从头盲目重跑；
 - 节点中不存在 `append_model_trace` 一类手工跨服务事件逻辑；
 - Go 现有事件/Span 查询仍然可用。
 
 ### Phase 5：V1 灰度与旧代码清理
 
 目标：V1 成为默认内部协议，Legacy 只保留薄适配器。
+
+Phase 4 验收完成前，V1 只用于本地集成测试、单副本验证和受控 shadow，不得成为
+生产默认协议，也不得宣称具备跨进程恢复能力。
 
 交付：
 
@@ -1152,6 +1251,7 @@ Python 启动时按顺序完成：
 验收：
 
 - 默认流量只经过唯一 Agent Application；
+- 生产默认 V1 前已通过进程重启、跨副本接管和 Outbox 回放测试；
 - Legacy Adapter 文件不含 Agent 逻辑；
 - 删除旧代码后全部测试通过；
 - 无未使用 Prompt、Tool、配置和依赖；
@@ -1225,6 +1325,10 @@ Checkpoint，不能创建新的执行框架。
 - deadline；
 - cancel；
 - checkpoint resume；
+- 进程终止后的 checkpoint resume；
+- lease 过期后的跨副本接管；
+- 旧 lease_epoch 写入被 fencing；
+- 非幂等副作用恢复时失败关闭；
 - 并行 Join；
 - 最大循环次数；
 - `done_when`。
@@ -1237,7 +1341,9 @@ Checkpoint，不能创建新的执行框架。
 - Usage 字段；
 - Prompt hash；
 - 错误码；
-- 重连和事件回放。
+- 浏览器 detached 与显式取消语义；
+- Go/Python 内部断线重连；
+- 跨进程、跨副本 starting_after 事件回放。
 
 ### 21.4 Eval
 
@@ -1291,13 +1397,15 @@ Checkpoint，不能创建新的执行框架。
 
 - deadline、取消、幂等、重连可测试；
 - Checkpoint 使用持久后端；
+- Runtime Event Outbox 支持跨进程回放；
 - Python 重启不会静默遗忘 Run；
-- 多副本扩展有明确 lease/路由方案，即使暂时只运行一个副本。
+- 多副本使用 lease_epoch fencing，即使暂时只运行一个副本。
 
 ### 观测
 
 - 模型、工具、检索、Prompt、Usage 自动采集；
 - Event schema 稳定；
+- Run Provenance 可查询且在执行期间不可变；
 - 无敏感 Secret；
 - Go 查询继续可用。
 
@@ -1375,3 +1483,15 @@ Checkpoint 保存执行状态。用户可见、可改、可忘的认知镜像由
 
 兼容通过 Adapter、Alias 和 Event Mapper 完成，不通过复制执行逻辑完成。迁移完成
 后删除旧实现是交付的一部分。
+
+### ADR-008：Python 使用短期持久 Event Outbox 支撑 V1 回放
+
+Go 持有产品侧长期 Agent Event 事实；Python 持有带有限保留期的 Runtime Event
+Outbox，负责 `starting_after` 的跨进程和跨副本回放。Redis 只做通知，不能作为
+唯一事件来源。
+
+### ADR-009：传输断开与语义取消分离
+
+用户显式停止才直接表达取消意图。浏览器意外断开先进入 detached/grace period；
+Go/Python 内部断线按相同 execution_id 和已确认 sequence 续接。是否在 grace
+period 后继续后台完成由 Go 产品策略决定。

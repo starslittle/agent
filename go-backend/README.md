@@ -1,54 +1,44 @@
 # Go Gateway
 
-这是 Python → Go 渐进迁移的第一阶段入口。当前 Go 负责：
+Go 是启点 Agent 的公网网关和产品控制面，负责：
 
-- 注册、登录、退出和会话恢复；
-- PostgreSQL 用户、身份凭据与服务端 Session；
-- PostgreSQL 用户级会话、消息与 Agent 运行记录；
-- Agent Run 摘要、Prompt 版本、模型/工具 Span 和关键事件投影；
-- 关键事件二次脱敏，高频 `answer.delta` / `progress` 不写事件表；
-- 会话列表、搜索、重命名、软删除和消息分页；
-- 新会话流式请求的历史组装、检查点与完成/停止/失败落库；
-- HttpOnly Cookie、CSRF 校验、登录限流和登录审计；
-- `POST /query_stream` 请求校验与 Python SSE 字节透传；
-- `GET /healthz` 进程存活检查；
-- `GET /readyz` Python 上游就绪检查；
-- 请求 ID、结构化日志、panic 恢复和优雅退出；
-- 客户端断开时取消发往 Python Legacy API 的 HTTP 请求；
-- 生产环境静态前端托管。
+- 认证、Session、CSRF、限流和审计；
+- 用户会话、消息与产品 Agent Run；
+- 从 PostgreSQL 组装可信历史；
+- 调用 Python Agent Service；
+- 持久化最终回答、运行状态、关键事件、Span 与 provenance；
+- V1 事件序号校验、缺口回放与失败关闭；
+- 浏览器断开后的后台续接；
+- 健康检查、日志、优雅退出与生产静态前端。
 
-当前 Go **尚不执行 Agent、LLM 或 Tool**。认证通过后，请求仍由 Python 的
-`stream_graph` 完整处理，后续阶段再逐步把默认 Agent、路由和原生工具迁入
-Go。
+Go 不执行 LLM、Tool 或 LangGraph，也不写 Python 的 `agent_runtime` schema。
 
-## 本地手动启动
+## 调用协议
 
-先复制根目录 `.env.example` 为 `.env`，填写 PostgreSQL 密码、模型密钥和
-至少 32 字符的 `INTERNAL_AGENT_SECRET`。Go 与 Python 必须使用相同的内部
-密钥。
+`AGENT_PROTOCOL_MODE` 有两个传输选项：
 
-先让 PostgreSQL 可用，再让 Python 使用内部端口 8001：
+- `v1`：版本化 Run/Event 协议，支持 execution id、幂等、重放、显式取消与恢复；
+- `legacy`：回滚兼容协议。
 
-```powershell
-$env:INTERNAL_AGENT_SECRET = "<与 Go 相同的内部密钥>"
-uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8001 --reload
-```
+两者最终都进入 Python 的同一个 `AgentApplication`。Legacy 不是第二套 Agent
+架构。开发 Compose 默认 `v1`，生产 Compose 默认 `legacy`，待人工审核后再切换。
 
-再启动 Go 公网入口：
+V1 事件必须严格连续。Go 遇到序号缺口时从最后确认序号重新附着；有限次回放仍无法
+追平时以 `agent_event_sequence_gap` 失败关闭，不把部分答案标记为完整回答。
+
+浏览器断开只是传输中断。Go 会按同一 execution id 在后台续接 Python 并保存结果；
+用户显式停止才调用 Python 取消接口。
+
+## 本地运行
+
+先启动 PostgreSQL 和 Python Agent Service，再执行：
 
 ```powershell
 cd go-backend
-$env:HTTP_ADDR = ":8000"
-$env:PYTHON_BASE_URL = "http://127.0.0.1:8001"
-$env:GO_DATABASE_URL = "postgres://qidian_agent:<密码>@127.0.0.1:5432/agent_db"
-$env:INTERNAL_AGENT_SECRET = "<与 Python 相同的内部密钥>"
 go run ./cmd/server
 ```
 
-前端继续运行在 5173，Vite 默认把 API 代理到 Go 的 8000 端口。前端代码修改
-会热更新，不需要重新构建。
-
-## 使用 Compose
+推荐直接使用根目录开发 Compose：
 
 ```powershell
 docker compose -f docker-compose.dev.yml up --build
@@ -57,89 +47,53 @@ docker compose -f docker-compose.dev.yml up --build
 开发拓扑：
 
 ```text
-Browser :5173 -> Vite -> Go :8000 -> Python :8000 (Compose 内部)
+Browser :5173 -> Vite -> Go :8000 -> Python :8000 (internal)
 ```
 
-生产使用 `docker compose up --build -d`。生产环境只有 Go 的应用端口暴露到
-宿主机，Python、PostgreSQL 和 Redis 只在 Compose 内部网络开放。
+生产只有 Go 端口对宿主机开放。
 
-## 配置
+## 关键配置
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `APP_ENV` | `ENVIRONMENT`，再回退 `development` | Go 运行环境；迁移期兼容 Python 变量名 |
-| `HTTP_ADDR` | 由 `PORT` 生成，默认 `:8080` | Go 监听地址 |
-| `PYTHON_BASE_URL` | `http://127.0.0.1:8000` | Python Agent Service；Legacy/V1 共用 |
-| `AGENT_PROTOCOL_MODE` | `legacy` | `legacy` 或版本化 Agent Service `v1` |
-| `AGENT_RUN_DEADLINE` | `5m` | Python Runtime 硬截止时间 |
-| `AGENT_CANCEL_TIMEOUT` | `5s` | 浏览器断开后独立取消请求时限 |
-| `AGENT_RECONCILE_TIMEOUT` | `5s` | 事件序号缺失时的状态对账时限 |
-| `GO_DATABASE_URL` | 从 `POSTGRES_*` 生成 | Go 用户与 Session 数据库；优先于 `DATABASE_URL` |
-| `PUBLIC_ORIGINS` | 本地 5173 地址 | 允许发起状态变更请求的前端 Origin |
-| `COOKIE_SECURE` | 开发 `false` | 生产必须为 `true` |
-| `SESSION_TTL` | `168h` | 登录 Session 有效期 |
-| `INTERNAL_AGENT_SECRET` | 无 | Go → Python 请求签名密钥，至少 32 字符 |
-| `STATIC_DIR` | 空 | 可选前端构建目录 |
-| `MAX_REQUEST_BYTES` | `1048576` | 请求体上限 |
-| `UPSTREAM_HEADER_TIMEOUT` | `30s` | 等待 Python 响应头的上限 |
-| `SHUTDOWN_TIMEOUT` | `10s` | 优雅退出时限 |
+| `APP_ENV` | `development` | 运行环境 |
+| `HTTP_ADDR` | `:8080` | 监听地址 |
+| `PYTHON_BASE_URL` | `http://127.0.0.1:8000` | Python 内部地址 |
+| `AGENT_PROTOCOL_MODE` | `legacy` | `legacy` 或 `v1` |
+| `AGENT_RUN_DEADLINE` | `5m` | 产品 Run 截止时间 |
+| `AGENT_CANCEL_TIMEOUT` | `5s` | 显式取消请求时限 |
+| `AGENT_RECONCILE_TIMEOUT` | `5s` | 序号缺口对账时限 |
+| `GO_DATABASE_URL` | 从 `POSTGRES_*` 生成 | Go 业务数据库连接 |
+| `PUBLIC_ORIGINS` | 开发本机地址 | 生产必须显式配置 |
+| `COOKIE_SECURE` | 生产强制 `true` | Session Cookie |
+| `SESSION_TTL` | `168h` | Session 有效期 |
+| `INTERNAL_AGENT_SECRET` | 无 | Go → Python HMAC 密钥，至少 32 字符 |
+
+## 主要 API
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/session`
+- `POST /api/v1/auth/logout`
+- `GET/POST /api/v1/conversations`
+- `GET/PATCH/DELETE /api/v1/conversations/{id}`
+- `GET /api/v1/conversations/{id}/messages`
+- `POST /api/v1/conversations/{id}/messages/stream`
+- `GET /api/v1/agent-runs`
+- `GET /api/v1/agent-runs/{run_id}`
+- `POST /query_stream`（兼容）
+- `GET /healthz`
+- `GET /readyz`
+
+运行详情只保存排障所需的脱敏结构化元数据。Prompt 记录文件与 hash，工具记录
+输入输出指纹，模型记录耗时和 token；不保存密钥、Authorization、Cookie 或模型
+隐式思维链。
 
 ## 验证
 
 ```powershell
-cd go-backend
 go test ./...
 ```
 
-SSE 契约样例位于
-`internal/httpapi/testdata/query_stream_contract.json`。测试会验证请求字段、
-请求 ID、CRLF、事件名和 JSON 数据均不被网关改写。
-
-## 认证 API
-
-| 方法与路径 | 作用 | 保护 |
-|---|---|---|
-| `POST /api/v1/auth/register` | 邮箱密码注册并登录 | Origin 校验 |
-| `POST /api/v1/auth/login` | 登录 | Origin 校验、账户与 IP 限流 |
-| `GET /api/v1/session` | 恢复前端会话与 CSRF Token | HttpOnly Session Cookie |
-| `GET /api/v1/me` | 获取当前用户 | Session |
-| `POST /api/v1/auth/logout` | 撤销当前 Session | Session、CSRF、Origin |
-| `POST /query_stream` | 发起 Agent 流式请求 | Session、CSRF、Origin |
-
-## 会话 API
-
-| 方法与路径 | 作用 | 保护 |
-|---|---|---|
-| `POST /api/v1/conversations` | 创建空会话 | Session、CSRF、Origin |
-| `GET /api/v1/conversations` | 会话列表与关键词搜索 | Session |
-| `GET /api/v1/conversations/{id}` | 获取会话 | Session |
-| `PATCH /api/v1/conversations/{id}` | 重命名会话 | Session、CSRF、Origin |
-| `DELETE /api/v1/conversations/{id}` | 软删除会话 | Session、CSRF、Origin |
-| `GET /api/v1/conversations/{id}/messages` | 游标分页读取消息 | Session |
-| `POST /api/v1/conversations/{id}/messages/stream` | 持久化流式生成 | Session、CSRF、Origin |
-
-新流式入口由 Go 从 PostgreSQL 读取可信历史，再调用 Python Agent。浏览器只
-提交当前消息和 `client_message_id`，不再上传完整 `chat_history`。Go 会在
-首帧返回会话、消息与运行 ID，并在完成、断流或失败时保存最终状态。
-
-V1 内部事件必须严格连续。Go 检测到序号缺口后不会处理跨序号事件，而是从
-最后一个已确认序号重新附着 Python Runtime 并回放。两次回放仍失败或回放在
-追平前结束时，Run 以 `agent_event_sequence_gap` 失败收口，且不会把部分答案
-保存成完整回答。
-
-旧 `/query_stream` 继续保留为兼容入口。
-
-## Agent Run 可观测 API
-
-| 方法与路径 | 作用 | 保护 |
-|---|---|---|
-| `GET /api/v1/agent-runs` | 按状态分页查看当前用户的运行摘要 | Session |
-| `GET /api/v1/agent-runs/{run_id}` | 查看运行、Span、关键事件和 Prompt 版本 | Session |
-
-运行详情默认只记录排障所需的结构化元数据。Prompt 记录文件与渲染后哈希，
-工具记录输入输出指纹，模型记录耗时和 token 用量；不保存完整 Prompt、工具
-输入输出、Authorization、Cookie、密钥或模型隐式思维链。Python 在事件发布前
-脱敏，Go 在写 PostgreSQL 前再次脱敏。
-
-浏览器不保存 Session Token；它只保存由服务端设置的 HttpOnly Cookie。详细
-边界和扩展方式见根目录 `AUTHENTICATION.md`。
+上线切换与回滚步骤见
+[`docs/operations/agent-runtime-rollout.md`](../docs/operations/agent-runtime-rollout.md)。

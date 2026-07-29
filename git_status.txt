@@ -1,0 +1,416 @@
+## codex/agent-runtime-migration
+ M .env.example
+ M .gitignore
+ M DEPLOYMENT.md
+ M README.md
+ M backend/.dockerignore
+ D backend/CLEANUP_CHECKLIST.md
+ M backend/Dockerfile
+ D backend/POST_CLEANUP_REPORT.md
+ M backend/README.md
+ D backend/agent/agent.py
+ M backend/agent/prompts/README.md
+ D backend/agent/prompts/direct_llm_system.txt
+ D backend/agent/prompts/executor_birth_extract.txt
+ D backend/agent/prompts/executor_tool_selection.txt
+ D backend/agent/prompts/fortune_general_prompt.txt
+ D backend/agent/prompts/general_prompt.txt
+ D backend/agent/prompts/generate_research_system.txt
+ D backend/agent/prompts/intent_classification.txt
+ D backend/agent/prompts/planner_fortune.txt
+ D backend/agent/prompts/planner_research.txt
+ D backend/agent/prompts/replanner.txt
+ M backend/agent/tools/__init__.py
+ M backend/agent/tools/date.py
+ D backend/agent/tools/deep_research.py
+ D backend/agent/tools/local_kb.py
+ M backend/agent/tools/lunar_chart.py
+ D backend/agent/tools/pandas_kb.py
+ M backend/agent/tools/registry.py
+ D backend/agent/tools/weather.py
+ M backend/agent/tools/ziwei_chart.py
+ D backend/agent/worker.py
+ M backend/app/__init__.py
+ M backend/app/api/__init__.py
+ D backend/app/api/agent_factory.py
+ M backend/app/api/agent_runs.py
+ M backend/app/api/graph_routes.py
+ D backend/app/api/intent_router.py
+ M backend/app/core/settings.py
+ D backend/app/deps.py
+ M backend/app/main.py
+ M backend/app/runtime/__init__.py
+ M backend/app/runtime/registry.py
+ D backend/app/runtime/service.py
+ D backend/check_migration.py
+ D backend/cleanup_migration.py
+ M backend/configs/agents.yaml
+ D backend/graph/__init__.py
+ D backend/graph/builder.py
+ D backend/graph/nodes/__init__.py
+ D backend/graph/nodes/direct_llm.py
+ D backend/graph/nodes/executor.py
+ D backend/graph/nodes/generate.py
+ D backend/graph/nodes/generation.py
+ D backend/graph/nodes/planner.py
+ D backend/graph/nodes/rag.py
+ D backend/graph/nodes/replanner.py
+ D backend/graph/nodes/retrieval.py
+ D backend/graph/nodes/router.py
+ D backend/graph/nodes/tool_router.py
+ D backend/graph/nodes/tools_exec.py
+ D backend/graph/state.py
+ D backend/infra/__init__.py
+ D backend/infra/cache/__init__.py
+ D backend/infra/cache/redis_client.py
+ D backend/infra/db/__init__.py
+ D backend/infra/db/connection.py
+ D backend/infra/logging/__init__.py
+ D backend/infra/logging/logger.py
+ M backend/pyproject.toml
+ D backend/rag/__init__.py
+ D backend/rag/engines/__init__.py
+ D backend/rag/engines/base.py
+ D backend/rag/engines/local.py
+ D backend/rag/engines/pandas_engine.py
+ D backend/rag/pipelines/__init__.py
+ D backend/rag/pipelines/fortune_pipeline.py
+ D backend/rag/pipelines/rag_pipeline.py
+ D backend/rag/retrievers/__init__.py
+ D backend/rag/retrievers/hybrid_retriever.py
+ D backend/rag/systems.py
+ D backend/requirements.runtime.txt
+ D backend/requirements.txt
+ D backend/requirements/agent.txt
+ D backend/requirements/api.txt
+ D backend/requirements/base.txt
+ D backend/requirements/cache.txt
+ D backend/requirements/database.txt
+ D backend/requirements/dev.txt
+ D backend/requirements/eval.txt
+ D backend/requirements/graph.txt
+ D backend/requirements/runtime-constraints.txt
+ D backend/scripts/check_dashscope.py
+ D backend/scripts/check_db_connection.py
+ D backend/scripts/migrate_chroma_to_pg.py
+ D backend/scripts/run_ragas_eval.py
+ M backend/tests/unit/test_prompt_loader.py
+ D backend/tests/unit/test_prompt_tracking.py
+ M backend/tests/unit/test_tool_registry.py
+ M backend/uv.lock
+ D backend/workers/__init__.py
+ D backend/workers/ingest_documents.py
+ D backend/workers/ingest_fortune.py
+ M docker-compose.dev.yml
+ M docker-compose.yml
+ M docs/README.md
+ M docs/architecture/agent-runtime.md
+ M frontend/src/components/chat/ChatContainer.tsx
+ M frontend/src/lib/chat-api.ts
+ M go-backend/Dockerfile
+ M go-backend/README.md
+ M go-backend/cmd/server/main.go
+ M go-backend/internal/agent/client.go
+ M go-backend/internal/agent/types.go
+ M go-backend/internal/agent/types_test.go
+ M go-backend/internal/agentclient/v1.go
+ M go-backend/internal/agentclient/v1_test.go
+ M go-backend/internal/agenttrace/redaction.go
+ M go-backend/internal/agenttrace/redaction_test.go
+ M go-backend/internal/auth/limiter.go
+ M go-backend/internal/auth/password.go
+ M go-backend/internal/auth/password_test.go
+ M go-backend/internal/auth/service.go
+ M go-backend/internal/auth/types.go
+ M go-backend/internal/config/config.go
+ M go-backend/internal/config/config_test.go
+ M go-backend/internal/conversation/service.go
+ M go-backend/internal/conversation/service_test.go
+ M go-backend/internal/conversation/store.go
+ M go-backend/internal/conversation/types.go
+ M go-backend/internal/httpapi/auth.go
+ M go-backend/internal/httpapi/conversation_integration_test.go
+ M go-backend/internal/httpapi/conversations.go
+ M go-backend/internal/httpapi/middleware.go
+ M go-backend/internal/httpapi/proxy.go
+ M go-backend/internal/httpapi/server.go
+ M go-backend/internal/httpapi/server_test.go
+ M go-backend/internal/platform/postgres/conversation_store.go
+ M go-backend/internal/platform/postgres/conversation_store_integration_test.go
+ M go-backend/internal/platform/postgres/migration_test.go
+ M go-backend/internal/platform/postgres/store.go
+?? backend/agent/application.py
+?? backend/agent/artifacts.py
+?? backend/agent/capabilities.py
+?? backend/agent/context.py
+?? backend/agent/events.py
+?? backend/agent/graph.py
+?? backend/agent/models/
+?? backend/agent/prompts/fortune_extract_birth_profile.txt
+?? backend/agent/prompts/research_grade_evidence.txt
+?? backend/agent/prompts/research_plan_structured.txt
+?? backend/agent/prompts/research_synthesize_with_citations.txt
+?? backend/agent/readiness.py
+?? backend/agent/specs.py
+?? backend/agent/state.py
+?? backend/agent/workflows/
+?? backend/app/runtime/checkpointer.py
+?? backend/app/runtime/coordination.py
+?? backend/app/runtime/factory.py
+?? backend/app/runtime/langgraph_v1.py
+?? backend/app/runtime/postgres_store.py
+?? backend/app/runtime/store.py
+?? backend/scripts/setup_agent_runtime.py
+?? backend/tests/fixtures/prompt_runtime_baseline.json
+?? backend/tests/fixtures/runtime_dependency_baseline.json
+?? backend/tests/integration/runtime_crash_worker.py
+?? backend/tests/integration/test_postgres_runtime_store.py
+?? backend/tests/unit/test_agent_specs.py
+?? backend/tests/unit/test_fenced_checkpointer.py
+?? backend/tests/unit/test_legacy_stream_baseline.py
+?? backend/tests/unit/test_model_gateway.py
+?? backend/tests/unit/test_root_agent_graph.py
+?? backend/tests/unit/test_runtime_architecture.py
+?? backend/tests/unit/test_runtime_coordination.py
+?? backend/tests/unit/test_runtime_dependency_baseline.py
+?? backend/tests/unit/test_runtime_store.py
+?? docs/architecture/agent-runtime-migration-progress.md
+?? docs/architecture/agent-runtime-p0-stabilization-plan.md
+?? docs/operations/
+?? git_status.txt
+?? go-backend/cmd/migrate/
+?? go-backend/internal/platform/postgres/migrations/005_agent_runtime_foundation.sql
+!! .pytest_cache/
+!! .ruff_cache/
+!! backend/.pytest_cache/
+!! backend/.ruff_cache/
+!! backend/.venv/
+!! backend/agent/__pycache__/
+!! backend/agent/models/__pycache__/
+!! backend/agent/models/providers/__pycache__/
+!! backend/agent/policies/__pycache__/
+!! backend/agent/prompts/__pycache__/
+!! backend/agent/tools/__pycache__/
+!! backend/agent/workflows/__pycache__/
+!! backend/agent/workflows/chat_v1/__pycache__/
+!! backend/agent/workflows/fortune_v1/__pycache__/
+!! backend/agent/workflows/research_v1/__pycache__/
+!! backend/app/__pycache__/
+!! backend/app/api/__pycache__/
+!! backend/app/core/__pycache__/
+!! backend/app/observability/__pycache__/
+!! backend/app/runtime/__pycache__/
+!! backend/graph/__pycache__/
+!! backend/graph/nodes/__pycache__/
+!! backend/tests/__pycache__/
+!! backend/tests/integration/__pycache__/
+!! backend/tests/unit/__pycache__/
+!! frontend/dist/
+## codex/agent-runtime-migration
+ M .env.example
+ M .gitignore
+ M DEPLOYMENT.md
+ M README.md
+ M backend/.dockerignore
+ D backend/CLEANUP_CHECKLIST.md
+ M backend/Dockerfile
+ D backend/POST_CLEANUP_REPORT.md
+ M backend/README.md
+ D backend/agent/agent.py
+ M backend/agent/prompts/README.md
+ D backend/agent/prompts/direct_llm_system.txt
+ D backend/agent/prompts/executor_birth_extract.txt
+ D backend/agent/prompts/executor_tool_selection.txt
+ D backend/agent/prompts/fortune_general_prompt.txt
+ D backend/agent/prompts/general_prompt.txt
+ D backend/agent/prompts/generate_research_system.txt
+ D backend/agent/prompts/intent_classification.txt
+ D backend/agent/prompts/planner_fortune.txt
+ D backend/agent/prompts/planner_research.txt
+ D backend/agent/prompts/replanner.txt
+ M backend/agent/tools/__init__.py
+ M backend/agent/tools/date.py
+ D backend/agent/tools/deep_research.py
+ D backend/agent/tools/local_kb.py
+ M backend/agent/tools/lunar_chart.py
+ D backend/agent/tools/pandas_kb.py
+ M backend/agent/tools/registry.py
+ D backend/agent/tools/weather.py
+ M backend/agent/tools/ziwei_chart.py
+ D backend/agent/worker.py
+ M backend/app/__init__.py
+ M backend/app/api/__init__.py
+ D backend/app/api/agent_factory.py
+ M backend/app/api/agent_runs.py
+ M backend/app/api/graph_routes.py
+ D backend/app/api/intent_router.py
+ M backend/app/core/settings.py
+ D backend/app/deps.py
+ M backend/app/main.py
+ M backend/app/runtime/__init__.py
+ M backend/app/runtime/registry.py
+ D backend/app/runtime/service.py
+ D backend/check_migration.py
+ D backend/cleanup_migration.py
+ M backend/configs/agents.yaml
+ D backend/graph/__init__.py
+ D backend/graph/builder.py
+ D backend/graph/nodes/__init__.py
+ D backend/graph/nodes/direct_llm.py
+ D backend/graph/nodes/executor.py
+ D backend/graph/nodes/generate.py
+ D backend/graph/nodes/generation.py
+ D backend/graph/nodes/planner.py
+ D backend/graph/nodes/rag.py
+ D backend/graph/nodes/replanner.py
+ D backend/graph/nodes/retrieval.py
+ D backend/graph/nodes/router.py
+ D backend/graph/nodes/tool_router.py
+ D backend/graph/nodes/tools_exec.py
+ D backend/graph/state.py
+ D backend/infra/__init__.py
+ D backend/infra/cache/__init__.py
+ D backend/infra/cache/redis_client.py
+ D backend/infra/db/__init__.py
+ D backend/infra/db/connection.py
+ D backend/infra/logging/__init__.py
+ D backend/infra/logging/logger.py
+ M backend/pyproject.toml
+ D backend/rag/__init__.py
+ D backend/rag/engines/__init__.py
+ D backend/rag/engines/base.py
+ D backend/rag/engines/local.py
+ D backend/rag/engines/pandas_engine.py
+ D backend/rag/pipelines/__init__.py
+ D backend/rag/pipelines/fortune_pipeline.py
+ D backend/rag/pipelines/rag_pipeline.py
+ D backend/rag/retrievers/__init__.py
+ D backend/rag/retrievers/hybrid_retriever.py
+ D backend/rag/systems.py
+ D backend/requirements.runtime.txt
+ D backend/requirements.txt
+ D backend/requirements/agent.txt
+ D backend/requirements/api.txt
+ D backend/requirements/base.txt
+ D backend/requirements/cache.txt
+ D backend/requirements/database.txt
+ D backend/requirements/dev.txt
+ D backend/requirements/eval.txt
+ D backend/requirements/graph.txt
+ D backend/requirements/runtime-constraints.txt
+ D backend/scripts/check_dashscope.py
+ D backend/scripts/check_db_connection.py
+ D backend/scripts/migrate_chroma_to_pg.py
+ D backend/scripts/run_ragas_eval.py
+ M backend/tests/unit/test_prompt_loader.py
+ D backend/tests/unit/test_prompt_tracking.py
+ M backend/tests/unit/test_tool_registry.py
+ M backend/uv.lock
+ D backend/workers/__init__.py
+ D backend/workers/ingest_documents.py
+ D backend/workers/ingest_fortune.py
+ M docker-compose.dev.yml
+ M docker-compose.yml
+ M docs/README.md
+ M docs/architecture/agent-runtime.md
+ M frontend/src/components/chat/ChatContainer.tsx
+ M frontend/src/lib/chat-api.ts
+ M go-backend/Dockerfile
+ M go-backend/README.md
+ M go-backend/cmd/server/main.go
+ M go-backend/internal/agent/client.go
+ M go-backend/internal/agent/types.go
+ M go-backend/internal/agent/types_test.go
+ M go-backend/internal/agentclient/v1.go
+ M go-backend/internal/agentclient/v1_test.go
+ M go-backend/internal/agenttrace/redaction.go
+ M go-backend/internal/agenttrace/redaction_test.go
+ M go-backend/internal/auth/limiter.go
+ M go-backend/internal/auth/password.go
+ M go-backend/internal/auth/password_test.go
+ M go-backend/internal/auth/service.go
+ M go-backend/internal/auth/types.go
+ M go-backend/internal/config/config.go
+ M go-backend/internal/config/config_test.go
+ M go-backend/internal/conversation/service.go
+ M go-backend/internal/conversation/service_test.go
+ M go-backend/internal/conversation/store.go
+ M go-backend/internal/conversation/types.go
+ M go-backend/internal/httpapi/auth.go
+ M go-backend/internal/httpapi/conversation_integration_test.go
+ M go-backend/internal/httpapi/conversations.go
+ M go-backend/internal/httpapi/middleware.go
+ M go-backend/internal/httpapi/proxy.go
+ M go-backend/internal/httpapi/server.go
+ M go-backend/internal/httpapi/server_test.go
+ M go-backend/internal/platform/postgres/conversation_store.go
+ M go-backend/internal/platform/postgres/conversation_store_integration_test.go
+ M go-backend/internal/platform/postgres/migration_test.go
+ M go-backend/internal/platform/postgres/store.go
+?? backend/agent/application.py
+?? backend/agent/artifacts.py
+?? backend/agent/capabilities.py
+?? backend/agent/context.py
+?? backend/agent/events.py
+?? backend/agent/graph.py
+?? backend/agent/models/
+?? backend/agent/prompts/fortune_extract_birth_profile.txt
+?? backend/agent/prompts/research_grade_evidence.txt
+?? backend/agent/prompts/research_plan_structured.txt
+?? backend/agent/prompts/research_synthesize_with_citations.txt
+?? backend/agent/readiness.py
+?? backend/agent/specs.py
+?? backend/agent/state.py
+?? backend/agent/workflows/
+?? backend/app/runtime/checkpointer.py
+?? backend/app/runtime/coordination.py
+?? backend/app/runtime/factory.py
+?? backend/app/runtime/langgraph_v1.py
+?? backend/app/runtime/postgres_store.py
+?? backend/app/runtime/store.py
+?? backend/scripts/setup_agent_runtime.py
+?? backend/tests/fixtures/prompt_runtime_baseline.json
+?? backend/tests/fixtures/runtime_dependency_baseline.json
+?? backend/tests/integration/runtime_crash_worker.py
+?? backend/tests/integration/test_postgres_runtime_store.py
+?? backend/tests/unit/test_agent_specs.py
+?? backend/tests/unit/test_fenced_checkpointer.py
+?? backend/tests/unit/test_legacy_stream_baseline.py
+?? backend/tests/unit/test_model_gateway.py
+?? backend/tests/unit/test_root_agent_graph.py
+?? backend/tests/unit/test_runtime_architecture.py
+?? backend/tests/unit/test_runtime_coordination.py
+?? backend/tests/unit/test_runtime_dependency_baseline.py
+?? backend/tests/unit/test_runtime_store.py
+?? docs/architecture/agent-runtime-migration-progress.md
+?? docs/architecture/agent-runtime-p0-stabilization-plan.md
+?? docs/operations/
+?? git_status.txt
+?? go-backend/cmd/migrate/
+?? go-backend/internal/platform/postgres/migrations/005_agent_runtime_foundation.sql
+!! .pytest_cache/
+!! .ruff_cache/
+!! backend/.pytest_cache/
+!! backend/.ruff_cache/
+!! backend/.venv/
+!! backend/agent/__pycache__/
+!! backend/agent/models/__pycache__/
+!! backend/agent/models/providers/__pycache__/
+!! backend/agent/policies/__pycache__/
+!! backend/agent/prompts/__pycache__/
+!! backend/agent/tools/__pycache__/
+!! backend/agent/workflows/__pycache__/
+!! backend/agent/workflows/chat_v1/__pycache__/
+!! backend/agent/workflows/fortune_v1/__pycache__/
+!! backend/agent/workflows/research_v1/__pycache__/
+!! backend/app/__pycache__/
+!! backend/app/api/__pycache__/
+!! backend/app/core/__pycache__/
+!! backend/app/observability/__pycache__/
+!! backend/app/runtime/__pycache__/
+!! backend/graph/__pycache__/
+!! backend/graph/nodes/__pycache__/
+!! backend/tests/__pycache__/
+!! backend/tests/integration/__pycache__/
+!! backend/tests/unit/__pycache__/
+!! frontend/dist/

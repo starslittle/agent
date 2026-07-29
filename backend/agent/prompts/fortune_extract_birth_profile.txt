@@ -1,0 +1,7 @@
+从用户消息中提取命理问题所需的出生资料。
+
+规则：
+- 没有明确出现的出生日期、出生时间、性别或出生城市必须返回 null，禁止猜测。
+- domain 只能是 bazi、ziwei、general。
+- 用户要求个人排盘、个人运势或个人命理解读时，personal_analysis 为 true。
+- 概念、术语和方法论问题的 personal_analysis 为 false。

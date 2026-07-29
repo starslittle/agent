@@ -4,7 +4,8 @@ WORKDIR /src/go-backend
 COPY go-backend/go.mod ./
 RUN go mod download
 COPY go-backend/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/qidian-gateway ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/qidian-gateway ./cmd/server \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/qidian-migrate ./cmd/migrate
 
 FROM node:20-alpine AS frontend-build
 
@@ -20,6 +21,7 @@ RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 COPY --from=go-build /out/qidian-gateway /app/qidian-gateway
+COPY --from=go-build /out/qidian-migrate /app/qidian-migrate
 COPY --from=frontend-build /src/frontend/dist /app/frontend/dist
 
 ENV HTTP_ADDR=:8000 \

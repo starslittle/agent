@@ -92,7 +92,14 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 		Sequence:        1,
 		Type:            "run.started",
 		OccurredAt:      time.Now().UTC(),
-		Data:            json.RawMessage(`{"service_version":"integration-test"}`),
+		Data: json.RawMessage(`{
+			"service_version":"integration-test",
+			"agent_version":"agent-test",
+			"graph_version":"graph-test",
+			"prompt_bundle_hash":"bundle-test",
+			"workflow_name":"chat_v1",
+			"model_name":"model-test"
+		}`),
 	}
 	inserted, err := service.RecordEvent(
 		ctx,
@@ -198,9 +205,6 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 			Category:        "usage",
 			Data: json.RawMessage(`{
 				"model_name":"model-test",
-				"agent_version":"agent-test",
-				"graph_version":"graph-test",
-				"prompt_bundle_hash":"bundle-test",
 				"input_tokens":11,
 				"output_tokens":7,
 				"total_tokens":18,
@@ -231,7 +235,15 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 	if len(runs) != 1 ||
 		runs[0].TotalTokens != 18 ||
 		runs[0].ModelCallCount != 1 ||
-		runs[0].ToolCallCount != 1 {
+		runs[0].ToolCallCount != 1 ||
+		runs[0].ActualRoute == nil ||
+		*runs[0].ActualRoute != "chat_v1" ||
+		runs[0].AgentVersion == nil ||
+		*runs[0].AgentVersion != "agent-test" ||
+		runs[0].GraphVersion == nil ||
+		*runs[0].GraphVersion != "graph-test" ||
+		runs[0].PromptBundleHash == nil ||
+		*runs[0].PromptBundleHash != "bundle-test" {
 		t.Fatalf("unexpected run summaries: %#v", runs)
 	}
 	detail, err := service.RunDetail(ctx, userID, generation.Run.ID)

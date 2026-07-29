@@ -8,14 +8,14 @@ from .models import (
     RunStatus,
 )
 from .registry import ExecutionRegistry
-from .service import GraphAgentRuntime
+from .factory import build_agent_runtime
 
 __all__ = [
     "AgentEvent",
     "AgentRunRequest",
     "ChatMessage",
     "ExecutionRegistry",
-    "GraphAgentRuntime",
     "RunSnapshot",
     "RunStatus",
+    "build_agent_runtime",
 ]

@@ -1,32 +1,12 @@
-# Prompt source of truth
+# Agent Runtime Prompts
 
-All runtime prompts are resolved relative to the `backend/` directory and loaded
-through `agent.prompts.loader`.
+Only prompts referenced by `agent.specs.PROMPT_BUNDLES` belong here.
+Every invocation records the source SHA-256 and rendered-content hash; prompt
+text is not copied into Runtime events.
 
-The public `/query_stream` path currently uses:
+- `chat_v1`: `generate_default_system.txt`
+- `research_v1`: plan, evidence grade, and cited synthesis prompts
+- `fortune_v1`: birth-profile extraction and bounded interpretation prompts
 
-- `intent_classification.txt`
-- `planner_research.txt` or `planner_fortune.txt`
-- `executor_tool_selection.txt`
-- `executor_birth_extract.txt`
-- `replanner.txt`
-- `generate_default_system.txt`, `generate_research_system.txt`, or
-  `generate_fortune_system.txt`
-
-`direct_llm_system.txt` belongs to the compiled/synchronous compatibility graph
-and is not used by the public streaming default route.
-
-`general_prompt.txt` and `fortune_general_prompt.txt` are legacy design prompts.
-They are retained for reference but are not part of the current public streaming
-execution path.
-
-Prompt paths stored in configuration must use this same backend-relative base.
-Prompt files are UTF-8 with LF line endings, enforced by `.gitattributes`.
-SHA-256 is calculated over the exact file bytes: Python uses `Path.read_bytes()`
-and Go must use `os.ReadFile()` without trimming, newline conversion, or
-re-encoding.
-
-Runtime state appends every prompt that was actually invoked to
-`metadata.prompt_versions`. Each entry contains the stage, backend-relative
-path, raw-file SHA-256, rendered-text SHA-256, and iteration where applicable.
-Code paths that do not invoke an LLM prompt must not add a synthetic entry.
+Adding a prompt requires updating `PROMPT_BUNDLES`, readiness tests, and the
+prompt hash fixture. Unreferenced compatibility prompts are not retained.

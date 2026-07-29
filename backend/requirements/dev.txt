@@ -1,7 +1,0 @@
-# 开发依赖
-ruff
-black
-mypy
-pytest
-pytest-asyncio
-httpx

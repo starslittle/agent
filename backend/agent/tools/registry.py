@@ -7,12 +7,11 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
-from agent.worker import heavy_worker_manager
 from app.observability import new_span_id, payload_fingerprint
 
 
 Effect = Literal["read", "write", "destructive"]
-ConcurrencyClass = Literal["thread", "process"]
+ConcurrencyClass = Literal["thread"]
 
 
 @dataclass(frozen=True)
@@ -95,19 +94,10 @@ class ToolRegistry:
         if audit_events is not None:
             audit_events.append({**audit_base, "status": "started"})
         try:
-            if definition.concurrency_class == "process":
-                result = await heavy_worker_manager.run(
-                    execution_id=execution_id,
-                    tool_name=name,
-                    arguments=arguments,
-                    timeout_seconds=definition.timeout_seconds,
-                    cancel_event=cancel_event,
-                )
-            else:
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(invoke_tool_sync, name, arguments),
-                    timeout=definition.timeout_seconds,
-                )
+            result = await asyncio.wait_for(
+                asyncio.to_thread(invoke_tool_sync, name, arguments),
+                timeout=definition.timeout_seconds,
+            )
             text = str(result)
             if len(text.encode("utf-8")) > definition.max_output_bytes:
                 raise ValueError(f"tool {name} output exceeds limit")
@@ -150,7 +140,7 @@ class ToolRegistry:
         return text
 
     async def cancel_execution(self, execution_id: str) -> None:
-        await heavy_worker_manager.cancel_execution(execution_id)
+        return None
 
 
 def _load_handler(path: str):
@@ -159,11 +149,25 @@ def _load_handler(path: str):
 
 
 def _tavily_search(query: str, max_results: int = 5) -> str:
-    from langchain_tavily import TavilySearch
+    import requests
 
-    tool = TavilySearch(max_results=max(1, min(int(max_results), 10)))
-    results = tool.invoke({"query": query})
-    items = results.get("results", []) if isinstance(results, dict) else results or []
+    from app.core.settings import settings
+
+    if not settings.TAVILY_API_KEY:
+        raise RuntimeError("TAVILY_API_KEY is not configured")
+    response = requests.post(
+        "https://api.tavily.com/search",
+        json={
+            "api_key": settings.TAVILY_API_KEY,
+            "query": query,
+            "max_results": max(1, min(int(max_results), 10)),
+            "search_depth": "basic",
+        },
+        timeout=40,
+    )
+    response.raise_for_status()
+    results = response.json()
+    items = results.get("results", []) if isinstance(results, dict) else []
     lines: list[str] = []
     for item in items:
         if isinstance(item, dict):
@@ -208,18 +212,6 @@ def get_tool_registry() -> ToolRegistry:
                     "thread",
                 ),
                 ToolDefinition(
-                    "get_seniverse_weather",
-                    "查询指定城市的当前天气和当日温度。",
-                    "agent.tools.weather:get_seniverse_weather",
-                    "read",
-                    True,
-                    True,
-                    25,
-                    4096,
-                    32 * 1024,
-                    "thread",
-                ),
-                ToolDefinition(
                     "tavily_search",
                     "通用互联网搜索。",
                     "agent.tools.registry:_tavily_search",
@@ -254,54 +246,6 @@ def get_tool_registry() -> ToolRegistry:
                     32 * 1024,
                     standard_limit,
                     "thread",
-                ),
-                ToolDefinition(
-                    "query_local_kb",
-                    "查询本地知识库；未初始化时可能触发索引加载。",
-                    "agent.tools.local_kb:query_local_kb",
-                    "read",
-                    True,
-                    False,
-                    180,
-                    64 * 1024,
-                    1024 * 1024,
-                    "process",
-                ),
-                ToolDefinition(
-                    "init_local_rag",
-                    "初始化或重建本地知识库。",
-                    "agent.tools.local_kb:init_local_rag",
-                    "destructive",
-                    False,
-                    False,
-                    600,
-                    4096,
-                    standard_limit,
-                    "process",
-                ),
-                ToolDefinition(
-                    "query_pandas_data",
-                    "在隔离进程中查询 Pandas 数据。",
-                    "agent.tools.pandas_kb:query_pandas_data",
-                    "read",
-                    True,
-                    False,
-                    300,
-                    64 * 1024,
-                    1024 * 1024,
-                    "process",
-                ),
-                ToolDefinition(
-                    "init_pandas_rag",
-                    "初始化 Pandas 数据引擎。",
-                    "agent.tools.pandas_kb:init_pandas_rag",
-                    "write",
-                    True,
-                    False,
-                    600,
-                    4096,
-                    standard_limit,
-                    "process",
                 ),
             ]
         )

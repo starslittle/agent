@@ -674,11 +674,25 @@ func (s *Store) RecordAgentEvent(
 			),
 			actual_route = COALESCE(
 				NULLIF($4::jsonb->>'actual_route', ''),
+				NULLIF($4::jsonb->>'selected_workflow', ''),
+				NULLIF($4::jsonb->>'workflow_name', ''),
 				actual_route
 			),
 			model_name = COALESCE(
 				NULLIF($4::jsonb->>'model_name', ''),
 				model_name
+			),
+			agent_version = COALESCE(
+				NULLIF($4::jsonb->>'agent_version', ''),
+				agent_version
+			),
+			graph_version = COALESCE(
+				NULLIF($4::jsonb->>'graph_version', ''),
+				graph_version
+			),
+			prompt_bundle_hash = COALESCE(
+				NULLIF($4::jsonb->>'prompt_bundle_hash', ''),
+				prompt_bundle_hash
 			),
 			error_code = CASE
 				WHEN $3 IN ('failed', 'timed_out')

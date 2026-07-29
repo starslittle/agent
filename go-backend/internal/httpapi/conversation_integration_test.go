@@ -534,6 +534,187 @@ func TestV1SequenceGapReplaysOrFailsClosedIntegration(t *testing.T) {
 	}
 }
 
+func TestV1BrowserDisconnectContinuesDetachedIntegration(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	store, err := postgres.Open(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	initialDelivered := make(chan struct{}, 1)
+	var (
+		callsMu     sync.Mutex
+		startAfters []int64
+		deleteCalls int
+	)
+	upstream := httptest.NewServer(http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		if r.Method == http.MethodDelete {
+			callsMu.Lock()
+			deleteCalls++
+			callsMu.Unlock()
+			writeJSON(w, http.StatusAccepted, map[string]any{
+				"status": "cancelled",
+			})
+			return
+		}
+		var run agent.RunRequest
+		if err := json.NewDecoder(r.Body).Decode(&run); err != nil {
+			t.Errorf("decode V1 run: %v", err)
+			return
+		}
+		startingAfter, _ := strconv.ParseInt(
+			r.URL.Query().Get("starting_after"),
+			10,
+			64,
+		)
+		callsMu.Lock()
+		startAfters = append(startAfters, startingAfter)
+		callsMu.Unlock()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		if startingAfter == 0 {
+			writeV1TestEvent(t, w, run, 1, "run.started", `{}`)
+			writeV1TestEvent(
+				t,
+				w,
+				run,
+				2,
+				"answer.delta",
+				`{"text":"前半"}`,
+			)
+			w.(http.Flusher).Flush()
+			initialDelivered <- struct{}{}
+			<-r.Context().Done()
+			return
+		}
+		writeV1TestEvent(
+			t,
+			w,
+			run,
+			3,
+			"answer.delta",
+			`{"text":"后半"}`,
+		)
+		writeV1TestEvent(t, w, run, 4, "run.completed", `{}`)
+	}))
+	defer upstream.Close()
+
+	cfg := config.Config{
+		AppEnv:                "test",
+		PythonBaseURL:         upstream.URL,
+		MaxRequestBytes:       1 << 20,
+		UpstreamHeaderTimeout: 2 * time.Second,
+		SessionTTL:            time.Hour,
+		InternalAgentSecret:   "test-secret-that-is-at-least-32-characters",
+		AgentProtocolMode:     "v1",
+		AgentRunDeadline:      10 * time.Second,
+		AgentCancelTimeout:    2 * time.Second,
+		AgentReconcileTimeout: 2 * time.Second,
+	}
+	server, err := New(
+		cfg,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		auth.NewService(store, time.Hour),
+		conversation.NewService(store),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	cookie, csrfToken := registerIntegrationUser(t, server)
+
+	create := authenticatedRequest(
+		http.MethodPost,
+		"/api/v1/conversations",
+		`{"agent_name":"default_llm_agent"}`,
+		cookie,
+		csrfToken,
+	)
+	createResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(createResponse, create)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("create conversation: %s", createResponse.Body.String())
+	}
+	var item conversation.Conversation
+	if err := json.Unmarshal(createResponse.Body.Bytes(), &item); err != nil {
+		t.Fatalf("decode conversation: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]string{
+		"content":           "断开后继续",
+		"client_message_id": auth.NewID(),
+		"agent_name":        "default_llm_agent",
+	})
+	request := authenticatedRequest(
+		http.MethodPost,
+		"/api/v1/conversations/"+item.ID+"/messages/stream",
+		string(body),
+		cookie,
+		csrfToken,
+	)
+	request.Header.Set(requestIDHeader, auth.NewID())
+	requestContext, disconnect := context.WithCancel(request.Context())
+	request = request.WithContext(requestContext)
+	response := httptest.NewRecorder()
+	handlerDone := make(chan struct{})
+	go func() {
+		defer close(handlerDone)
+		server.Handler().ServeHTTP(response, request)
+	}()
+
+	select {
+	case <-initialDelivered:
+		disconnect()
+	case <-time.After(5 * time.Second):
+		t.Fatal("initial V1 events were not delivered")
+	}
+	select {
+	case <-handlerDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("browser handler did not return after disconnect")
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		run := getIntegrationRun(t, server, cookie, item.ID)
+		if run.Status == "completed" {
+			messages := getIntegrationMessages(t, server, cookie, item.ID)
+			got := messages[len(messages)-1]
+			if got.Status != "completed" || got.Content != "前半后半" {
+				t.Fatalf("detached assistant message = %#v", got)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("detached run status = %q, want completed", run.Status)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	callsMu.Lock()
+	defer callsMu.Unlock()
+	if deleteCalls != 0 {
+		t.Fatalf("browser disconnect issued %d semantic cancels", deleteCalls)
+	}
+	if len(startAfters) != 2 ||
+		startAfters[0] != 0 ||
+		startAfters[1] != 2 {
+		t.Fatalf("V1 start/resume cursors = %#v, want [0 2]", startAfters)
+	}
+}
+
 type integrationStreamResult struct {
 	ConversationID string
 	StreamStatus   int

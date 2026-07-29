@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-from langchain_core.tools import tool
-
-
 def _parse_date(date_str: str) -> Tuple[int, int, int]:
     if not date_str:
         raise ValueError("birth_date 不能为空，格式应为 YYYY-MM-DD")
@@ -60,7 +57,6 @@ def _normalize_gender(gender: Optional[str]) -> Optional[int]:
     return None
 
 
-@tool
 def get_lunar_chart(
     birth_date: str,
     birth_time: str = "00:00",

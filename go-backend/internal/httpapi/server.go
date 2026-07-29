@@ -134,6 +134,14 @@ func New(
 			authAPI.requireSession(http.HandlerFunc(conversationAPI.runDetail)),
 		)
 		mux.Handle(
+			"DELETE /api/v1/agent-runs/{runID}",
+			authAPI.protectMutation(
+				authAPI.requireSession(
+					authAPI.requireCSRF(http.HandlerFunc(conversationAPI.cancelRun)),
+				),
+			),
+		)
+		mux.Handle(
 			"POST /api/v1/conversations/{conversationID}/messages/stream",
 			authAPI.protectMutation(
 				authAPI.requireSession(
@@ -164,7 +172,7 @@ func readinessHandler(
 	client *http.Client,
 	authService *auth.Service,
 ) http.HandlerFunc {
-	healthURL := strings.TrimRight(pythonBaseURL, "/") + "/healthz"
+	healthURL := strings.TrimRight(pythonBaseURL, "/") + "/internal/ready"
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := authService.Ping(r.Context()); err != nil {
 			writeJSONError(w, http.StatusServiceUnavailable, "database_not_ready")

@@ -2,48 +2,25 @@
  name = "qidian-agent-backend"
  version = "0.1.0"
  description = "Backend for Qidian Agent with LangGraph."
- requires-python = ">=3.10"
+ requires-python = ">=3.11,<3.13"
  dependencies = [
-   "pyyaml",
-   "python-dotenv",
-   "langchain>=0.2.10",
-   "langchain-community>=0.2.10",
-   "langchain-tavily",
-   "langchain-dashscope",
-   "langchain-postgres",
-   "ragas",
-   "datasets",
-   "llama-index-core",
-   "llama-index-llms-dashscope",
-   "llama-index-embeddings-huggingface",
-   "llama-index-vector-stores-chroma",
-   "llama-index-readers-file",
-   "llama-index-experimental",
-   "chromadb",
-   "unstructured[local-inference]",
-   "pandas",
-   "tabulate",
-   "matplotlib",
-   "requests",
-   "pydantic",
-   "pydantic-settings",
-   "PyPDF2",
-   "pdfplumber",
-   "pymupdf",
-   "python-docx",
-   "docx2txt",
-   "rank_bm25",
-   "protobuf==3.20.3",
-   "fastapi",
-   "uvicorn[standard]",
-   "sse-starlette",
-   "python-multipart",
-   "langgraph>=0.2.0",
-   "psycopg2-binary",
-   "redis",
-   "lunar-python>=1.4.8",
-  "py-iztro",
-]
+   "fastapi==0.128.0",
+   "langgraph==1.0.7",
+   "langgraph-checkpoint-postgres==3.0.5",
+   "lunar-python==1.4.8",
+   "openai==2.15.0",
+   "psycopg[binary,pool]==3.3.4",
+   "py-iztro==0.1.3",
+   "pydantic==2.12.5",
+   "pydantic-settings==2.12.0",
+   "python-dotenv==1.2.1",
+   "python-multipart==0.0.21",
+   "pyyaml==6.0.3",
+   "redis==7.1.0",
+   "requests==2.32.5",
+   "sse-starlette==3.2.0",
+   "uvicorn[standard]==0.40.0",
+ ]
 
  [project.optional-dependencies]
  dev = [
@@ -53,4 +30,12 @@
    "pytest",
    "pytest-asyncio",
    "httpx",
+ ]
+
+ [dependency-groups]
+ # Minimal, reproducible environment for validating the target Agent Runtime
+ # independently from the legacy RAG/ingestion dependency stack.
+ target-test = [
+   "pytest==9.0.2",
+   "pytest-asyncio==1.3.0",
  ]

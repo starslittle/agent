@@ -1,2 +1,0 @@
-# 缓存依赖 - Redis
-redis
