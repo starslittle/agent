@@ -24,7 +24,7 @@ type Store interface {
 	StartGeneration(context.Context, StartGenerationParams) (Generation, error)
 	LoadHistory(context.Context, string, string, int, int) ([]Message, error)
 	CheckpointGeneration(context.Context, string, string, string) error
-	FinishGeneration(context.Context, FinishGenerationParams) error
+	FinishGeneration(context.Context, FinishGenerationParams) (string, error)
 	RecordAgentEvent(context.Context, string, string, agent.Event) (bool, error)
 	MarkSequenceGap(context.Context, string, string, int64, int64) error
 	MarkSequenceReconciled(context.Context, string, string, int64) error

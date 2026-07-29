@@ -355,7 +355,13 @@ func (h *conversationHTTP) cancelRun(w http.ResponseWriter, r *http.Request) {
 			"run_id", runID,
 			"error", err,
 		)
-		writeJSONError(w, http.StatusBadGateway, "agent_cancel_failed")
+		// The cancellation intent is already durable in PostgreSQL. The active
+		// stream will reconcile the eventual Python terminal event, and a late
+		// run.completed is resolved as cancelled.
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"run_id": runID,
+			"status": string(agent.StatusCancelRequested),
+		})
 		return
 	}
 
@@ -380,7 +386,10 @@ func (h *conversationHTTP) cancelRun(w http.ResponseWriter, r *http.Request) {
 		}
 		select {
 		case <-cancelCtx.Done():
-			writeJSONError(w, http.StatusGatewayTimeout, "agent_cancel_timeout")
+			writeJSON(w, http.StatusAccepted, map[string]any{
+				"run_id": runID,
+				"status": string(agent.StatusCancelRequested),
+			})
 			return
 		case <-ticker.C:
 		}
@@ -570,7 +579,7 @@ func (h *conversationHTTP) stream(w http.ResponseWriter, r *http.Request) {
 
 			if event.Type == "done" {
 				if strings.TrimSpace(answer.String()) == "" {
-					if err := h.finishGeneration(
+					if _, err := h.finishGeneration(
 						session.User.ID,
 						generation,
 						"",
@@ -588,7 +597,7 @@ func (h *conversationHTTP) stream(w http.ResponseWriter, r *http.Request) {
 					flusher.Flush()
 					return
 				}
-				if err := h.finishGeneration(
+				if _, err := h.finishGeneration(
 					session.User.ID,
 					generation,
 					answer.String(),
@@ -616,7 +625,7 @@ func (h *conversationHTTP) stream(w http.ResponseWriter, r *http.Request) {
 				finishStatus = "failed"
 				finishCode = "agent_error"
 				finishDetail = event.Message
-				if err := h.finishGeneration(
+				if _, err := h.finishGeneration(
 					session.User.ID,
 					generation,
 					answer.String(),
@@ -1014,7 +1023,7 @@ func (h *conversationHTTP) streamV1(
 				flusher.Flush()
 				return
 			}
-			if err := h.finishGeneration(
+			persistedStatus, err := h.finishGeneration(
 				userID,
 				generation,
 				answer.String(),
@@ -1022,21 +1031,26 @@ func (h *conversationHTTP) streamV1(
 				"",
 				"",
 				firstTokenAt,
-			); err != nil {
+			)
+			if err != nil {
 				terminalDetail = err.Error()
 				terminalCode = "persistence_failed"
 				return
 			}
 			finished = true
+			browserStatus := persistedStatus
+			if persistedStatus == string(agent.StatusCancelled) {
+				browserStatus = "stopped"
+			}
 			writeSSEJSON(w, map[string]any{
 				"type":       "done",
 				"message_id": generation.Assistant.ID,
-				"status":     "completed",
+				"status":     browserStatus,
 			})
 			flusher.Flush()
 			return
 		case "run.cancelled":
-			_ = h.finishGeneration(
+			_, _ = h.finishGeneration(
 				userID,
 				generation,
 				answer.String(),
@@ -1060,7 +1074,7 @@ func (h *conversationHTTP) streamV1(
 			if event.Type == "run.timed_out" {
 				status = string(agent.StatusTimedOut)
 			}
-			_ = h.finishGeneration(
+			_, _ = h.finishGeneration(
 				userID,
 				generation,
 				answer.String(),
@@ -1216,7 +1230,7 @@ func (h *conversationHTTP) continueV1Detached(
 					)
 					return
 				}
-				_ = h.finishGeneration(
+				_, _ = h.finishGeneration(
 					userID,
 					generation,
 					answer.String(),
@@ -1227,7 +1241,7 @@ func (h *conversationHTTP) continueV1Detached(
 				)
 				return
 			case "run.cancelled":
-				_ = h.finishGeneration(
+				_, _ = h.finishGeneration(
 					userID,
 					generation,
 					answer.String(),
@@ -1244,7 +1258,7 @@ func (h *conversationHTTP) continueV1Detached(
 				if event.Type == "run.timed_out" {
 					status = string(agent.StatusTimedOut)
 				}
-				_ = h.finishGeneration(
+				_, _ = h.finishGeneration(
 					userID,
 					generation,
 					answer.String(),
@@ -1395,7 +1409,7 @@ func (h *conversationHTTP) finishGeneration(
 	code string,
 	detail string,
 	firstTokenAt *time.Time,
-) error {
+) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return h.service.Finish(ctx, conversation.FinishGenerationParams{
@@ -1420,7 +1434,7 @@ func (h *conversationHTTP) finishDetached(
 	detail string,
 	firstTokenAt *time.Time,
 ) {
-	if err := h.finishGeneration(
+	if _, err := h.finishGeneration(
 		userID,
 		generation,
 		content,

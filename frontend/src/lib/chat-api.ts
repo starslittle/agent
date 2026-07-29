@@ -33,45 +33,6 @@ export interface MessageListResponse {
   next_before?: number | null;
 }
 
-export type BrowserEventType =
-  | "meta"
-  | "activity"
-  | "answer_delta"
-  | "artifact"
-  | "done"
-  | "error";
-
-export interface BrowserEvent {
-  type: BrowserEventType;
-  sequence: number;
-  data?: unknown;
-  conversation_id?: string;
-  user_message_id?: string;
-  assistant_message_id?: string;
-  run_id?: string;
-  execution_id?: string;
-  protocol_version?: number;
-  title?: string;
-}
-
-export interface CreateRunResponse {
-  conversation_id: string;
-  user_message_id: string;
-  assistant_message_id: string;
-  run_id: string;
-  execution_id?: string;
-  protocol_version?: number;
-  status: string;
-  events_url?: string;
-  client_message_id?: string;
-}
-
-export interface CancelRunResponse {
-  run_id: string;
-  status: string;
-}
-
-// Extended stream event type for P0 browser protocol (meta, activity, answer_delta, artifact, done, error)
 export type ConversationStreamEvent =
   | {
       type: "meta";
@@ -88,21 +49,6 @@ export type ConversationStreamEvent =
       data?: string;
       isThinking?: boolean;
       thinkingFinished?: boolean;
-    }
-  | {
-      type: "activity";
-      sequence: number;
-      activity: unknown;
-    }
-  | {
-      type: "answer_delta";
-      sequence: number;
-      data: string;
-    }
-  | {
-      type: "artifact";
-      sequence: number;
-      artifact: unknown;
     }
   | {
       type: "done";
@@ -319,92 +265,3 @@ function chatErrorMessage(code?: string, detail?: string): string {
       return "会话请求失败，请稍后重试";
   }
 }
-
-// P0 protocol types for Go JSON -> TS mirror (one-to-one correspondence,
-// no UI integration)
-export type BrowserEventType =
-  | "meta"
-  | "activity"
-  | "answer_delta"
-  | "artifact"
-  | "done"
-  | "error";
-
-export interface BrowserEvent {
-  type: BrowserEventType;
-  sequence: number;
-  data?: unknown;
-  // Meta-specific fields for P0
-  conversation_id?: string;
-  user_message_id?: string;
-  assistant_message_id?: string;
-  run_id?: string;
-  execution_id?: string;
-  protocol_version?: number;
-  title?: string;
-}
-
-export interface CreateRunResponse {
-  conversation_id: string;
-  user_message_id: string;
-  assistant_message_id: string;
-  run_id: string;
-  execution_id?: string;
-  protocol_version?: number;
-  status: string;
-  events_url?: string;
-  client_message_id?: string;
-}
-
-export interface AttachEventRequest {
-  starting_after?: number;
-}
-
-export interface CancelRunResponse {
-  run_id: string;
-  status: string;
-}
-
-// Extend existing stream event type with new P0 browser event kinds
-// without changing runtime behavior or UI logic
-export type ConversationStreamEvent =
-  | {
-      type: "meta";
-      conversation_id: string;
-      user_message_id: string;
-      assistant_message_id: string;
-      run_id: string;
-      execution_id?: string;
-      protocol_version?: number;
-      title: string;
-    }
-  | {
-      type: "delta";
-      data?: string;
-      isThinking?: boolean;
-      thinkingFinished?: boolean;
-    }
-  | {
-      type: "activity";
-      sequence: number;
-      activity: unknown;
-    }
-  | {
-      type: "answer_delta";
-      sequence: number;
-      data: string;
-    }
-  | {
-      type: "artifact";
-      sequence: number;
-      artifact: unknown;
-    }
-  | {
-      type: "done";
-      message_id?: string;
-      status?: string;
-    }
-  | {
-      type: "error";
-      message?: string;
-    };

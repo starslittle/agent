@@ -10,6 +10,7 @@ import {
 } from "@/lib/chat-api";
 import { useAuth } from "@/auth/AuthProvider";
 import { ArrowDown, ArrowUpRight, LoaderCircle } from "lucide-react";
+import { toast } from "sonner";
 
 interface Message {
   id: string;
@@ -161,6 +162,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   }, [setFollowingLatest]);
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -173,32 +175,34 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 
   const requestRunCancellation = useCallback(async (
     activeRun: { id: string; protocolVersion: number },
-    controller: AbortController,
   ) => {
     if (cancellationInFlightRef.current) return;
 
     cancellationInFlightRef.current = true;
     try {
-      const result = await cancelAgentRun(activeRun.id, csrfToken);
-      if (result.status === "cancelled") {
-        controller.abort();
-      }
+      await cancelAgentRun(activeRun.id, csrfToken);
+      // Keep consuming the stream until Go emits its authoritative terminal
+      // event. Aborting here can make the UI say "stopped" while the Run is
+      // still active in PostgreSQL.
     } catch (error) {
       console.error("取消生成失败:", error);
-      controller.abort();
-      return;
+      stopRequestedRef.current = false;
+      if (mountedRef.current) {
+        setIsCancelling(false);
+        toast.error("取消失败，任务仍在运行，可再次点击停止");
+      }
     } finally {
       cancellationInFlightRef.current = false;
     }
   }, [csrfToken]);
 
   const handleStop = useCallback(() => {
-    const controller = abortControllerRef.current;
-    if (!controller) return;
+    if (!abortControllerRef.current || cancellationInFlightRef.current) return;
     stopRequestedRef.current = true;
+    setIsCancelling(true);
     const activeRun = activeRunRef.current;
     if (activeRun) {
-      void requestRunCancellation(activeRun, controller);
+      void requestRunCancellation(activeRun);
     }
   }, [requestRunCancellation]);
 
@@ -263,10 +267,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
               protocolVersion: event.protocol_version ?? 0,
             };
             if (stopRequestedRef.current) {
-              void requestRunCancellation(
-                activeRunRef.current,
-                controller,
-              );
+              void requestRunCancellation(activeRunRef.current);
             }
             setMessages((prev) => prev.map((message) => {
               if (message.id === clientMessageID) {
@@ -332,13 +333,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           : message,
       ));
     } catch (err: unknown) {
-      // 如果是用户手动停止，不做错误处理，只确保 thinking 结束
+      // Abort only represents a local stream teardown (for example component
+      // unmount). A successful cancellation is reported by the server's done
+      // event and must not be inferred from AbortError.
       if ((err as Error).name === "AbortError") {
-        setMessages((prev) => prev.map((m) =>
-          m.role === "assistant" && m.status === "streaming"
-            ? { ...m, status: "stopped", thinking: false }
-            : m
-        ));
         return;
       }
 
@@ -360,6 +358,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       stopRequestedRef.current = false;
       if (mountedRef.current) {
         setIsGenerating(false);
+        setIsCancelling(false);
         if (createdConversation) {
           onConversationCreated?.(createdConversation);
         }
@@ -490,7 +489,12 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           </button>
         )}
         <div className="pointer-events-auto mx-auto w-full max-w-4xl">
-          <ChatInput onSend={handleSend} loading={isGenerating} onStop={handleStop} />
+          <ChatInput
+            onSend={handleSend}
+            loading={isGenerating}
+            stopping={isCancelling}
+            onStop={handleStop}
+          />
           <p className="mt-2.5 text-center text-[10px] text-muted-foreground">
             奇点AI可能会犯错，请核对重要信息。
           </p>

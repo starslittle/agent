@@ -141,7 +141,7 @@ func (s *Service) Checkpoint(
 func (s *Service) Finish(
 	ctx context.Context,
 	params FinishGenerationParams,
-) error {
+) (string, error) {
 	if params.GenerationCompleted.IsZero() {
 		params.GenerationCompleted = s.now().UTC()
 	}

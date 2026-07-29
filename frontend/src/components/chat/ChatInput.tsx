@@ -2,15 +2,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Brain, Plus, Send, Square } from "lucide-react";
+import { Brain, LoaderCircle, Plus, Send, Square } from "lucide-react";
 
 interface ChatInputProps {
   onSend: (text: string, deepThinking: boolean) => void;
   loading?: boolean;
+  stopping?: boolean;
   onStop?: () => void;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSend, loading, onStop }) => {
+export const ChatInput: React.FC<ChatInputProps> = ({
+  onSend,
+  loading,
+  stopping,
+  onStop,
+}) => {
   const [value, setValue] = useState("");
   const [deep, setDeep] = useState(false);
   // local sending state still useful for debounce/prevent double click
@@ -87,13 +93,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSend, loading, onStop })
 
           <button
             type="button"
-            disabled={!loading && (sending || (!value.trim() && !file))}
+            disabled={stopping || (!loading && (sending || (!value.trim() && !file)))}
             onClick={loading ? onStop : handleSend}
             className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-[#121629] text-white shadow-[0_10px_24px_-12px_rgba(18,22,41,0.8)] transition hover:-translate-y-0.5 hover:bg-[#1d2340] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transform-none dark:bg-white dark:text-[#121629] dark:hover:bg-white/90"
-            title={loading ? "停止生成" : "发送消息"}
-            aria-label={loading ? "停止生成" : "发送消息"}
+            title={stopping ? "正在停止生成" : loading ? "停止生成" : "发送消息"}
+            aria-label={stopping ? "正在停止生成" : loading ? "停止生成" : "发送消息"}
           >
-            {loading ? (
+            {stopping ? (
+              <LoaderCircle size={16} className="animate-spin" />
+            ) : loading ? (
               <Square size={13} className="fill-current" />
             ) : (
               <Send size={17} />
