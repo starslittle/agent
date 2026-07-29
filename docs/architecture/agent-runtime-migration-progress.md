@@ -6,7 +6,7 @@
 >
 > 开发分支：`codex/agent-runtime-migration`
 >
-> 状态：主体实现与自动验证完成；等待人工验收，显式取消时序问题列为默认开启前的 P0 TODO
+> 状态：迁移代码已合入 `main`；显式取消修复已通过产品验收，生产默认切换仍需完成剩余门禁
 
 ## 结论
 
@@ -96,43 +96,21 @@ AGENT_RUNTIME_COORDINATION=none
 - Go Run-ID 取消接口与 Python 取消传播已经实现；
 - Python Event 先落 Store 后推流，Go 再持久化脱敏关键事件和 Span。
 
-### P0 TODO：显式停止存在 Run-ID 获取时序缺口
+### P0 修复完成：显式停止终态一致
 
-2026-07-29 的真实页面验收发现，前端点击“停止生成”后可能只中止浏览器 SSE，
-后台 Run 仍继续执行并最终写成 `completed`。用户紧接着发送下一条消息时，会收到
-`conversation_busy`。
+2026-07-30 已修复“页面显示已停止、后台 Run 仍继续运行”的状态分裂：
 
-这不是 LangGraph、PostgreSQL Runtime Store 或 Python CancellationToken 本身失效，
-而是产品控制面与流式传输之间的契约缺口：
+- 前端不再把本地 `AbortError` 当作停止成功，只接受服务端终态事件；
+- 点击停止后进入“正在停止生成”，取消请求失败时保留运行状态并允许重试；
+- Go 先将 `cancel_requested` 持久化，再向 Python 传播取消；
+- `cancel_requested` 与晚到的 `run.completed` 发生竞态时，以 `cancelled` 为最终状态；
+- Product Run 与 assistant message 在同一事务中分别落为 `cancelled/stopped`；
+- Go 将数据库确定的最终状态投影给浏览器，页面、消息和 Run 不再各自推断。
 
-1. 前端只有收到当前 SSE 中的 `meta.run_id` 后，才能调用
-   `DELETE /api/v1/agent-runs/{runID}`；
-2. “停止”按钮在请求发出后立即可用，用户可能在 `meta` 到达前点击；
-3. 这一取消意图目前只暂存在 React 内存引用中，没有持久的请求身份或服务端取消意图；
-4. 取消 API 失败时，前端会中止本地流并显示“已停止”，从而可能掩盖后台 Run 未取消；
-5. Go 当前只能按 `run_id` 取消，不能按已知的
-   `conversation_id + client_message_id` 查找或登记待取消意图。
-
-因此，“浏览器 detached 不等于语义取消”的架构原则仍然正确，但显式停止必须拥有
-一条不依赖同一条 SSE 先交付 Run ID 的稳定控制通道。
-
-建议按两层收口：
-
-- 短期：增加按 `conversation_id + client_message_id` 的幂等取消命令。Go 在 Run
-  已创建时解析并取消；Run 尚未创建时短暂等待或持久化 pending-cancel intent。
-  前端从发送开始就持有这两个 ID，取消失败时不得把 UI 标记为成功停止。
-- 目标：将“创建 Run”和“订阅事件”拆成两个协议步骤。创建命令先返回稳定
-  `run_id/execution_id`，随后客户端用独立 SSE attach/re-attach；取消始终走独立
-  command endpoint。这样 start、attach、detach、cancel 四种语义完全分离。
-
-修复后的强制验收：
-
-- 在首个 `meta` 前立即点击停止，Run 和 assistant message 最终均为 `cancelled`；
-- 在模型流式输出中点击停止，同样落为 `cancelled`；
-- 取消 API 故障时 UI 明确显示取消失败，不得伪装成“已停止”；
-- 取消完成后同一会话可立即发送下一条消息；
-- 重复取消幂等，多副本下由 PostgreSQL 状态和 fencing 保证唯一终态；
-- 浏览器意外断开仍只 detach，不自动转换为显式取消。
+自动测试覆盖取消/完成竞态、消息终态和会话解锁；真实页面验收确认 DELETE 成功、
+页面显示“已停止生成”，数据库为 `cancelled/stopped`，同一会话随后可正常产生
+`completed/completed` 的新 Run。浏览器意外断开仍只代表 detach，不会自动转换为
+显式取消。
 
 ### 可观测与 provenance
 
@@ -159,7 +137,7 @@ AGENT_RUNTIME_COORDINATION=none
 
 | 项目 | 结果 |
 |---|---|
-| Python 3.11 target unit | 61 passed |
+| Python 3.11 target unit | 62 passed，2 skipped |
 | 真实 PostgreSQL integration | 2 passed |
 | 真实 OS process kill/takeover | passed |
 | Go `go test ./...` | passed |
@@ -176,17 +154,14 @@ AGENT_RUNTIME_COORDINATION=none
 
 ## 仅剩人工参与
 
-以下操作仍需人工参与。它们有生产影响，自动迁移不会代替人工执行。显式取消 P0
-TODO 可以与后续产品问题集中整改，但在 V1 成为默认链路前必须修复并通过上述验收：
+以下操作仍需人工参与。它们有生产影响，自动迁移不会代替人工执行：
 
-1. 审核本分支的大规模删除、状态所有权与安全边界；
-2. 选择提交拆分方式、合并到 `main` 并推送；
-3. 生产 PostgreSQL 备份并确认可恢复；
-4. 由数据库管理员执行 migration、checkpoint setup 与最小权限 grant；
-5. 配置生产 Secret、Runtime 数据库连接和 Redis；
-6. 在测试/小流量环境切换 `v1 + postgres + redis` 并观察；
-7. 确认指标后逐步扩大流量；
-8. 最终授权生产默认切换。
+1. 生产 PostgreSQL 备份并确认可恢复；
+2. 由数据库管理员执行 migration、checkpoint setup 与最小权限 grant；
+3. 配置生产 Secret、Runtime 数据库连接和 Redis；
+4. 在测试/小流量环境切换 `v1 + postgres + redis` 并观察；
+5. 确认指标后逐步扩大流量；
+6. 最终授权生产默认切换。
 
 详细命令、门禁、观测点和回滚方法见
 [`agent-runtime-rollout.md`](../operations/agent-runtime-rollout.md)。
@@ -205,10 +180,9 @@ P0 的协议、实施顺序和自动验收矩阵见
 3. 完成服务重启恢复、失败/超时解锁、事件序号、Trace/provenance 脱敏和跨用户权限
    的自动技术验收并形成报告。
 
-本项目采用“`main` 保持可验收、可发布”的合码标准：P0 未完成时可以在迁移分支
-继续提交、推送和内部架构开发，但不合入 `main`，也不得把 V1 设为面向用户的默认
-链路。只有 P0 修复、自动技术验收报告和完整回归全部通过后，才进入人工审核与
-`main` 合并。
+迁移实现可以保存在 `main`，但生产 Compose 必须继续保持 legacy 默认链路，直到
+上述剩余 P0 自动门禁、生产数据库准备和小流量观测全部完成。代码合入不等于生产
+默认切换授权。
 
 ### P1：下一轮产品架构迁移
 
