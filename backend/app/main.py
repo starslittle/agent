@@ -1,18 +1,88 @@
+from contextlib import asynccontextmanager
+import asyncio
+
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 from app.core.settings import settings
-from .api.agent_runs import router as agent_runs_router
+from .api import agent_runs
 
-if settings.DASHSCOPE_API_KEY:
-    print("[ENV] DASHSCOPE_API_KEY loaded successfully")
-else:
-    print("[ENV] WARNING: DASHSCOPE_API_KEY is missing; streaming LLM calls may fail")
+if settings.AGENT_RUNTIME_STORE == "postgres":
+    # psycopg async connections require the selector loop on Windows. This
+    # import must happen before Uvicorn creates the application event loop.
+    from app.runtime.postgres_store import (
+        configure_psycopg_event_loop_policy,
+    )
+
+    configure_psycopg_event_loop_policy()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    runtime_store = None
+    runtime_notifier = None
+    if settings.AGENT_RUNTIME_COORDINATION == "redis":
+        from app.runtime.coordination import RedisRuntimeNotifier
+
+        runtime_notifier = await RedisRuntimeNotifier.open(
+            settings.REDIS_URL,
+            channel_prefix=settings.AGENT_RUNTIME_REDIS_CHANNEL_PREFIX,
+        )
+    if settings.AGENT_RUNTIME_STORE == "postgres":
+        from app.runtime.postgres_store import PostgresRuntimeStore
+
+        runtime_store = await PostgresRuntimeStore.open(
+            settings.AGENT_RUNTIME_DATABASE_URL
+        )
+        checkpointer = None
+        if settings.AGENT_EXECUTION_ENGINE == "langgraph_v1":
+            checkpointer = await runtime_store.build_checkpointer(
+                setup=settings.AGENT_RUNTIME_CHECKPOINT_SETUP,
+            )
+        agent_runs.configure_runtime_store(
+            runtime_store,
+            checkpointer=checkpointer,
+            notifier=runtime_notifier,
+        )
+    elif runtime_notifier is not None:
+        from app.runtime.store import InMemoryRuntimeStore
+
+        agent_runs.configure_runtime_store(
+            InMemoryRuntimeStore(),
+            notifier=runtime_notifier,
+        )
+    maintenance_task = asyncio.create_task(
+        _runtime_maintenance(),
+        name="agent-runtime-maintenance",
+    )
+    try:
+        yield
+    finally:
+        maintenance_task.cancel()
+        await asyncio.gather(maintenance_task, return_exceptions=True)
+        await agent_runs.registry.close()
+        if runtime_store is not None:
+            await runtime_store.close()
 
 
-app = FastAPI(title="Qidian Python Agent Service", version="1.0.0")
-app.include_router(agent_runs_router)
+async def _runtime_maintenance() -> None:
+    interval = max(30, settings.AGENT_RUNTIME_MAINTENANCE_SECONDS)
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await agent_runs.registry.purge_expired()
+        except Exception:
+            # Readiness exposes persistent failures. Maintenance retries on
+            # the next interval without terminating the Agent Service.
+            continue
+
+
+app = FastAPI(
+    title="Qidian Python Agent Service",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+app.include_router(agent_runs.router)
 
 
 class QueryRequest(BaseModel):
@@ -41,18 +111,12 @@ async def query_stream_endpoint(req: QueryRequest, request: Request):
     return await query_stream_graph(req)
 
 
-# ===== 原有的API端点（保留兼容） =====
-
-
 @app.get("/healthz")
 def healthz():
     return {
         "status": "ok",
         "service": "python-agent-service",
         "service_version": settings.AGENT_SERVICE_VERSION,
-        "protocol_versions": [1],
-        "graph_enabled": True,  # 标识Graph功能已启用
-        "graph_modes": ["default", "research", "fortune"],
     }
 
 

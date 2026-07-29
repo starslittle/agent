@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-from langchain_core.tools import tool
-
-
 def _parse_date(date_str: str) -> Tuple[int, int, int]:
     if not date_str:
         raise ValueError("birth_date 不能为空，格式应为 YYYY-MM-DD")
@@ -63,7 +60,6 @@ def _time_index_from_hms(hour: int, minute: int, second: int) -> int:
     return (hour + 1) // 2
 
 
-@tool
 def get_ziwei_chart(
     birth_date: str,
     birth_time: str = "00:00",

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import ChatMessage, { ChatRole } from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import {
+  cancelAgentRun,
   createConversation,
   postConversationStream,
   type Conversation,
@@ -9,6 +10,7 @@ import {
 } from "@/lib/chat-api";
 import { useAuth } from "@/auth/AuthProvider";
 import { ArrowDown, ArrowUpRight, LoaderCircle } from "lucide-react";
+import { toast } from "sonner";
 
 interface Message {
   id: string;
@@ -71,6 +73,12 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   const isFollowingLatestRef = useRef(true);
   const lastScrollTopRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeRunRef = useRef<{
+    id: string;
+    protocolVersion: number;
+  } | null>(null);
+  const stopRequestedRef = useRef(false);
+  const cancellationInFlightRef = useRef(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -154,6 +162,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   }, [setFollowingLatest]);
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -164,13 +173,38 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     };
   }, []);
 
-  const handleStop = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setIsGenerating(false);
+  const requestRunCancellation = useCallback(async (
+    activeRun: { id: string; protocolVersion: number },
+  ) => {
+    if (cancellationInFlightRef.current) return;
+
+    cancellationInFlightRef.current = true;
+    try {
+      await cancelAgentRun(activeRun.id, csrfToken);
+      // Keep consuming the stream until Go emits its authoritative terminal
+      // event. Aborting here can make the UI say "stopped" while the Run is
+      // still active in PostgreSQL.
+    } catch (error) {
+      console.error("取消生成失败:", error);
+      stopRequestedRef.current = false;
+      if (mountedRef.current) {
+        setIsCancelling(false);
+        toast.error("取消失败，任务仍在运行，可再次点击停止");
+      }
+    } finally {
+      cancellationInFlightRef.current = false;
     }
-  }, []);
+  }, [csrfToken]);
+
+  const handleStop = useCallback(() => {
+    if (!abortControllerRef.current || cancellationInFlightRef.current) return;
+    stopRequestedRef.current = true;
+    setIsCancelling(true);
+    const activeRun = activeRunRef.current;
+    if (activeRun) {
+      void requestRunCancellation(activeRun);
+    }
+  }, [requestRunCancellation]);
 
   const handleSend = useCallback(async (text: string, deep: boolean) => {
     scrollToLatest();
@@ -205,6 +239,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     setIsGenerating(true);
     let createdConversation: Conversation | null = null;
     let accumulatedContent = "";
+    let terminalStatus: string | undefined;
+    activeRunRef.current = null;
+    stopRequestedRef.current = false;
 
     try {
       const agentName = deep ? "research_agent" : undefined;
@@ -225,6 +262,13 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         csrfToken,
         (event) => {
           if (event.type === "meta") {
+            activeRunRef.current = {
+              id: event.run_id,
+              protocolVersion: event.protocol_version ?? 0,
+            };
+            if (stopRequestedRef.current) {
+              void requestRunCancellation(activeRunRef.current);
+            }
             setMessages((prev) => prev.map((message) => {
               if (message.id === clientMessageID) {
                 return { ...message, id: event.user_message_id };
@@ -234,6 +278,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
               }
               return message;
             }));
+            return;
+          }
+          if (event.type === "done") {
+            terminalStatus = event.status;
             return;
           }
           if (event.type !== "delta" || !event.data) return;
@@ -256,6 +304,20 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         },
         controller.signal
       );
+
+      if (terminalStatus === "stopped" || terminalStatus === "cancelled") {
+        setMessages((prev) => prev.map((message) =>
+          message.role === "assistant" && message.status === "streaming"
+            ? {
+                ...message,
+                status: "stopped",
+                thinking: false,
+                thinkingFinished: true,
+              }
+            : message,
+        ));
+        return;
+      }
       
       if (!accumulatedContent) {
         throw new Error("流式输出未收到任何内容");
@@ -271,13 +333,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           : message,
       ));
     } catch (err: unknown) {
-      // 如果是用户手动停止，不做错误处理，只确保 thinking 结束
+      // Abort only represents a local stream teardown (for example component
+      // unmount). A successful cancellation is reported by the server's done
+      // event and must not be inferred from AbortError.
       if ((err as Error).name === "AbortError") {
-        setMessages((prev) => prev.map((m) =>
-          m.role === "assistant" && m.status === "streaming"
-            ? { ...m, status: "stopped", thinking: false }
-            : m
-        ));
         return;
       }
 
@@ -295,8 +354,11 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       ));
     } finally {
       abortControllerRef.current = null;
+      activeRunRef.current = null;
+      stopRequestedRef.current = false;
       if (mountedRef.current) {
         setIsGenerating(false);
+        setIsCancelling(false);
         if (createdConversation) {
           onConversationCreated?.(createdConversation);
         }
@@ -308,6 +370,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     csrfToken,
     onConversationChanged,
     onConversationCreated,
+    requestRunCancellation,
     scrollToLatest,
   ]);
 
@@ -426,7 +489,12 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           </button>
         )}
         <div className="pointer-events-auto mx-auto w-full max-w-4xl">
-          <ChatInput onSend={handleSend} loading={isGenerating} onStop={handleStop} />
+          <ChatInput
+            onSend={handleSend}
+            loading={isGenerating}
+            stopping={isCancelling}
+            onStop={handleStop}
+          />
           <p className="mt-2.5 text-center text-[10px] text-muted-foreground">
             奇点AI可能会犯错，请核对重要信息。
           </p>

@@ -1,9 +1,0 @@
-请从以下文本中提取出生信息，并输出 JSON（不要输出多余文字）。
-字段：birth_date（YYYY-MM-DD 或 YYYYMMDD）、birth_time（HH:MM 或 HH:MM:SS）、gender（男/女）、birthplace（城市/地区）。
-如果某字段缺失请输出空字符串。
-
-文本 1: {{query}}
-文本 2: {{current_task}}
-
-仅输出 JSON，例如：
-{"birth_date":"2001-05-14","birth_time":"16:05","gender":"男","birthplace":"绍兴"}

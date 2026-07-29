@@ -1,221 +1,129 @@
-# QidianAgent Backend
+# Python Agent Service
 
-## 项目结构
+Python 服务是启点 Agent 的执行面。它不拥有用户、会话、消息或产品 Run
+等业务事实，只负责执行 Agent、保存短期 Runtime 状态并向 Go 发布稳定事件。
 
-本项目采用分层架构设计，遵循领域驱动设计（DDD）原则。
+## 唯一执行路径
 
+```text
+app/api/agent_runs.py（V1） ─┐
+app/api/graph_routes.py（Legacy Adapter）
+                             ├─> app/runtime/registry.py
+                             -> app/runtime/langgraph_v1.py
+                             -> agent/application.py
+                             -> agent/graph.py
+                             -> agent/workflows/*
+                             -> ModelGateway / Capability Registry
 ```
+
+`graph_routes.py` 只转换旧 SSE 协议。仓库中不再保留顶层 `graph/`、第二套 RAG
+Agent、手写 `stream_graph` 或 Provider 直连节点。
+
+## 目录职责
+
+```text
 backend/
-├── app/                     # 内部 Agent API、Runtime 与服务启动
-├── graph/                   # LangGraph 图与节点
-├── agent/                   # 智能体能力层（工具注册表/Worker/提示词）
-├── rag/                     # RAG 体系（引擎/检索器/管线）
-├── infra/                   # 基础设施（数据库/缓存/存储/日志）
-├── configs/                 # 配置文件
-├── scripts/                 # 运维/迁移脚本
-├── tests/                   # 单测/集成测试
-└── requirements/            # 依赖拆分
+├── app/
+│   ├── api/                 # 内部 V1 API、Legacy 协议适配、HMAC
+│   ├── observability/       # 脱敏与稳定 Trace/Event 投影
+│   └── runtime/             # Store、lease、fencing、checkpoint、Redis 通知
+├── agent/
+│   ├── application.py       # Runtime 到 Root Graph 的唯一入口
+│   ├── graph.py             # 唯一 Root Graph
+│   ├── workflows/           # chat_v1 / research_v1 / fortune_v1
+│   ├── models/              # Provider 无关 Gateway 与百炼适配
+│   ├── tools/               # Tool 实现及唯一 Capability Registry
+│   └── prompts/             # 受 hash/provenance 管理的 Prompt
+├── configs/agents.yaml      # 唯一 AgentSpec 与策略配置
+├── scripts/                 # Runtime schema/setup
+└── tests/                   # 契约、单元与 PostgreSQL 故障恢复
 ```
 
-## 快速开始
+## 依赖
 
-### 1. 安装依赖
+Python 版本固定为 `>=3.11,<3.13`，`pyproject.toml + uv.lock` 是唯一依赖来源。
 
-```bash
-# 安装基础依赖
-pip install -r requirements/base.txt
-
-# 安装 API 依赖
-pip install -r requirements/api.txt
-
-# 安装数据库依赖
-pip install -r requirements/database.txt
-
-# 安装缓存依赖
-pip install -r requirements/cache.txt
-
-# 安装 Agent 依赖
-pip install -r requirements/agent.txt
-
-# 开发环境
-pip install -r requirements/dev.txt
+```powershell
+uv sync --frozen --group target-test --python 3.11
 ```
 
-### 2. 配置环境变量
+Docker 镜像也只从这两个文件安装依赖。最终运行镜像不包含 Node/npm。
 
-本地直接运行 Python 时，在 `backend` 目录创建独立的 `.env`：
+## 启动
 
-```bash
-cp ../.env.example .env
+从根目录 `.env.example` 创建本地 `.env`，或向进程注入环境变量。不要提交真实
+Provider Key、数据库密码或内部签名密钥。
+
+```powershell
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
-主要配置项：
-- `DASHSCOPE_API_KEY`: 通义千问 API 密钥
-- `TAVILY_API_KEY`: Tavily 搜索密钥（可选）
-- `SENIVERSE_API_KEY`: 心知天气密钥（可选）
-- `INTERNAL_AGENT_SECRET`: 与 Go 网关一致的内部 HMAC 密钥
-- `AGENT_SERVICE_VERSION`: Agent Service 发布版本
-- `PORT`: 服务端口（默认 8000）
+主要内部接口：
 
-Python Agent Service 不负责用户、会话、消息或 Run 的业务数据写入；这些数据
-只由 Go 网关写入 PostgreSQL。
+- `GET /internal/health`
+- `GET /internal/ready`
+- `GET /internal/v1/capabilities`
+- `POST /internal/v1/agent-runs:stream`
+- `GET /internal/v1/agent-runs/{execution_id}`
+- `DELETE /internal/v1/agent-runs/{execution_id}`
+- `POST /query_stream`（Legacy 协议适配）
 
-### 3. 启动服务
+除健康与能力清单外，内部接口要求 Go 生成 HMAC v1 签名。生产环境不得把 Python
+直接暴露到公网。
 
-```bash
-uvicorn app.main:app --reload --port 8000
+## Runtime 模式
+
+本地轻量模式：
+
+```dotenv
+AGENT_RUNTIME_STORE=memory
+AGENT_RUNTIME_COORDINATION=none
 ```
 
-也可以完全以 `backend` 为构建上下文：
+持久/多副本目标模式：
 
-```bash
-docker build -t qidian-python-agent .
+```dotenv
+AGENT_RUNTIME_STORE=postgres
+AGENT_RUNTIME_COORDINATION=redis
+AGENT_RUNTIME_CHECKPOINT_SETUP=false
 ```
 
-### 4. 内部接口
+PostgreSQL 保存 execution、短期 Event Outbox、Artifact staging、lease/fencing 与
+LangGraph checkpoint。Redis 只降低通知和取消延迟；Redis 故障时继续用 PostgreSQL
+轮询，绝不把 Redis 当作运行事实源。
 
-- 健康检查: `GET /internal/health`
-- 能力清单: `GET /internal/v1/capabilities`
-- 开始/续接执行: `POST /internal/v1/agent-runs:stream`
-- 执行状态: `GET /internal/v1/agent-runs/{execution_id}`
-- 幂等取消: `DELETE /internal/v1/agent-runs/{execution_id}`
-- Legacy 回滚入口: `POST /query_stream`
+生产建表必须作为独立部署步骤执行：
 
-除健康检查与能力清单外，内部接口要求 Go 生成的 HMAC v1 签名。生产部署只应
-通过内部网络暴露 Python 服务。
-
-## 核心模块说明
-
-### 应用层 (app/)
-
-FastAPI 应用的入口层，负责：
-- API 路由定义
-- 请求/响应模型
-- 依赖注入
-- 中间件配置
-
-### Graph 层 (graph/)
-
-LangGraph 工作流层，负责：
-- 意图路由
-- 检索节点
-- 工具调用节点
-- 答案生成节点
-- 状态管理
-
-### Agent 层 (agent/)
-
-智能体能力层，负责：
-- 工具实现（日期、天气、搜索等）
-- 提示词管理
-- 路由策略
-
-### RAG 层 (rag/)
-
-检索增强生成层，负责：
-- 向量检索引擎
-- 混合检索器
-- RAG 管线
-- 文档处理
-
-### Infra 层 (infra/)
-
-基础设施层，负责：
-- 数据库连接管理
-- Redis 缓存
-- 本地存储管理
-- 日志配置
-
-## 开发指南
-
-### 添加新工具
-
-1. 在 `agent/tools/` 创建工具实现
-2. 在 `agent/tools/registry.py` 注册唯一名称、用途、副作用、幂等性、影子权限、
-   超时、输入输出上限和并发类型
-3. 阻塞、高内存或不可协作取消的实现使用 `process`，由可终止 Heavy Worker
-   隔离执行
-4. 为能力清单、影子限制、超时与取消补充契约测试
-
-### 添加新的 RAG 管线
-
-1. 在 `rag/pipelines/` 创建管线文件
-2. 在 `rag/pipelines/__init__.py` 中导出
-3. 在 `configs/rag.yaml` 中配置
-
-### 运行测试
-
-```bash
-# 快速协议、Runtime、签名和工具回归集
-pytest tests/unit -q
+```powershell
+uv run python scripts/setup_agent_runtime.py
 ```
 
-## 配置文件
+不要在生产请求进程中设置 `AGENT_RUNTIME_CHECKPOINT_SETUP=true`。
 
-### agents.yaml
+## 添加能力或工作流
 
-定义各种 Agent 的配置：
-- LLM 模型
-- 工具列表
-- 提示词模板
-- 执行参数
+能力必须在 `agent/tools/registry.py` 登记版本、输入输出 schema、effect、
+idempotent、shadow 权限、deadline 与资源限制。AgentSpec 白名单必须与 Registry
+一致。当前迁移只启用只读且幂等的能力；非幂等写能力在 durable operation ledger
+落地前会被 readiness 拒绝。
 
-### rag.yaml
+新 Workflow 必须：
 
-定义 RAG 系统配置：
-- 向量存储配置
-- 检索参数
-- 重排配置
+1. 作为 `agent/workflows/` 下的独立 Subgraph；
+2. 通过 `AgentApplication` 与 Root Graph 进入；
+3. 只调用 Model Gateway 与 Capability Executor；
+4. 使用 RunContext 的 deadline、取消和预算；
+5. 产生稳定事件与 Artifact，而不是写 Go 的业务表；
+6. 提供 Fake Model/Fake Capability 契约测试。
 
-## 脚本说明
+## 验证
 
-- `scripts/init_pgvector.sql`: 初始化 PostgreSQL 向量扩展
-- `scripts/migrate_chroma_to_pg.py`: 从 Chroma 迁移到 PGVector
-- `scripts/run_ragas_eval.py`: 运行 RAG 评估
-
-## 迁移说明
-
-如果你正在从旧结构迁移，请参考：
-- [MIGRATION_GUIDE.md](./MIGRATION_SUMMARY.md): 详细的迁移指南
-- [MIGRATION_SUMMARY.md](./MIGRATION_SUMMARY.md): 迁移完成总结
-
-## 常见问题
-
-### 1. 导入错误
-
-确保 backend 目录在 Python 路径中：
-```python
-import sys
-from pathlib import Path
-backend_root = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(backend_root))
+```powershell
+uv lock --check
+uv run pytest tests/unit -q
+uvx ruff check agent app tests scripts
 ```
 
-### 2. 数据库连接失败
-
-检查 `DATABASE_URL` 格式：
-```
-postgresql://<user>:<password>@<host>:<port>/<database>?client_encoding=utf8
-```
-
-### 3. Redis 连接失败
-
-确保 Redis 服务运行，并检查 `REDIS_URL` 配置。
-
-## 技术栈
-
-- **框架**: FastAPI
-- **LLM**: 通义千问 (DashScope)
-- **RAG**: LangChain + LlamaIndex
-- **向量数据库**: PGVector
-- **缓存**: Redis
-- **数据库**: PostgreSQL
-- **工作流**: LangGraph（待集成）
-
-## 许可证
-
-MIT License
-
-## 联系方式
-
-如有问题，请提交 Issue。
+真实 PostgreSQL 集成测试需要显式设置 `TEST_DATABASE_URL`，默认不会
+接触真实数据库。完整审核与回滚步骤见
+[`docs/operations/agent-runtime-rollout.md`](../docs/operations/agent-runtime-rollout.md)。

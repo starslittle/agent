@@ -8,14 +8,8 @@ from .registry import ToolDefinition, ToolRegistry, get_tool_registry
 
 _LAZY_EXPORTS = {
     "get_current_date": ("agent.tools.date", "get_current_date"),
-    "get_seniverse_weather": ("agent.tools.weather", "get_seniverse_weather"),
     "get_lunar_chart": ("agent.tools.lunar_chart", "get_lunar_chart"),
     "get_ziwei_chart": ("agent.tools.ziwei_chart", "get_ziwei_chart"),
-    "init_pandas_rag": ("agent.tools.pandas_kb", "init_pandas_rag"),
-    "query_pandas_data": ("agent.tools.pandas_kb", "query_pandas_data"),
-    "init_local_rag": ("agent.tools.local_kb", "init_local_rag"),
-    "query_local_kb": ("agent.tools.local_kb", "query_local_kb"),
-    "deep_research": ("agent.tools.deep_research", "deep_research"),
 }
 
 

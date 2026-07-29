@@ -92,7 +92,14 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 		Sequence:        1,
 		Type:            "run.started",
 		OccurredAt:      time.Now().UTC(),
-		Data:            json.RawMessage(`{"service_version":"integration-test"}`),
+		Data: json.RawMessage(`{
+			"service_version":"integration-test",
+			"agent_version":"agent-test",
+			"graph_version":"graph-test",
+			"prompt_bundle_hash":"bundle-test",
+			"workflow_name":"chat_v1",
+			"model_name":"model-test"
+		}`),
 	}
 	inserted, err := service.RecordEvent(
 		ctx,
@@ -198,9 +205,6 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 			Category:        "usage",
 			Data: json.RawMessage(`{
 				"model_name":"model-test",
-				"agent_version":"agent-test",
-				"graph_version":"graph-test",
-				"prompt_bundle_hash":"bundle-test",
 				"input_tokens":11,
 				"output_tokens":7,
 				"total_tokens":18,
@@ -231,7 +235,15 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 	if len(runs) != 1 ||
 		runs[0].TotalTokens != 18 ||
 		runs[0].ModelCallCount != 1 ||
-		runs[0].ToolCallCount != 1 {
+		runs[0].ToolCallCount != 1 ||
+		runs[0].ActualRoute == nil ||
+		*runs[0].ActualRoute != "chat_v1" ||
+		runs[0].AgentVersion == nil ||
+		*runs[0].AgentVersion != "agent-test" ||
+		runs[0].GraphVersion == nil ||
+		*runs[0].GraphVersion != "graph-test" ||
+		runs[0].PromptBundleHash == nil ||
+		*runs[0].PromptBundleHash != "bundle-test" {
 		t.Fatalf("unexpected run summaries: %#v", runs)
 	}
 	detail, err := service.RunDetail(ctx, userID, generation.Run.ID)
@@ -316,7 +328,7 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 	); err != nil {
 		t.Fatalf("Checkpoint() error = %v", err)
 	}
-	if err := service.Finish(ctx, conversation.FinishGenerationParams{
+	if _, err := service.Finish(ctx, conversation.FinishGenerationParams{
 		UserID:              userID,
 		RunID:               generation.Run.ID,
 		AssistantMessageID:  generation.Assistant.ID,
@@ -337,6 +349,82 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 		messages[1].Content != "完整回答" {
 		t.Fatalf("unexpected messages: %#v", messages)
 	}
+
+	cancelledGeneration, err := service.Start(ctx, conversation.StartGenerationParams{
+		UserID:          userID,
+		ConversationID:  item.ID,
+		ClientMessageID: auth.NewID(),
+		RequestID:       auth.NewID(),
+		Content:         "取消竞态测试",
+		AgentName:       conversation.DefaultAgent,
+		ProtocolVersion: agent.ProtocolVersion,
+	})
+	if err != nil {
+		t.Fatalf("Start() cancellation race error = %v", err)
+	}
+	if err := service.RequestCancellation(
+		ctx,
+		userID,
+		cancelledGeneration.Run.ID,
+	); err != nil {
+		t.Fatalf("RequestCancellation() error = %v", err)
+	}
+	if _, err := service.Finish(ctx, conversation.FinishGenerationParams{
+		UserID:              userID,
+		RunID:               cancelledGeneration.Run.ID,
+		AssistantMessageID:  cancelledGeneration.Assistant.ID,
+		Content:             "取消请求之后到达的完整回答",
+		Status:              string(agent.StatusCompleted),
+		GenerationCompleted: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("Finish() cancellation race error = %v", err)
+	}
+	cancelledDetail, err := service.RunDetail(
+		ctx,
+		userID,
+		cancelledGeneration.Run.ID,
+	)
+	if err != nil {
+		t.Fatalf("RunDetail() cancellation race error = %v", err)
+	}
+	if cancelledDetail.Run.Status != string(agent.StatusCancelled) {
+		t.Fatalf(
+			"cancellation race status = %q, want %q",
+			cancelledDetail.Run.Status,
+			agent.StatusCancelled,
+		)
+	}
+	messages, err = service.Messages(ctx, userID, item.ID, 50, nil)
+	if err != nil {
+		t.Fatalf("Messages() after cancellation race error = %v", err)
+	}
+	if got := messages[len(messages)-1].Status; got != "stopped" {
+		t.Fatalf("cancelled assistant status = %q, want stopped", got)
+	}
+
+	afterCancellation, err := service.Start(ctx, conversation.StartGenerationParams{
+		UserID:          userID,
+		ConversationID:  item.ID,
+		ClientMessageID: auth.NewID(),
+		RequestID:       auth.NewID(),
+		Content:         "取消后继续会话",
+		AgentName:       conversation.DefaultAgent,
+		ProtocolVersion: agent.ProtocolVersion,
+	})
+	if err != nil {
+		t.Fatalf("Start() after cancellation error = %v", err)
+	}
+	if _, err := service.Finish(ctx, conversation.FinishGenerationParams{
+		UserID:              userID,
+		RunID:               afterCancellation.Run.ID,
+		AssistantMessageID:  afterCancellation.Assistant.ID,
+		Content:             "会话已解锁",
+		Status:              string(agent.StatusCompleted),
+		GenerationCompleted: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("Finish() after cancellation error = %v", err)
+	}
+
 	if _, err := service.Messages(ctx, otherUserID, item.ID, 50, nil); !errors.Is(err, conversation.ErrNotFound) {
 		t.Fatalf("cross-user Messages() error = %v, want not found", err)
 	}

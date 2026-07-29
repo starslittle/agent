@@ -1,3 +1,0 @@
-# 评估依赖
-ragas
-datasets

@@ -1,55 +1,50 @@
 agents:
-  - name: "default_llm_agent"
-    description: "默认直连LLM的简洁回答模式（不使用 ReAct 与工具）"
+  - name: default_llm_agent
+    description: 默认低延迟对话，不使用工具。
     is_default: true
-    config:
-      llm: "deepseek-v4-flash"
-      mode: "direct"
-      prompt_template_path: "agent/prompts/generate_default_system.txt"
+    workflow: chat_v1
+    model_profile: default_chat
+    prompt_bundle: chat_v1
+    allowed_capabilities: []
+    budgets:
+      deadline_seconds: 60
+      max_model_calls: 2
+      max_tool_calls: 0
 
-# ========== 以下智能体已启用 ==========
-
-  - name: "research_agent"
-    description: "面向开放式调研/综述任务的代理，倾向使用深度检索与网络搜索。"
+  - name: research_agent
+    description: 基于结构化计划和来源证据完成开放式调研。
     is_default: false
-    config:
-      llm: "deepseek-v4-flash"
-      tools: ["deep_research", "tavily_search_results_json"]
-      prompt_template_path: "agent/prompts/generate_research_system.txt"
-      max_iterations: 15
-      max_execution_time: 180
+    workflow: research_v1
+    model_profile: default_reasoning
+    prompt_bundle: research_v1
+    allowed_capabilities:
+      - tavily_search
+    budgets:
+      deadline_seconds: 180
+      max_model_calls: 8
+      max_tool_calls: 5
 
-  - name: "fortune_agent"
-    description: "命理/术数知识库问答，优先基于本地命理资料库进行检索，再生成解释。"
+  - name: fortune_agent
+    description: 先校验出生资料并确定性排盘，再做不确定性明确的命理解读。
     is_default: false
-    config:
-      llm: "deepseek-v4-flash"
-      tools: ["get_current_date", "get_lunar_chart", "get_ziwei_chart"]
-      rag_db_path: "./storage/chroma/fortune"
-      collection_name: "fortune"
-      top_k: 10
-      rerank: true
-      prompt_template_path: "agent/prompts/generate_fortune_system.txt"
-      max_iterations: 24
-      max_execution_time: 600
+    workflow: fortune_v1
+    model_profile: default_reasoning
+    prompt_bundle: fortune_v1
+    allowed_capabilities:
+      - get_current_date
+      - get_lunar_chart
+      - get_ziwei_chart
+    budgets:
+      deadline_seconds: 180
+      max_model_calls: 6
+      max_tool_calls: 3
 
-  - name: "general_rag_agent"
-    description: "通用RAG问答代理，支持日期/天气、本地PDF/CSV 以及 Tavily 搜索（ReAct）。"
-    is_default: false
-    config:
-      llm: "deepseek-v4-flash"
-      tools:
-        [
-          "get_current_date",
-          "get_seniverse_weather",
-          "init_local_rag",
-          "query_local_kb",
-          "init_pandas_rag",
-          "query_pandas_data",
-          "tavily_search_results_json",
-          "deep_research",
-        ]
-      rag_db_path: "./storage/chroma/local"
-      prompt_template_path: "agent/prompts/generate_research_system.txt"
-      max_iterations: 20
-      max_execution_time: 300
+aliases:
+  default: default_llm_agent
+  chat: default_llm_agent
+  chat_v1: default_llm_agent
+  research: research_agent
+  research_v1: research_agent
+  general_rag_agent: research_agent
+  fortune: fortune_agent
+  fortune_v1: fortune_agent

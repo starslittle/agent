@@ -511,12 +511,45 @@ func (s *Store) CheckpointGeneration(
 func (s *Store) FinishGeneration(
 	ctx context.Context,
 	params conversation.FinishGenerationParams,
-) error {
+) (string, error) {
 	transaction, err := s.pool.Begin(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() { _ = transaction.Rollback(ctx) }()
+
+	var currentRunStatus string
+	err = transaction.QueryRow(ctx, `
+		SELECT r.status
+		FROM app_core.agent_runs r
+		JOIN app_core.conversations c ON c.id = r.conversation_id
+		WHERE r.id = $1
+			AND r.assistant_message_id = $2
+			AND c.user_id = $3
+		FOR UPDATE OF r
+	`,
+		params.RunID,
+		params.AssistantMessageID,
+		params.UserID,
+	).Scan(&currentRunStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", conversation.ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+
+	requestedRunStatus := runStatus(params.Status)
+	finalRunStatus := conversation.ResolveTerminalStatus(
+		currentRunStatus,
+		requestedRunStatus,
+	)
+	errorCode := params.ErrorCode
+	if finalRunStatus == string(agent.StatusCancelled) &&
+		requestedRunStatus == string(agent.StatusCompleted) &&
+		errorCode == "" {
+		errorCode = "generation_cancelled"
+	}
 
 	var conversationID string
 	err = transaction.QueryRow(ctx, `
@@ -536,23 +569,19 @@ func (s *Store) FinishGeneration(
 		params.AssistantMessageID,
 		params.UserID,
 		params.Content,
-		messageStatus(params.Status),
+		messageStatus(finalRunStatus),
 		params.GenerationCompleted,
 	).Scan(&conversationID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return conversation.ErrNotFound
+		return "", conversation.ErrNotFound
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	_, err = transaction.Exec(ctx, `
 		UPDATE app_core.agent_runs
-		SET status = CASE
-				WHEN status IN ('completed', 'cancelled', 'failed', 'timed_out')
-					THEN status
-				ELSE $2
-			END,
+		SET status = $2,
 			error_code = NULLIF($3, ''),
 			error_detail = NULLIF($4, ''),
 			first_token_at = COALESCE(first_token_at, $5),
@@ -560,14 +589,14 @@ func (s *Store) FinishGeneration(
 		WHERE id = $1
 	`,
 		params.RunID,
-		runStatus(params.Status),
-		params.ErrorCode,
+		finalRunStatus,
+		errorCode,
 		truncateRunes(params.ErrorDetail, 1000),
 		params.FirstTokenAt,
 		params.GenerationCompleted,
 	)
 	if err != nil {
-		return err
+		return "", err
 	}
 	_, err = transaction.Exec(ctx, `
 		UPDATE app_core.conversations
@@ -575,9 +604,12 @@ func (s *Store) FinishGeneration(
 		WHERE id = $1
 	`, conversationID, params.GenerationCompleted)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return transaction.Commit(ctx)
+	if err := transaction.Commit(ctx); err != nil {
+		return "", err
+	}
+	return finalRunStatus, nil
 }
 
 func (s *Store) RecordAgentEvent(
@@ -674,11 +706,25 @@ func (s *Store) RecordAgentEvent(
 			),
 			actual_route = COALESCE(
 				NULLIF($4::jsonb->>'actual_route', ''),
+				NULLIF($4::jsonb->>'selected_workflow', ''),
+				NULLIF($4::jsonb->>'workflow_name', ''),
 				actual_route
 			),
 			model_name = COALESCE(
 				NULLIF($4::jsonb->>'model_name', ''),
 				model_name
+			),
+			agent_version = COALESCE(
+				NULLIF($4::jsonb->>'agent_version', ''),
+				agent_version
+			),
+			graph_version = COALESCE(
+				NULLIF($4::jsonb->>'graph_version', ''),
+				graph_version
+			),
+			prompt_bundle_hash = COALESCE(
+				NULLIF($4::jsonb->>'prompt_bundle_hash', ''),
+				prompt_bundle_hash
 			),
 			error_code = CASE
 				WHEN $3 IN ('failed', 'timed_out')
@@ -1337,8 +1383,11 @@ func runStatus(status string) string {
 }
 
 func messageStatus(status string) string {
-	if status == string(agent.StatusCancelled) || status == string(agent.StatusTimedOut) {
+	if status == string(agent.StatusCancelled) {
 		return "stopped"
+	}
+	if status == string(agent.StatusTimedOut) {
+		return "failed"
 	}
 	return status
 }

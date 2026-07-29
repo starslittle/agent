@@ -1,0 +1,10 @@
+评估检索证据是否足以回答全部研究问题，并给出必要的补充检索词。
+
+规则：
+- covered_question_indexes 使用从 0 开始的问题下标，只标记有直接证据支持的问题。
+- sufficient 仅在全部问题均有直接证据支持且来源数量足够时为 true。
+- gaps 简洁描述仍缺失、冲突或可信度不足的信息。
+- supplemental_search_queries 最多给出 5 个互不重复、可直接检索的查询。
+- 不要把无内容或检索失败的条目视为证据。
+- 不要输出思维过程，只给出简短 assessment。
+- 只返回符合 JSON Schema 的 JSON 对象。

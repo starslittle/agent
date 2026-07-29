@@ -40,6 +40,8 @@ export type ConversationStreamEvent =
       user_message_id: string;
       assistant_message_id: string;
       run_id: string;
+      execution_id?: string;
+      protocol_version?: number;
       title: string;
     }
   | {
@@ -230,6 +232,17 @@ export async function postConversationStream(
   } finally {
     reader.releaseLock();
   }
+}
+
+export async function cancelAgentRun(
+  runID: string,
+  csrfToken: string,
+): Promise<{ run_id: string; status: string }> {
+  return apiRequest<{ run_id: string; status: string }>(
+    `/api/v1/agent-runs/${encodeURIComponent(runID)}`,
+    { method: "DELETE" },
+    csrfToken,
+  );
 }
 
 function chatErrorMessage(code?: string, detail?: string): string {

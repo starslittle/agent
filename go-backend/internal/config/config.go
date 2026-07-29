@@ -42,7 +42,7 @@ func Load() (Config, error) {
 		HTTPAddr:              httpAddr(),
 		PythonBaseURL:         strings.TrimRight(envOr("PYTHON_BASE_URL", defaultPythonBaseURL), "/"),
 		StaticDir:             strings.TrimSpace(os.Getenv("STATIC_DIR")),
-		DatabaseURL:           databaseURL(),
+		DatabaseURL:           DatabaseURLFromEnvironment(),
 		PublicOrigins:         csvValues(os.Getenv("PUBLIC_ORIGINS")),
 		CookieSecure:          strings.EqualFold(appEnv, "production"),
 		SessionTTL:            7 * 24 * time.Hour,
@@ -161,7 +161,10 @@ func envOr(name, fallback string) string {
 	return fallback
 }
 
-func databaseURL() string {
+// DatabaseURLFromEnvironment resolves only database-related settings. It is
+// exported so the one-shot migration command does not need unrelated HTTP,
+// cookie, or Agent credentials.
+func DatabaseURLFromEnvironment() string {
 	if value := strings.TrimSpace(os.Getenv("GO_DATABASE_URL")); value != "" {
 		return value
 	}

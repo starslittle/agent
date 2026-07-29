@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote_plus
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,24 +25,30 @@ class Settings(BaseSettings):
 
     # 基础与密钥
     DASHSCOPE_API_KEY: str = ""
+    MODEL_PROVIDER: str = "dashscope_openai"
+    MODEL_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    MODEL_REQUEST_TIMEOUT_SECONDS: float = 120.0
     TAVILY_API_KEY: str = ""
-    SENIVERSE_API_KEY: str = ""
     INTERNAL_AGENT_SECRET: str = ""
     AGENT_SERVICE_VERSION: str = "dev"
     AGENT_PROTOCOL_VERSION: int = 1
     AGENT_RUNTIME_RETENTION_SECONDS: int = 1800
+    AGENT_RUNTIME_STORE: Literal["memory", "postgres"] = "memory"
+    AGENT_RUNTIME_DATABASE_URL: str = ""
+    AGENT_RUNTIME_LEASE_SECONDS: int = 30
+    AGENT_RUNTIME_EVENT_POLL_SECONDS: float = 0.25
+    AGENT_RUNTIME_CHECKPOINT_SETUP: bool = False
+    AGENT_RUNTIME_COORDINATION: Literal["none", "redis"] = "none"
+    AGENT_RUNTIME_REDIS_CHANNEL_PREFIX: str = "qidian:agent-runtime"
+    AGENT_RUNTIME_MAINTENANCE_SECONDS: int = 300
     AGENT_MAX_REQUEST_BYTES: int = 1048576
+    # Retained for deployment compatibility; only the single LangGraph v1
+    # implementation exists after the migration.
+    AGENT_EXECUTION_ENGINE: Literal["langgraph_v1"] = "langgraph_v1"
     APP_TIMEZONE: str = "Asia/Shanghai"
 
-    # RAG / 模型相关（默认值与现有代码保持一致）
+    # 模型
     LLM_MODEL_NAME: str = "deepseek-v4-flash"
-    EMBED_MODEL_NAME: str = "BAAI/bge-small-zh-v1.5"
-    FORTUNE_LLM_MODEL: str = "deepseek-v4-flash"
-    EVAL_EMBED_MODEL: str = "BAAI/bge-small-zh-v1.5"
-
-    # 数据路径（可选覆盖）
-    CSV_FILE_PATH: str = ""
-    CSV_DIR_PATH: str = ""
 
     # 服务端口（供本地开发使用）
     PORT: int = 8000
@@ -56,21 +62,19 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     ENVIRONMENT: str = "development"
     
-    # 流式分片配置（字符数）。数值越小，chunk 次数越多；0 表示不拆分
-    STREAM_CHUNK_SIZE: int = 24
-
-    # Redis 配置
+    # Redis Runtime 通知
     REDIS_URL: str = ""
-    REDIS_TTL: int = 120  # /query 结果缓存默认 120 秒，0 表示禁用
-    
-    # Agent执行限制（默认值，可被 .env 覆盖）
-    DEFAULT_MAX_ITERATIONS: int = 30
-    DEFAULT_MAX_EXECUTION_TIME: int = 300
 
     # 在所有设置加载完成后解析 DATABASE_URL
     def model_post_init(self, __context: Any) -> None:
         self._build_database_url()
-        self._ensure_db_encoding()
+        self.DATABASE_URL = self._normalize_database_url(self.DATABASE_URL)
+        if not self.AGENT_RUNTIME_DATABASE_URL:
+            self.AGENT_RUNTIME_DATABASE_URL = self.DATABASE_URL
+        else:
+            self.AGENT_RUNTIME_DATABASE_URL = self._normalize_database_url(
+                self.AGENT_RUNTIME_DATABASE_URL
+            )
         self._parse_database_url()
 
     def _build_database_url(self) -> None:
@@ -85,19 +89,19 @@ class Settings(BaseSettings):
             f"{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{database}"
         )
 
-    def _ensure_db_encoding(self) -> None:
-        """确保 PostgreSQL 连接字符串包含正确的编码参数"""
-        if self.DATABASE_URL and self.DATABASE_URL.startswith("postgresql"):
-            # 移除任何现有的错误编码参数
-            import re
-            # 移除可能存在的错误格式
-            self.DATABASE_URL = re.sub(r'\?options=-c[^&]*', '', self.DATABASE_URL)
-            self.DATABASE_URL = re.sub(r'&options=-c[^&]*', '', self.DATABASE_URL)
-            
-            # 如果没有 client_encoding 参数，则添加正确的参数
-            if "client_encoding" not in self.DATABASE_URL:
-                separator = "?" if "?" not in self.DATABASE_URL else "&"
-                self.DATABASE_URL += f"{separator}client_encoding=utf8"
+    @staticmethod
+    def _normalize_database_url(value: str) -> str:
+        """Normalize PostgreSQL client encoding without exposing credentials."""
+        import re
+
+        if not value or not value.startswith("postgresql"):
+            return value
+        normalized = re.sub(r"\?options=-c[^&]*", "", value)
+        normalized = re.sub(r"&options=-c[^&]*", "", normalized)
+        if "client_encoding" not in normalized:
+            separator = "?" if "?" not in normalized else "&"
+            normalized += f"{separator}client_encoding=utf8"
+        return normalized
 
     def _parse_database_url(self) -> None:
         import re

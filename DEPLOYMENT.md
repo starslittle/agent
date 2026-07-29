@@ -1,124 +1,116 @@
 # 部署指南
 
-## 当前部署架构
-
-迁移第一阶段采用双服务、单入口：
+## 拓扑与边界
 
 ```text
 Internet
-   |
-   v
-Go Gateway :8000
-   |
-   v
-Python Legacy API :8000（仅容器内部）
-   |              \
-PostgreSQL       Redis（仅容器内部）
+   -> Go Gateway :8000
+      -> Python Agent Service :8000（内部）
+      -> PostgreSQL（内部）
+      -> Redis（内部）
 ```
 
-Go 负责公网 API、用户认证、服务端 Session、SSE 透传、静态前端、请求 ID、
-日志和健康检查。Agent、LLM、RAG 及现有工具仍由 Python 完整执行。
+Go 是唯一公网入口，拥有认证、会话、消息和产品 Run。Python 运行唯一的
+LangGraph Agent Application，并只写 `agent_runtime` schema。Redis 只用于通知，
+PostgreSQL 是运行与回放事实源。
 
-生产环境只发布 Go 的端口。不要单独发布 Python、PostgreSQL 或 Redis。
+不要发布 Python、PostgreSQL、Redis 或开发 Adminer 到公网。
 
-## 环境变量
-
-复制示例文件：
+## 配置
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-至少填写：
+至少通过 Secret 管理系统提供：
 
 - `DASHSCOPE_API_KEY`
 - `POSTGRES_PASSWORD`
-- `INTERNAL_AGENT_SECRET`（至少 32 字符，Go 与 Python 使用相同值）
-- 生产环境的 `PUBLIC_ORIGINS`（只填写真实 HTTPS 前端 Origin）
-- 使用研究、天气能力时填写 `TAVILY_API_KEY`、`SENIVERSE_API_KEY`
+- `INTERNAL_AGENT_SECRET`（至少 32 字符，Go/Python 相同）
+- 生产 HTTPS `PUBLIC_ORIGINS`
+- Research 需要的 `TAVILY_API_KEY`
 
-`.env` 已被 Git 忽略，只作为本机或 Compose 的单一配置源。生产平台应通过
-Secret 管理功能注入真实值，不要把真实值写入镜像、Compose 或仓库。
+不要把真实值写入镜像、Compose、日志或 Git。进入过 Git 历史的凭据必须在外部平台
+撤销并轮换。
 
-已经进入过 Git 历史的凭据仍需在外部平台撤销并轮换；更换本地文件并不能
-让旧凭据失效。
-
-## 开发环境
+## 开发
 
 ```powershell
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-服务地址：
+- 前端：`http://localhost:5173`
+- Go：`http://localhost:8000`
+- Adminer：`http://127.0.0.1:8082`
 
-- 前端（Vite 热更新）：`http://localhost:5173`
-- Go API：`http://localhost:8000`
-- PostgreSQL：`localhost:5432`（仅开发环境发布）
-- Redis：`localhost:6379`（仅开发环境发布）
+Adminer 必须选择 `PostgreSQL`，服务器为 `postgres`。它只在开发 Compose 中存在，
+并且仅监听本机。
 
-前端源码改动会自动热更新，不需要重新构建。Python 通过 Uvicorn reload
-自动重载。Go 源码修改后当前容器需要重启：
+## 生产构建
 
 ```powershell
-docker compose -f docker-compose.dev.yml restart gateway
+docker compose --env-file .env -f docker-compose.yml config --quiet
+docker compose build
 ```
 
-## 生产环境
+生产 Compose 有意默认：
 
-先校验最终配置：
-
-```powershell
-docker compose config
+```dotenv
+AGENT_PROTOCOL_MODE=legacy
+AGENT_RUNTIME_STORE=memory
+AGENT_RUNTIME_COORDINATION=none
 ```
 
-再构建并启动：
+这不是最终性能配置，而是人工上线门禁。数据库 migration、checkpoint setup、
+最小权限、分阶段切换和回滚必须按
+[`docs/operations/agent-runtime-rollout.md`](docs/operations/agent-runtime-rollout.md)
+执行。
 
-```powershell
-docker compose up --build -d
+完成审核后才逐步切换：
+
+```dotenv
+AGENT_PROTOCOL_MODE=v1
+AGENT_RUNTIME_STORE=postgres
+AGENT_RUNTIME_COORDINATION=redis
+AGENT_RUNTIME_CHECKPOINT_SETUP=false
 ```
 
-验证：
+## 启动与健康
 
 ```powershell
+docker compose up -d
 Invoke-RestMethod http://localhost:8000/healthz
 Invoke-RestMethod http://localhost:8000/readyz
 ```
 
-- `/healthz` 只表示 Go 进程存活；
-- `/readyz` 还会验证 PostgreSQL 与 Python Legacy API 可用；
-- 部署平台和负载均衡应使用 `/readyz` 判断是否接收流量。
+- `/healthz`：Go 进程存活；
+- `/readyz`：Go 数据库与 Python 上游可用；
+- Python `/internal/ready`：AgentSpec、Root Graph、Runtime Store、Checkpoint、模型
+  配置与协调后端就绪。
 
-查看状态和日志：
+查看日志：
 
 ```powershell
 docker compose ps
 docker compose logs -f gateway python
 ```
 
-停止服务：
+停止时不要随意使用 `down -v`，它会删除数据库卷。
 
-```powershell
-docker compose down
-```
+## 镜像
 
-不要使用 `down -v`，除非明确要删除 PostgreSQL 数据卷。
+- `go-backend/Dockerfile`：Go 网关、一次性 `qidian-migrate` 和前端产物；
+- `backend/Dockerfile`：Python 3.11 Agent Runtime；
+- `pyproject.toml + uv.lock`：唯一 Python 依赖来源。
 
-## 镜像职责
+Python 最终镜像不包含 Node/npm。Node 只在 builder 阶段满足个别包的构建需求。
 
-- `go-backend/Dockerfile`：构建 Go 网关和前端，生成公网镜像；
-- `backend/Dockerfile`：构建 Python Legacy API，仅供内部服务使用；
-- `docker-compose.yml`：生产拓扑；
-- `docker-compose.dev.yml`：开发拓扑与前端热更新。
+## 回滚原则
 
-## 回滚
+- V1 传输异常：先切回 `AGENT_PROTOCOL_MODE=legacy`；
+- Redis 异常：切回 `AGENT_RUNTIME_COORDINATION=none`；
+- PostgreSQL Runtime 回退到 memory 前必须停止新流量并收口活跃 Run；
+- Agent 行为异常：回滚到预先记录的上一稳定镜像 digest；
+- 事故中不要删除 `agent_runtime` schema，也不要把浏览器直连 Python。
 
-Go 已经保存用户和 Session，Python 仍不直接读取认证表。发生 Agent 网关兼容
-问题时：
-
-1. 保留 PostgreSQL、Redis 和 Python 服务；
-2. 保留 Go 认证入口，只把认证后的 Agent 请求临时转发到 Python；
-3. 修复 Go 后重新执行 SSE 契约和端到端测试；
-4. 不要将浏览器直接切到 Python，否则会绕过登录和 CSRF 边界。
-
-生产回滚前仍需确保 Python 端口只对受控入口开放，不能把数据库或缓存发布
-到公网。
+完整回滚顺序和人工批准清单见上线手册。

@@ -9,7 +9,8 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.api.internal_auth import verify_internal_request
 from app.core.settings import settings
-from app.runtime import AgentRunRequest, ExecutionRegistry, GraphAgentRuntime
+from app.runtime import AgentRunRequest, ExecutionRegistry, build_agent_runtime
+from app.runtime.store import InMemoryRuntimeStore, RuntimeStore
 from app.runtime.registry import (
     ExecutionNotFoundError,
     IdempotencyConflictError,
@@ -17,11 +18,45 @@ from app.runtime.registry import (
 
 
 router = APIRouter()
-registry = ExecutionRegistry(
-    GraphAgentRuntime(),
-    service_version=settings.AGENT_SERVICE_VERSION,
-    retention_seconds=settings.AGENT_RUNTIME_RETENTION_SECONDS,
-)
+
+
+def build_execution_registry(
+    store: RuntimeStore | None = None,
+    *,
+    checkpointer=None,
+    notifier=None,
+) -> ExecutionRegistry:
+    runtime_store = store or InMemoryRuntimeStore()
+    return ExecutionRegistry(
+        build_agent_runtime(
+            checkpointer=checkpointer,
+            lease_guard=runtime_store,
+            artifact_stager=runtime_store,
+        ),
+        service_version=settings.AGENT_SERVICE_VERSION,
+        retention_seconds=settings.AGENT_RUNTIME_RETENTION_SECONDS,
+        store=runtime_store,
+        lease_seconds=settings.AGENT_RUNTIME_LEASE_SECONDS,
+        event_poll_seconds=settings.AGENT_RUNTIME_EVENT_POLL_SECONDS,
+        notifier=notifier,
+    )
+
+
+registry = build_execution_registry()
+
+
+def configure_runtime_store(
+    store: RuntimeStore,
+    *,
+    checkpointer=None,
+    notifier=None,
+) -> None:
+    global registry
+    registry = build_execution_registry(
+        store,
+        checkpointer=checkpointer,
+        notifier=notifier,
+    )
 
 
 def _verify(request: Request, body: bytes, execution_id: str) -> None:
@@ -42,20 +77,59 @@ async def internal_health():
         "service": "python-agent-service",
         "service_version": settings.AGENT_SERVICE_VERSION,
         "protocol_versions": [1],
-        "runtime_registry": "single-replica-memory",
+        "runtime_store": registry.store_kind,
+        "execution_engine": settings.AGENT_EXECUTION_ENGINE,
+    }
+
+
+@router.get("/internal/ready")
+async def internal_ready():
+    from agent.readiness import validate_target_runtime
+
+    try:
+        report = validate_target_runtime()
+        runtime_store = await registry.validate_store()
+        if (
+            settings.AGENT_EXECUTION_ENGINE == "langgraph_v1"
+            and settings.AGENT_RUNTIME_STORE == "postgres"
+            and not runtime_store.get("checkpoint_ready")
+        ):
+            raise ValueError("PostgreSQL checkpoint schema is not ready")
+        if (
+            settings.AGENT_EXECUTION_ENGINE == "langgraph_v1"
+            and not settings.DASHSCOPE_API_KEY
+        ):
+            raise ValueError("DASHSCOPE_API_KEY is required")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "not_ready",
+                "code": type(exc).__name__,
+            },
+        ) from exc
+    return {
+        "status": "ready",
+        "execution_engine": settings.AGENT_EXECUTION_ENGINE,
+        "runtime_store": runtime_store,
+        **report,
     }
 
 
 @router.get("/internal/v1/capabilities")
 async def capabilities():
+    from agent.capabilities import target_capability_schemas
+    from agent.specs import get_agent_catalog
     from agent.tools.registry import get_tool_registry
 
     return {
         "protocol_version": 1,
         "service_version": settings.AGENT_SERVICE_VERSION,
-        "agents": ["default_llm_agent", "research_agent", "fortune_agent"],
+        "agents": get_agent_catalog().names(),
         "tools": get_tool_registry().capabilities(),
-        "runtime_registry": "single-replica-memory",
+        "target_capabilities": target_capability_schemas(),
+        "runtime_store": registry.store_kind,
+        "execution_engine": settings.AGENT_EXECUTION_ENGINE,
     }
 
 

@@ -83,6 +83,10 @@ reports/**
 
 # Model files (checkpoints, etc.)
 models/
+# `backend/agent/models` contains the runtime Model Gateway source code.
+!backend/agent/models/
+!backend/agent/models/**/
+!backend/agent/models/**/*.py
 *.h5
 *.pth
 *.pt

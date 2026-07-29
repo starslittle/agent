@@ -3,6 +3,8 @@ package conversation
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/starslittle/agent/go-backend/internal/agent"
 )
 
 const (
@@ -177,4 +179,19 @@ type FinishGenerationParams struct {
 	ErrorDetail         string
 	FirstTokenAt        *time.Time
 	GenerationCompleted time.Time
+}
+
+// ResolveTerminalStatus makes cancellation intent win over a late successful
+// completion. This keeps the Product Run and assistant message consistent when
+// DELETE races with Python's run.completed event.
+func ResolveTerminalStatus(current string, requested string) string {
+	currentStatus := agent.Status(current)
+	if currentStatus.Terminal() {
+		return current
+	}
+	if currentStatus == agent.StatusCancelRequested &&
+		agent.Status(requested) == agent.StatusCompleted {
+		return string(agent.StatusCancelled)
+	}
+	return requested
 }
