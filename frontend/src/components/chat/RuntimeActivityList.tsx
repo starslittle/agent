@@ -12,10 +12,14 @@ import type {
   RuntimeActivity,
   RuntimeActivityStatus,
 } from "@/lib/chat-api";
+import {
+  runtimeActivitySummary,
+  type RuntimeMessageStatus,
+} from "@/lib/conversation-stream-reducer";
 
 interface RuntimeActivityListProps {
   activities: RuntimeActivity[];
-  isStreaming: boolean;
+  messageStatus?: RuntimeMessageStatus;
 }
 
 const statusLabels: Record<RuntimeActivityStatus, string> = {
@@ -30,8 +34,9 @@ const durationFormatter = new Intl.NumberFormat("zh-CN");
 
 export const RuntimeActivityList: React.FC<RuntimeActivityListProps> = ({
   activities,
-  isStreaming,
+  messageStatus,
 }) => {
+  const isStreaming = messageStatus === "streaming";
   const [expanded, setExpanded] = React.useState(isStreaming);
   const panelID = React.useId();
 
@@ -43,25 +48,7 @@ export const RuntimeActivityList: React.FC<RuntimeActivityListProps> = ({
 
   if (activities.length === 0) return null;
 
-  const active = activities.some(
-    (activity) =>
-      activity.status === "started" || activity.status === "running",
-  );
-  const completedTools = activities.filter(
-    (activity) =>
-      activity.kind === "tool" && activity.status === "completed",
-  ).length;
-  const failures = activities.filter(
-    (activity) => activity.status === "failed",
-  ).length;
-  const summary =
-    isStreaming || active
-      ? `正在运行 · ${activities.length} 项活动`
-      : failures > 0
-        ? `运行过程 · ${failures} 项失败`
-        : completedTools > 0
-          ? `运行过程 · 已完成 ${completedTools} 次工具调用`
-          : `运行过程 · ${activities.length} 项活动`;
+  const summary = runtimeActivitySummary(activities, messageStatus);
 
   return (
     <section

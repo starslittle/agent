@@ -274,7 +274,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         {!isUser && (
           <RuntimeActivityList
             activities={activities}
-            isStreaming={status === "streaming"}
+            messageStatus={status}
           />
         )}
         {thinking && !displayedContent && activities.length === 0 ? (
