@@ -175,7 +175,7 @@ Activity 只显示经过服务端白名单投影的产品信息，不显示完�
 ### 5.1 创建消息与 Run
 
 ```http
-POST /api/v1/conversations/{conversation_id}/messages
+POST /api/v1/conversations/{conversation_id}/runs
 X-CSRF-Token: ...
 Content-Type: application/json
 ```
