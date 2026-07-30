@@ -12,6 +12,8 @@ import { Copy, Check, Brain, ChevronDown, ChevronRight, Download, Maximize2, Min
 import { useStreamMarkdownBuffer } from "@/hooks/useStreamMarkdownBuffer";
 import { useSmoothTyping } from "@/hooks/useSmoothTyping";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import type { RuntimeActivity } from "@/lib/chat-api";
+import { RuntimeActivityList } from "./RuntimeActivityList";
 
 export type ChatRole = "user" | "assistant";
 
@@ -21,6 +23,7 @@ export interface ChatMessageProps {
   status?: "pending" | "streaming" | "completed" | "stopped" | "failed";
   thinking?: boolean;
   thinkingFinished?: boolean;
+  activities?: RuntimeActivity[];
 }
 
 const ThinkingProcess: React.FC<{ thoughts: string[]; thinkingFinished?: boolean }> = ({ thoughts, thinkingFinished }) => {
@@ -56,6 +59,10 @@ const ThinkingProcess: React.FC<{ thoughts: string[]; thinkingFinished?: boolean
   );
 };
 
+/**
+ * @deprecated Retained only for historical messages that embedded progress
+ * markers in content. New streams use structured RuntimeActivity values.
+ */
 const parseContent = (content: string) => {
   const lines = content.split("\n");
   const thoughts: string[] = [];
@@ -168,6 +175,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   status,
   thinking,
   thinkingFinished,
+  activities = [],
 }) => {
   const isUser = role === "user";
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null);
@@ -233,7 +241,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   const handleCopyMessage = async () => {
-    const textToCopy = isUser ? displayedContent : normalizedAnswer;
+    const textToCopy = displayedContent;
     if (!textToCopy.trim()) return;
     try {
       await navigator.clipboard.writeText(textToCopy);
@@ -263,7 +271,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             : "max-w-full rounded-[1.5rem] rounded-tl-md border border-white/80 bg-white/75 px-5 py-4 text-foreground shadow-[0_14px_42px_-30px_rgba(31,41,70,0.35)] backdrop-blur dark:border-white/[0.08] dark:bg-white/[0.045]"
         }
       >
-        {thinking && !displayedContent ? (
+        {!isUser && (
+          <RuntimeActivityList
+            activities={activities}
+            isStreaming={status === "streaming"}
+          />
+        )}
+        {thinking && !displayedContent && activities.length === 0 ? (
           <div className="space-y-2">
             <div className="h-4 w-40 bg-muted rounded animate-pulse" />
             <div className="h-4 w-64 bg-muted rounded animate-pulse" />

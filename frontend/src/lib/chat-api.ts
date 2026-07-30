@@ -33,6 +33,33 @@ export interface MessageListResponse {
   next_before?: number | null;
 }
 
+export type RuntimeActivityKind = "route" | "progress" | "model" | "tool";
+
+export type RuntimeActivityStatus =
+  | "started"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface RuntimeActivity {
+  id: string;
+  sequence?: number;
+  kind: RuntimeActivityKind;
+  status: RuntimeActivityStatus;
+  label: string;
+  name?: string;
+  duration_ms?: number;
+}
+
+export interface RuntimeArtifact {
+  artifact_id: string;
+  artifact_type: string;
+  content_hash: string;
+  mime_type: string;
+  size_bytes: number;
+}
+
 export type ConversationStreamEvent =
   | {
       type: "meta";
@@ -46,17 +73,19 @@ export type ConversationStreamEvent =
     }
   | {
       type: "activity";
-      data?: string;
-      isThinking?: boolean;
-      thinkingFinished?: boolean;
+      sequence?: number;
+      activity: RuntimeActivity;
     }
   | {
       type: "answer_delta";
-      data?: string;
-      isThinking?: boolean;
-      thinkingFinished?: boolean;
+      sequence?: number;
+      data: string;
     }
   | {
+      /**
+       * @deprecated Migration-only compatibility for the legacy Python stream.
+       * V1 must use activity/answer_delta instead.
+       */
       type: "delta";
       data?: string;
       isThinking?: boolean;
@@ -73,8 +102,142 @@ export type ConversationStreamEvent =
     }
   | {
       type: "artifact";
-      data?: string;
+      sequence?: number;
+      artifact: RuntimeArtifact;
     };
+
+const runtimeActivityKinds = new Set<RuntimeActivityKind>([
+  "route",
+  "progress",
+  "model",
+  "tool",
+]);
+
+const runtimeActivityStatuses = new Set<RuntimeActivityStatus>([
+  "started",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOptionalNumber(
+  value: Record<string, unknown>,
+  key: string,
+): boolean {
+  return value[key] === undefined || typeof value[key] === "number";
+}
+
+function hasOptionalString(
+  value: Record<string, unknown>,
+  key: string,
+): boolean {
+  return value[key] === undefined || typeof value[key] === "string";
+}
+
+function hasOptionalBoolean(
+  value: Record<string, unknown>,
+  key: string,
+): boolean {
+  return value[key] === undefined || typeof value[key] === "boolean";
+}
+
+export function parseConversationStreamEvent(
+  raw: string,
+): ConversationStreamEvent | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return null;
+  }
+
+  switch (value.type) {
+    case "meta":
+      if (
+        typeof value.conversation_id !== "string" ||
+        typeof value.user_message_id !== "string" ||
+        typeof value.assistant_message_id !== "string" ||
+        typeof value.run_id !== "string" ||
+        typeof value.title !== "string" ||
+        !hasOptionalString(value, "execution_id") ||
+        !hasOptionalNumber(value, "protocol_version")
+      ) {
+        return null;
+      }
+      return value as ConversationStreamEvent;
+    case "activity": {
+      if (
+        !hasOptionalNumber(value, "sequence") ||
+        !isRecord(value.activity) ||
+        typeof value.activity.id !== "string" ||
+        typeof value.activity.label !== "string" ||
+        !runtimeActivityKinds.has(value.activity.kind as RuntimeActivityKind) ||
+        !runtimeActivityStatuses.has(
+          value.activity.status as RuntimeActivityStatus,
+        ) ||
+        !hasOptionalNumber(value.activity, "sequence") ||
+        !hasOptionalString(value.activity, "name") ||
+        !hasOptionalNumber(value.activity, "duration_ms")
+      ) {
+        return null;
+      }
+      return value as ConversationStreamEvent;
+    }
+    case "answer_delta":
+      if (
+        typeof value.data !== "string" ||
+        !hasOptionalNumber(value, "sequence")
+      ) {
+        return null;
+      }
+      return value as ConversationStreamEvent;
+    case "artifact":
+      if (
+        !hasOptionalNumber(value, "sequence") ||
+        !isRecord(value.artifact) ||
+        typeof value.artifact.artifact_id !== "string" ||
+        typeof value.artifact.artifact_type !== "string" ||
+        typeof value.artifact.content_hash !== "string" ||
+        typeof value.artifact.mime_type !== "string" ||
+        typeof value.artifact.size_bytes !== "number"
+      ) {
+        return null;
+      }
+      return value as ConversationStreamEvent;
+    case "delta":
+      if (
+        !hasOptionalString(value, "data") ||
+        !hasOptionalBoolean(value, "isThinking") ||
+        !hasOptionalBoolean(value, "thinkingFinished")
+      ) {
+        return null;
+      }
+      return value as ConversationStreamEvent;
+    case "done":
+      if (
+        !hasOptionalString(value, "message_id") ||
+        !hasOptionalString(value, "status")
+      ) {
+        return null;
+      }
+      return value as ConversationStreamEvent;
+    case "error":
+      if (!hasOptionalString(value, "message")) {
+        return null;
+      }
+      return value as ConversationStreamEvent;
+    default:
+      return null;
+  }
+}
 
 function apiBase(): string {
   const env = (import.meta as unknown as { env?: Record<string, unknown> }).env || {};
@@ -230,12 +393,8 @@ export async function postConversationStream(
         if (!trimmed.startsWith("data:")) continue;
         const raw = trimmed.slice(5).trim();
         if (!raw || raw === "[DONE]") continue;
-        let event: ConversationStreamEvent;
-        try {
-          event = JSON.parse(raw) as ConversationStreamEvent;
-        } catch {
-          continue;
-        }
+        const event = parseConversationStreamEvent(raw);
+        if (!event) continue;
         onEvent(event);
         if (event.type === "error") {
           throw new Error(event.message || "生成失败");

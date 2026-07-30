@@ -970,47 +970,19 @@ func (h *conversationHTTP) streamV1(
 			}
 		}
 
-		var data map[string]any
-		_ = json.Unmarshal(event.Data, &data)
-		switch event.Type {
-		case "progress":
-			message, _ := data["message"].(string)
-			if message != "" {
-				writeSSEJSON(w, map[string]any{
-					"type":             "activity",
-					"data":             message + "\n",
-					"isThinking":       true,
-					"thinkingFinished": false,
-				})
-				flusher.Flush()
-			}
-		case "tool.completed":
-			name, _ := data["name"].(string)
-			if name != "" {
-				writeSSEJSON(w, map[string]any{
-					"type":             "activity",
-					"data":             "已完成工具：" + name + "\n",
-					"isThinking":       true,
-					"thinkingFinished": false,
-				})
-				flusher.Flush()
-			}
-		case "answer.delta":
-			text, _ := data["text"].(string)
-			if text != "" {
-				answer.WriteString(text)
+		if payload, visible := projectBrowserEvent(event); visible {
+			if delta, ok := payload.(browserAnswerDeltaEvent); ok {
+				answer.WriteString(delta.Data)
 				if firstTokenAt == nil {
 					now := time.Now().UTC()
 					firstTokenAt = &now
 				}
-				writeSSEJSON(w, map[string]any{
-					"type":             "answer_delta",
-					"data":             text,
-					"isThinking":       false,
-					"thinkingFinished": true,
-				})
-				flusher.Flush()
 			}
+			writeSSEJSON(w, payload)
+			flusher.Flush()
+		}
+
+		switch event.Type {
 		case "run.completed":
 			if strings.TrimSpace(answer.String()) == "" {
 				terminalStatus = "failed"
@@ -1068,6 +1040,8 @@ func (h *conversationHTTP) streamV1(
 			flusher.Flush()
 			return
 		case "run.failed", "run.timed_out":
+			var data map[string]any
+			_ = json.Unmarshal(event.Data, &data)
 			code, _ := data["code"].(string)
 			message, _ := data["message"].(string)
 			status := "failed"

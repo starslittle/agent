@@ -112,6 +112,22 @@ AGENT_RUNTIME_COORDINATION=none
 `completed/completed` 的新 Run。浏览器意外断开仍只代表 detach，不会自动转换为
 显式取消。
 
+### P0 修复完成：运行事件与回答正文分离
+
+2026-07-31 已完成 TASK-002 的浏览器事件分层：
+
+- Go 通过纯白名单投影将 route/progress/model/tool 映射为结构化 `activity`；
+- `artifact.created` 只投影安全引用元数据，不发送 Artifact 内容；
+- V1 只有 `answer.delta` 映射为 `answer_delta` 并进入持久化正文；
+- 前端使用强类型协议和纯 reducer 分离 answer、activity、artifact 与终态；
+- legacy `isThinking=true` delta 转换为通用 Activity，不进入正文或复制内容；
+- Activity 在回答上方使用独立、可折叠、键盘可操作的展示区域；
+- Go 投影/集成测试和前端 reducer 单元测试覆盖白名单、sequence、重复事件、
+  五次工具调用、legacy、Artifact 和终态不污染正文。
+
+该修复不改变生产默认协议模式、取消状态机、检索次数、Citation、Skill 或模型配置。
+生产切换仍受本文件后续数据库准备、小流量观测和用户授权门禁约束。
+
 ### 可观测与 provenance
 
 - Model Gateway 自动发布 started/completed/failed、duration 与 usage；
@@ -175,8 +191,8 @@ P0 的协议、实施顺序和自动验收矩阵见
 
 1. 修复显式取消的 Run-ID 时序缺口，保证页面、Go Run、Python execution 和消息
    最终状态一致；
-2. 修复运行事件与最终正文的协议混用：`tool/progress` 保持结构化事件，
-   `answer.delta` 才能进入最终消息；实时页面、刷新结果和复制内容必须一致；
+2. 已完成（2026-07-31）：运行事件与最终正文分层，`tool/progress` 保持结构化事件，
+   `answer.delta` 才能进入最终消息；实时页面、刷新结果和复制内容保持一致；
 3. 完成服务重启恢复、失败/超时解锁、事件序号、Trace/provenance 脱敏和跨用户权限
    的自动技术验收并形成报告。
 

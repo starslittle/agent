@@ -1,9 +1,9 @@
 # TASK-002 Round-3 Handoff (Final)
 
-**Status**: accepted  
-**Executor**: Grok  
-**Round**: ROUND-01  
-**Date**: 2026-07-30  
+**Status**: accepted
+**Executor**: Grok
+**Round**: ROUND-01
+**Date**: 2026-07-30
 
 ## 总结
 
@@ -26,6 +26,6 @@
 - `frontend lint`、`build` 通过
 - `git diff --check` 通过
 
-**此 Task 完成，等待 Codex 最终 `accepted`**。 
+**此 Task 完成，等待 Codex 最终 `accepted`**。
 
 **Grok 已停止。**

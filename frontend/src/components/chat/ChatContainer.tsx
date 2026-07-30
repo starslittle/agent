@@ -6,8 +6,14 @@ import {
   createConversation,
   postConversationStream,
   type Conversation,
+  type RuntimeActivity,
+  type RuntimeArtifact,
   type StoredMessage,
 } from "@/lib/chat-api";
+import {
+  conversationStreamReducer,
+  createConversationStreamState,
+} from "@/lib/conversation-stream-reducer";
 import { useAuth } from "@/auth/AuthProvider";
 import { ArrowDown, ArrowUpRight, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -19,6 +25,8 @@ interface Message {
   status?: StoredMessage["status"];
   thinking?: boolean;
   thinkingFinished?: boolean;
+  activities?: RuntimeActivity[];
+  artifacts?: RuntimeArtifact[];
 }
 
 function uid() {
@@ -238,7 +246,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     abortControllerRef.current = controller;
     setIsGenerating(true);
     let createdConversation: Conversation | null = null;
-    let accumulatedContent = "";
+    let streamState = createConversationStreamState();
     let terminalStatus: string | undefined;
     activeRunRef.current = null;
     stopRequestedRef.current = false;
@@ -261,6 +269,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         },
         csrfToken,
         (event) => {
+          streamState = conversationStreamReducer(streamState, event);
           if (event.type === "meta") {
             activeRunRef.current = {
               id: event.run_id,
@@ -281,35 +290,27 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             return;
           }
           if (event.type === "done") {
-            terminalStatus = event.status;
+            terminalStatus = streamState.terminalStatus;
             return;
           }
-          if (event.type === "activity" || event.type === "tool.completed") {
-            // Activity is handled by reducer
-            return;
-          }
-          if (event.type === "answer_delta" || event.type === "delta") {
-            const data = event.type === "answer_delta" ? event.data : (event as any).data;
-            if (data) {
-              accumulatedContent += data;
-              setMessages((prev) =>
-                prev.map((message) => {
-                  if (message.id === assistantId ||
-                      (event.type === "answer_delta" || event.type === "delta") && message.status === "streaming" && message.role === "assistant") {
-                    return {
-                      ...message,
-                      content: accumulatedContent,
-                      status: "streaming",
-                      thinking: event.isThinking ?? message.thinking,
-                      thinkingFinished: event.thinkingFinished ?? message.thinkingFinished,
-                    };
-                  }
-                  return message;
-                }),
-              );
-            }
-            return;
-          }
+          setMessages((prev) =>
+            prev.map((message) => {
+              const isActiveAssistant =
+                message.id === assistantId ||
+                (message.role === "assistant" &&
+                  message.status === "streaming");
+              if (!isActiveAssistant) return message;
+              return {
+                ...message,
+                content: streamState.answer,
+                activities: streamState.activities,
+                artifacts: streamState.artifacts,
+                status: event.type === "error" ? "failed" : "streaming",
+                thinking: streamState.isStreaming,
+                thinkingFinished: !streamState.isStreaming,
+              };
+            }),
+          );
         },
         controller.signal
       );
@@ -328,7 +329,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         return;
       }
       
-      if (!accumulatedContent) {
+      if (!streamState.answer) {
         throw new Error("流式输出未收到任何内容");
       }
       setMessages((prev) => prev.map((message) =>
@@ -350,14 +351,17 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       }
 
       console.error("对话失败:", err);
+      toast.error((err as Error)?.message || "生成失败，请重试");
       setMessages((prev) => prev.map((m) => 
         m.role === "assistant" && m.status === "streaming"
           ? { 
               ...m, 
-              content: accumulatedContent ||
-                `请求失败：${(err as Error)?.message || String(err)}`,
+              content: streamState.answer,
+              activities: streamState.activities,
+              artifacts: streamState.artifacts,
               status: "failed",
-              thinking: false 
+              thinking: false,
+              thinkingFinished: true,
             }
           : m
       ));
@@ -476,6 +480,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                       status={message.status}
                       thinking={message.thinking}
                       thinkingFinished={message.thinkingFinished}
+                      activities={message.activities}
                     />
                   </div>
                 ))}

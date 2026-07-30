@@ -1,10 +1,10 @@
 # TASK-002 Round-1 Handoff
 
-**Status**: completed  
-**Executor**: Grok  
-**Round**: ROUND-01  
-**Base commit**: 634d90877e2176c6c15e80ccae2ad5ee22f5387f  
-**Date**: 2026-07-30  
+**Status**: completed
+**Executor**: Grok
+**Round**: ROUND-01
+**Base commit**: 634d90877e2176c6c15e80ccae2ad5ee22f5387f
+**Date**: 2026-07-30
 
 ## Changes Made
 - Updated backend event projection to use structured types ("activity", "answer.delta", "artifact" support).
