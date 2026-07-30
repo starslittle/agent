@@ -284,12 +284,18 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             terminalStatus = event.status;
             return;
           }
-          if (event.type !== "delta" || !event.data) return;
+          if (event.type === "activity" || event.type === "tool.completed") {
+            // Activity is handled separately (e.g. tool calls or progress)
+            // For now, we can log or show in a dedicated activity panel
+            console.log("Activity:", event.data);
+            return;
+          }
+          if (event.type !== "answer.delta" || !event.data) return;
           accumulatedContent += event.data;
           setMessages((prev) =>
             prev.map((message) => {
               if (message.id === assistantId ||
-                  (event.type === "delta" && message.status === "streaming" && message.role === "assistant")) {
+                  (event.type === "answer.delta" && message.status === "streaming" && message.role === "assistant")) {
                 return {
                   ...message,
                   content: accumulatedContent,

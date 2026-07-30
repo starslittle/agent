@@ -977,7 +977,7 @@ func (h *conversationHTTP) streamV1(
 			message, _ := data["message"].(string)
 			if message != "" {
 				writeSSEJSON(w, map[string]any{
-					"type":             "delta",
+					"type":             "activity",
 					"data":             message + "\n",
 					"isThinking":       true,
 					"thinkingFinished": false,
@@ -1004,7 +1004,7 @@ func (h *conversationHTTP) streamV1(
 					firstTokenAt = &now
 				}
 				writeSSEJSON(w, map[string]any{
-					"type":             "delta",
+					"type":             "answer.delta",
 					"data":             text,
 					"isThinking":       false,
 					"thinkingFinished": true,

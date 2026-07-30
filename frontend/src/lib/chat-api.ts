@@ -45,7 +45,13 @@ export type ConversationStreamEvent =
       title: string;
     }
   | {
-      type: "delta";
+      type: "activity";
+      data?: string;
+      isThinking?: boolean;
+      thinkingFinished?: boolean;
+    }
+  | {
+      type: "answer.delta";
       data?: string;
       isThinking?: boolean;
       thinkingFinished?: boolean;
@@ -58,6 +64,10 @@ export type ConversationStreamEvent =
   | {
       type: "error";
       message?: string;
+    }
+  | {
+      type: "artifact";
+      data?: string;
     };
 
 function apiBase(): string {
