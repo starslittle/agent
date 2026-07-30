@@ -285,9 +285,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             return;
           }
           if (event.type === "activity" || event.type === "tool.completed") {
-            // Activity is handled separately (e.g. tool calls or progress)
-            // TODO: implement RuntimeActivityList UI
-            console.log("Activity:", event.data);
+            // Activity is handled by reducer
             return;
           }
           if (event.type === "answer_delta" || event.type === "delta") {
