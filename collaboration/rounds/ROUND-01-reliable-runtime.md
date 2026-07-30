@@ -23,7 +23,9 @@ user_gate: required
 
 - 2026-07-30：用户明确授权启动 ROUND-01，并要求先由 Grok 执行 TASK-002；
 - 本轮基线为 `634d90877e2176c6c15e80ccae2ad5ee22f5387f`；
-- 当前只授权 TASK-002，TASK-003～TASK-007 继续保持 `draft`，不得自动启动；
+- 2026-07-31：TASK-002 已由 Codex 审查为 `accepted`；用户明确授权 Codex 连续执行
+  TASK-003 直至 `accepted`，无需 Grok 接管或中途确认；
+- 当前只授权 TASK-003，TASK-004～TASK-007 继续保持 `draft`，不得自动启动；
 - 本轮授权不包含生产切换、生产配置修改或破坏性数据操作。
 
 ## 业务结果

@@ -1,9 +1,9 @@
 ---
 id: TASK-003
 title: 分离 Create Run 并建立 Go Run Supervisor
-status: draft
-executor: grok
-base_commit: pending
+status: ready
+executor: codex
+base_commit: ce31efb363c81643e6ec495b2095a6dbf1f2d383
 business_round: ROUND-01
 depends_on:
   - TASK-002
