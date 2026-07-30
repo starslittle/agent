@@ -286,27 +286,32 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           }
           if (event.type === "activity" || event.type === "tool.completed") {
             // Activity is handled separately (e.g. tool calls or progress)
-            // For now, we can log or show in a dedicated activity panel
+            // TODO: implement RuntimeActivityList UI
             console.log("Activity:", event.data);
             return;
           }
-          if (event.type !== "answer.delta" || !event.data) return;
-          accumulatedContent += event.data;
-          setMessages((prev) =>
-            prev.map((message) => {
-              if (message.id === assistantId ||
-                  (event.type === "answer.delta" && message.status === "streaming" && message.role === "assistant")) {
-                return {
-                  ...message,
-                  content: accumulatedContent,
-                  status: "streaming",
-                  thinking: event.isThinking ?? message.thinking,
-                  thinkingFinished: event.thinkingFinished ?? message.thinkingFinished,
-                };
-              }
-              return message;
-            }),
-          );
+          if (event.type === "answer_delta" || event.type === "delta") {
+            const data = event.type === "answer_delta" ? event.data : (event as any).data;
+            if (data) {
+              accumulatedContent += data;
+              setMessages((prev) =>
+                prev.map((message) => {
+                  if (message.id === assistantId ||
+                      (event.type === "answer_delta" || event.type === "delta") && message.status === "streaming" && message.role === "assistant") {
+                    return {
+                      ...message,
+                      content: accumulatedContent,
+                      status: "streaming",
+                      thinking: event.isThinking ?? message.thinking,
+                      thinkingFinished: event.thinkingFinished ?? message.thinkingFinished,
+                    };
+                  }
+                  return message;
+                }),
+              );
+            }
+            return;
+          }
         },
         controller.signal
       );

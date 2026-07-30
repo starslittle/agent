@@ -51,7 +51,13 @@ export type ConversationStreamEvent =
       thinkingFinished?: boolean;
     }
   | {
-      type: "answer.delta";
+      type: "answer_delta";
+      data?: string;
+      isThinking?: boolean;
+      thinkingFinished?: boolean;
+    }
+  | {
+      type: "delta";
       data?: string;
       isThinking?: boolean;
       thinkingFinished?: boolean;
