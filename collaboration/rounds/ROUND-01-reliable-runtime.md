@@ -1,9 +1,9 @@
 ---
 id: ROUND-01
 title: 可信 Agent 运行链路
-status: draft
+status: ready
 runtime_state: not_deployed
-base_commit: pending
+base_commit: 634d90877e2176c6c15e80ccae2ad5ee22f5387f
 accepted_commit: pending
 depends_on_rounds: []
 tasks:
@@ -18,6 +18,13 @@ user_gate: required
 ---
 
 # ROUND-01：可信 Agent 运行链路
+
+## 授权记录
+
+- 2026-07-30：用户明确授权启动 ROUND-01，并要求先由 Grok 执行 TASK-002；
+- 本轮基线为 `634d90877e2176c6c15e80ccae2ad5ee22f5387f`；
+- 当前只授权 TASK-002，TASK-003～TASK-007 继续保持 `draft`，不得自动启动；
+- 本轮授权不包含生产切换、生产配置修改或破坏性数据操作。
 
 ## 业务结果
 
@@ -53,6 +60,15 @@ TASK-006 的自动报告是本轮证据之一，不能替代 Codex 的 Browser /
 
 优先使用现有 Runtime 协议/部署控制在 `legacy` 与 `v1` 间切换。进入 `ready` 前必须
 确认浏览器和 Go/Python 的兼容组合，不能只切后端而留下不可用前端。
+
+当前冻结的兼容组合：
+
+- `legacy`：Python legacy adapter 继续发送 `delta`；前端保留 deprecated
+  `delta` 消费，thinking delta 只进入 Activity；
+- `v1`：Go 只把 `answer.delta` 投影为 `answer_delta`，运行事件投影为
+  `activity`，Artifact 独立；
+- TASK-002 不修改生产默认协议模式、运行中 Run 的终态规则或取消状态机；
+- 若无法同时维持上述两个组合，TASK-002 停止并退回重新冻结范围。
 
 回滚演练：
 

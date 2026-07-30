@@ -1,8 +1,9 @@
 # 统一助手、Skill 与个人 Wiki 迁移 Backlog
 
-> 版本：v0.1
+> 版本：v0.2
 >
-> 状态：完整规划已沉淀；所有未轮到执行的 Task 保持 `draft`
+> 状态：ROUND-01 已获用户授权；TASK-002 为 `ready`，其余未轮到执行的 Task 保持
+> `draft`
 >
 > 最后更新：2026-07-30
 
@@ -139,7 +140,7 @@ TASK-026 仍是 P1，TASK-027 仍是发布准备而不是产品功能或生产�
 | ID | 目标 | 里程碑 | 风险 | Codex E2E | 状态 |
 |---|---|---|---|---|---|
 | [TASK-001](TASK-001-skill-contract.md) | Skill Manifest 与 Registry | M1 | medium | N/A | draft |
-| [TASK-002](TASK-002-browser-event-contract.md) | Activity 与正文结构化分离 | M2 | high | required | draft |
+| [TASK-002](TASK-002-browser-event-contract.md) | Activity 与正文结构化分离 | M2 | high | required | ready |
 | [TASK-003](TASK-003-run-create-supervisor.md) | Create Run 与 Go Supervisor | M3 | high | required | draft |
 | [TASK-004](TASK-004-run-event-attach.md) | Attach/Re-attach 与事件回放 | M3 | high | required | draft |
 | [TASK-005](TASK-005-frontend-run-lifecycle.md) | 前端切换 Create/Attach/Cancel | M3 | high | required | draft |

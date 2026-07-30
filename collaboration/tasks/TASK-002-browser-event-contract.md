@@ -1,9 +1,9 @@
 ---
 id: TASK-002
 title: 建立结构化 Browser Event 并分离 Activity 与回答正文
-status: draft
+status: ready
 executor: grok
-base_commit: pending
+base_commit: 634d90877e2176c6c15e80ccae2ad5ee22f5387f
 business_round: ROUND-01
 depends_on: []
 source_todos:
@@ -23,10 +23,14 @@ allowed_paths:
   - go-backend/internal/conversation/**
   - go-backend/internal/httpapi/**
   - go-backend/internal/platform/postgres/**
+  - frontend/package.json
+  - frontend/package-lock.json
   - frontend/src/lib/chat-api.ts
+  - frontend/src/lib/conversation-stream-reducer.ts
   - frontend/src/components/chat/**
   - frontend/src/hooks/**
   - frontend/src/**/*.test.*
+  - docs/architecture/agent-runtime-migration-progress.md
   - collaboration/handoffs/TASK-002-*.md
 forbidden_paths:
   - backend/agent/workflows/**
@@ -41,13 +45,13 @@ forbidden_paths:
 
 ## 目标
 
-将 Go 到浏览器的实时事件收敛为强类型协议，使 Activity、回答正文、Artifact、
-Citation 和终态互不混用。
+将 Go 到浏览器的实时事件收敛为强类型协议，使 Activity、回答正文、Artifact 和
+终态互不混用。
 
 ## 历史TODO追溯
 
-完整承接“Tool/Progress 事件与最终正文分离”。本Task只建立 Citation 事件外壳，
-具体 Citation 元数据、持久化和 UI 由 TASK-007 完成。
+完整承接“Tool/Progress 事件与最终正文分离”。Citation 事件外壳、元数据、持久化
+和 UI 均由 TASK-007 完成，本 Task 不提前实现。
 
 ## 当前事实
 
@@ -64,10 +68,7 @@ Citation 和终态互不混用。
 meta
 activity
 answer_delta
-citation
 artifact
-proposal
-confirmation_required
 done
 error
 ```
@@ -87,7 +88,7 @@ assistant_message.content
 
 - 不修改 Python Workflow 或 Prompt；
 - 不实现 Create/Attach 分离；
-- 不实现完整 Citation UI；
+- 不实现 Citation、Proposal 或 Confirmation 协议与 UI；
 - 不新增 Skill、Wiki 或 Decision；
 - 不新增或改写数据库 Migration；若现有 Schema 无法承载稳定投影，Task 必须退回
   `draft` 重新冻结范围；
@@ -108,6 +109,7 @@ assistant_message.content
 
 ```text
 cd go-backend && go test ./...
+cd frontend && npm run test -- --run
 cd frontend && npm run lint
 cd frontend && npm run build
 ```
