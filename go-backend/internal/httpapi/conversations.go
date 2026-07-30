@@ -17,6 +17,7 @@ import (
 	"github.com/starslittle/agent/go-backend/internal/agent"
 	"github.com/starslittle/agent/go-backend/internal/agenttrace"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
+	runsupervisor "github.com/starslittle/agent/go-backend/internal/runs"
 )
 
 type conversationHTTP struct {
@@ -29,6 +30,7 @@ type conversationHTTP struct {
 	runDeadline      time.Duration
 	cancelTimeout    time.Duration
 	reconcileTimeout time.Duration
+	runSupervisor    *runsupervisor.Supervisor
 }
 
 const maxV1SequenceResumeAttempts = 2
@@ -44,6 +46,13 @@ type updateConversationRequest struct {
 type streamConversationRequest struct {
 	Content         string `json:"content"`
 	ClientMessageID string `json:"client_message_id"`
+	AgentName       string `json:"agent_name"`
+}
+
+type createRunRequest struct {
+	Content         string `json:"content"`
+	ClientMessageID string `json:"client_message_id"`
+	IdempotencyKey  string `json:"idempotency_key"`
 	AgentName       string `json:"agent_name"`
 }
 
@@ -68,6 +77,7 @@ func newConversationHTTP(
 	runDeadline time.Duration,
 	cancelTimeout time.Duration,
 	reconcileTimeout time.Duration,
+	runSupervisor *runsupervisor.Supervisor,
 ) *conversationHTTP {
 	return &conversationHTTP{
 		service:          service,
@@ -79,7 +89,62 @@ func newConversationHTTP(
 		runDeadline:      runDeadline,
 		cancelTimeout:    cancelTimeout,
 		reconcileTimeout: reconcileTimeout,
+		runSupervisor:    runSupervisor,
 	}
+}
+
+func (h *conversationHTTP) createRun(w http.ResponseWriter, r *http.Request) {
+	session, ok := sessionFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required")
+		return
+	}
+	if h.protocolMode != "v1" {
+		writeJSONError(w, http.StatusConflict, "run_create_not_enabled")
+		return
+	}
+	var input createRunRequest
+	if err := decodeJSONBody(r, &input, h.maxRequestBytes); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_json")
+		return
+	}
+	generation, err := h.service.CreateRun(
+		r.Context(),
+		conversation.StartGenerationParams{
+			UserID:          session.User.ID,
+			ConversationID:  r.PathValue("conversationID"),
+			ClientMessageID: input.ClientMessageID,
+			IdempotencyKey:  input.IdempotencyKey,
+			RequestID:       r.Header.Get(requestIDHeader),
+			Content:         input.Content,
+			AgentName:       input.AgentName,
+		},
+	)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	if h.runSupervisor != nil {
+		if err := h.runSupervisor.Submit(generation.Run.ID); err != nil {
+			h.logger.Warn(
+				"schedule Agent Run",
+				"run_id", generation.Run.ID,
+				"error", err,
+			)
+		}
+	}
+	status := http.StatusCreated
+	if generation.Replayed {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, map[string]any{
+		"run_id":               generation.Run.ID,
+		"execution_id":         generation.Run.ExecutionID,
+		"user_message_id":      generation.UserMessage.ID,
+		"assistant_message_id": generation.Assistant.ID,
+		"status":               generation.Run.Status,
+		"protocol_version":     generation.Run.ProtocolVersion,
+	})
 }
 
 func (h *conversationHTTP) create(w http.ResponseWriter, r *http.Request) {
@@ -1435,6 +1500,8 @@ func (h *conversationHTTP) writeError(w http.ResponseWriter, err error) {
 		writeJSONError(w, http.StatusConflict, "conversation_busy")
 	case errors.Is(err, conversation.ErrDuplicateMessage):
 		writeJSONError(w, http.StatusConflict, "duplicate_message")
+	case errors.Is(err, conversation.ErrIdempotencyConflict):
+		writeJSONError(w, http.StatusConflict, "idempotency_conflict")
 	default:
 		h.logger.Error("conversation_api_error", "error", err)
 		writeJSONError(w, http.StatusInternalServerError, "internal_error")

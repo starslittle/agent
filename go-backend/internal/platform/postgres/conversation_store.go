@@ -300,17 +300,36 @@ func (s *Store) StartGeneration(
 		return conversation.Generation{}, mapConversationError(err)
 	}
 
-	var duplicate bool
-	if err := transaction.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM app_core.messages
-			WHERE conversation_id = $1 AND client_message_id = $2
+	if params.Idempotent {
+		existing, found, existingErr := loadIdempotentGeneration(
+			ctx,
+			transaction,
+			params,
+			result.Conversation,
 		)
-	`, params.ConversationID, params.ClientMessageID).Scan(&duplicate); err != nil {
-		return conversation.Generation{}, err
-	}
-	if duplicate {
-		return conversation.Generation{}, conversation.ErrDuplicateMessage
+		if existingErr != nil {
+			return conversation.Generation{}, existingErr
+		}
+		if found {
+			existing.Replayed = true
+			if err := transaction.Commit(ctx); err != nil {
+				return conversation.Generation{}, err
+			}
+			return existing, nil
+		}
+	} else {
+		var duplicate bool
+		if err := transaction.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM app_core.messages
+				WHERE conversation_id = $1 AND client_message_id = $2
+			)
+		`, params.ConversationID, params.ClientMessageID).Scan(&duplicate); err != nil {
+			return conversation.Generation{}, err
+		}
+		if duplicate {
+			return conversation.Generation{}, conversation.ErrDuplicateMessage
+		}
 	}
 
 	now := time.Now().UTC()
@@ -357,9 +376,12 @@ func (s *Store) StartGeneration(
 		INSERT INTO app_core.agent_runs (
 			id, conversation_id, user_message_id, assistant_message_id,
 			request_id, execution_id, idempotency_key, agent_name,
-			protocol_version, status, trace_id
+			protocol_version, status, trace_id, metadata
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, 'queued', $6)
+		VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $6,
+			jsonb_build_object('run_supervisor_managed', $10::boolean)
+		)
 	`,
 		runID,
 		params.ConversationID,
@@ -367,12 +389,17 @@ func (s *Store) StartGeneration(
 		assistantMessageID,
 		params.RequestID,
 		params.ExecutionID,
+		params.IdempotencyKey,
 		agentName,
 		params.ProtocolVersion,
+		params.SupervisorManaged,
 	)
 	if err != nil {
 		var pgError *pgconn.PgError
 		if errors.As(err, &pgError) && pgError.Code == "23505" {
+			if pgError.ConstraintName == "agent_runs_idempotency_key_idx" {
+				return conversation.Generation{}, conversation.ErrIdempotencyConflict
+			}
 			return conversation.Generation{}, conversation.ErrGenerationActive
 		}
 		return conversation.Generation{}, err
@@ -409,6 +436,7 @@ func (s *Store) StartGeneration(
 	result.Run = conversation.Run{
 		ID:                 runID,
 		ExecutionID:        params.ExecutionID,
+		IdempotencyKey:     params.IdempotencyKey,
 		ConversationID:     params.ConversationID,
 		UserMessageID:      userMessageID,
 		AssistantMessageID: assistantMessageID,
@@ -421,6 +449,102 @@ func (s *Store) StartGeneration(
 		return conversation.Generation{}, err
 	}
 	return result, nil
+}
+
+func loadIdempotentGeneration(
+	ctx context.Context,
+	transaction pgx.Tx,
+	params conversation.StartGenerationParams,
+	item conversation.Conversation,
+) (conversation.Generation, bool, error) {
+	var (
+		run             conversation.Run
+		existingContent string
+		existingAgent   string
+	)
+	err := transaction.QueryRow(ctx, `
+		SELECT
+			r.id::text,
+			r.execution_id,
+			r.idempotency_key,
+			r.conversation_id::text,
+			r.user_message_id::text,
+			r.assistant_message_id::text,
+			r.request_id,
+			r.agent_name,
+			r.status,
+			r.protocol_version,
+			r.last_sequence,
+			um.content,
+			r.agent_name
+		FROM app_core.agent_runs r
+		JOIN app_core.messages um ON um.id = r.user_message_id
+		WHERE r.conversation_id = $1
+			AND (
+				um.client_message_id = $2
+				OR r.idempotency_key = $3
+			)
+		ORDER BY
+			CASE WHEN r.idempotency_key = $3 THEN 0 ELSE 1 END,
+			r.started_at DESC
+		LIMIT 1
+		FOR UPDATE OF r
+	`,
+		params.ConversationID,
+		params.ClientMessageID,
+		params.IdempotencyKey,
+	).Scan(
+		&run.ID,
+		&run.ExecutionID,
+		&run.IdempotencyKey,
+		&run.ConversationID,
+		&run.UserMessageID,
+		&run.AssistantMessageID,
+		&run.RequestID,
+		&run.AgentName,
+		&run.Status,
+		&run.ProtocolVersion,
+		&run.LastSequence,
+		&existingContent,
+		&existingAgent,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return conversation.Generation{}, false, nil
+	}
+	if err != nil {
+		return conversation.Generation{}, false, err
+	}
+	if run.IdempotencyKey != params.IdempotencyKey ||
+		existingContent != params.Content ||
+		(params.AgentName != "" && existingAgent != params.AgentName) {
+		return conversation.Generation{}, false, conversation.ErrIdempotencyConflict
+	}
+
+	result := conversation.Generation{
+		Conversation: item,
+		Run:          run,
+	}
+	if err := transaction.QueryRow(ctx, `
+		SELECT
+			id::text, conversation_id::text, client_message_id::text,
+			role, content, status, sequence_id, metadata,
+			created_at, updated_at, completed_at
+		FROM app_core.messages
+		WHERE id = $1
+	`, run.UserMessageID).Scan(messageScanTargets(&result.UserMessage)...); err != nil {
+		return conversation.Generation{}, false, err
+	}
+	if err := transaction.QueryRow(ctx, `
+		SELECT
+			id::text, conversation_id::text, client_message_id::text,
+			role, content, status, sequence_id, metadata,
+			created_at, updated_at, completed_at
+		FROM app_core.messages
+		WHERE id = $1
+	`, run.AssistantMessageID).Scan(messageScanTargets(&result.Assistant)...); err != nil {
+		return conversation.Generation{}, false, err
+	}
+	return result, true, nil
 }
 
 func (s *Store) LoadHistory(
@@ -518,7 +642,15 @@ func (s *Store) FinishGeneration(
 	}
 	defer func() { _ = transaction.Rollback(ctx) }()
 
-	var currentRunStatus string
+	var (
+		currentRunStatus string
+		leaseOwner       string
+		leaseEpoch       int64
+	)
+	if params.Lease != nil {
+		leaseOwner = params.Lease.OwnerID
+		leaseEpoch = params.Lease.Epoch
+	}
 	err = transaction.QueryRow(ctx, `
 		SELECT r.status
 		FROM app_core.agent_runs r
@@ -526,13 +658,28 @@ func (s *Store) FinishGeneration(
 		WHERE r.id = $1
 			AND r.assistant_message_id = $2
 			AND c.user_id = $3
+			AND (
+				$4 = ''
+				OR (
+					r.metadata->>'supervisor_owner_id' = $4
+					AND (r.metadata->>'supervisor_lease_epoch')::bigint = $5
+					AND (
+						r.metadata->>'supervisor_lease_expires_at'
+					)::timestamptz > NOW()
+				)
+			)
 		FOR UPDATE OF r
 	`,
 		params.RunID,
 		params.AssistantMessageID,
 		params.UserID,
+		leaseOwner,
+		leaseEpoch,
 	).Scan(&currentRunStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
+		if params.Lease != nil {
+			return "", conversation.ErrRunLeaseLost
+		}
 		return "", conversation.ErrNotFound
 	}
 	if err != nil {
@@ -618,6 +765,26 @@ func (s *Store) RecordAgentEvent(
 	runID string,
 	event agent.Event,
 ) (bool, error) {
+	return s.recordAgentEvent(ctx, userID, runID, event, nil)
+}
+
+func (s *Store) RecordAgentEventOwned(
+	ctx context.Context,
+	userID string,
+	runID string,
+	event agent.Event,
+	lease conversation.RunLease,
+) (bool, error) {
+	return s.recordAgentEvent(ctx, userID, runID, event, &lease)
+}
+
+func (s *Store) recordAgentEvent(
+	ctx context.Context,
+	userID string,
+	runID string,
+	event agent.Event,
+	lease *conversation.RunLease,
+) (bool, error) {
 	if event.TraceID == "" {
 		event.TraceID = event.ExecutionID
 	}
@@ -635,6 +802,46 @@ func (s *Store) RecordAgentEvent(
 		return false, err
 	}
 	defer func() { _ = transaction.Rollback(ctx) }()
+
+	var (
+		leaseOwner string
+		leaseEpoch int64
+	)
+	if lease != nil {
+		leaseOwner = lease.OwnerID
+		leaseEpoch = lease.Epoch
+	}
+	var lockedRunID string
+	err = transaction.QueryRow(ctx, `
+		SELECT r.id::text
+		FROM app_core.agent_runs r
+		JOIN app_core.conversations c ON c.id = r.conversation_id
+		WHERE r.id = $1
+			AND c.user_id = $2
+			AND r.execution_id = $3
+			AND (
+				$4 = ''
+				OR (
+					r.metadata->>'supervisor_owner_id' = $4
+					AND (r.metadata->>'supervisor_lease_epoch')::bigint = $5
+					AND (
+						r.metadata->>'supervisor_lease_expires_at'
+					)::timestamptz > NOW()
+				)
+			)
+		FOR UPDATE OF r
+	`, runID, userID, event.ExecutionID, leaseOwner, leaseEpoch).Scan(
+		&lockedRunID,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		if lease != nil {
+			return false, conversation.ErrRunLeaseLost
+		}
+		return false, conversation.ErrNotFound
+	}
+	if err != nil {
+		return false, err
+	}
 
 	command, err := transaction.Exec(ctx, `
 		INSERT INTO app_core.agent_run_events (
@@ -696,6 +903,8 @@ func (s *Store) RecordAgentEvent(
 		SET last_sequence = GREATEST(last_sequence, $2),
 			status = CASE
 				WHEN status IN ('completed', 'cancelled', 'failed', 'timed_out')
+					THEN status
+				WHEN status = 'cancel_requested' AND $3 = 'completed'
 					THEN status
 				WHEN $3 = '' THEN status
 				ELSE $3
@@ -1288,26 +1497,6 @@ func (s *Store) RequestRunCancellation(
 	return nil
 }
 
-func (s *Store) InterruptStaleGenerations(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, `
-		WITH stale AS (
-			UPDATE app_core.agent_runs
-			SET status = 'failed',
-				error_code = 'generation_interrupted',
-				error_detail = 'Generation did not finish before the service restarted',
-				completed_at = NOW()
-			WHERE status IN ('queued', 'running', 'cancel_requested')
-			RETURNING assistant_message_id
-		)
-		UPDATE app_core.messages m
-		SET status = 'failed', updated_at = NOW(), completed_at = NOW()
-		FROM stale
-		WHERE m.id = stale.assistant_message_id
-			AND m.status = 'streaming'
-	`)
-	return err
-}
-
 type rowScanner interface {
 	Scan(...any) error
 }
@@ -1362,14 +1551,6 @@ func statusForEvent(eventType string) string {
 		return string(agent.StatusRunning)
 	case "run.cancel_requested":
 		return string(agent.StatusCancelRequested)
-	case "run.completed":
-		return string(agent.StatusCompleted)
-	case "run.cancelled":
-		return string(agent.StatusCancelled)
-	case "run.failed":
-		return string(agent.StatusFailed)
-	case "run.timed_out":
-		return string(agent.StatusTimedOut)
 	default:
 		return ""
 	}

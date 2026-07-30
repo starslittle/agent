@@ -41,13 +41,20 @@ func main() {
 
 	authService := auth.NewService(store, cfg.SessionTTL)
 	conversationService := conversation.NewService(store)
-	if err := conversationService.Recover(startupCtx); err != nil {
-		logger.Error("recover_stale_generations", "error", err)
+	if err := conversationService.ReconcileStartup(startupCtx); err != nil {
+		logger.Error("reconcile_unmanaged_runs", "error", err)
 		os.Exit(1)
 	}
 	api, err := httpapi.New(cfg, logger, authService, conversationService)
 	if err != nil {
 		logger.Error("initialize_server", "error", err)
+		os.Exit(1)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := api.Start(ctx); err != nil {
+		logger.Error("start_run_supervisor", "error", err)
 		os.Exit(1)
 	}
 
@@ -57,9 +64,6 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       90 * time.Second,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	go func() {
 		<-ctx.Done()
@@ -79,5 +83,13 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("serve_http", "error", err)
 		os.Exit(1)
+	}
+	supervisorCloseCtx, supervisorCloseCancel := context.WithTimeout(
+		context.Background(),
+		cfg.ShutdownTimeout,
+	)
+	defer supervisorCloseCancel()
+	if err := api.Close(supervisorCloseCtx); err != nil {
+		logger.Error("stop_run_supervisor", "error", err)
 	}
 }

@@ -41,6 +41,7 @@ type Message struct {
 type Run struct {
 	ID                 string
 	ExecutionID        string
+	IdempotencyKey     string
 	ConversationID     string
 	UserMessageID      string
 	AssistantMessageID string
@@ -142,6 +143,7 @@ type Generation struct {
 	UserMessage  Message
 	Assistant    Message
 	Run          Run
+	Replayed     bool
 }
 
 type ListParams struct {
@@ -159,14 +161,30 @@ type MessageListParams struct {
 }
 
 type StartGenerationParams struct {
-	UserID          string
-	ConversationID  string
-	ClientMessageID string
-	RequestID       string
-	ExecutionID     string
-	Content         string
-	AgentName       string
-	ProtocolVersion int
+	UserID            string
+	ConversationID    string
+	ClientMessageID   string
+	RequestID         string
+	ExecutionID       string
+	IdempotencyKey    string
+	Content           string
+	AgentName         string
+	ProtocolVersion   int
+	Idempotent        bool
+	SupervisorManaged bool
+}
+
+type RunLease struct {
+	OwnerID   string
+	Epoch     int64
+	ExpiresAt time.Time
+}
+
+type ClaimedRun struct {
+	Generation
+	UserID         string
+	PreviousStatus string
+	Lease          RunLease
 }
 
 type FinishGenerationParams struct {
@@ -179,6 +197,7 @@ type FinishGenerationParams struct {
 	ErrorDetail         string
 	FirstTokenAt        *time.Time
 	GenerationCompleted time.Time
+	Lease               *RunLease
 }
 
 // ResolveTerminalStatus makes cancellation intent win over a late successful

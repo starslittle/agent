@@ -713,6 +713,260 @@ func TestV1SequenceGapReplaysOrFailsClosedIntegration(t *testing.T) {
 	}
 }
 
+func TestCreateRunReturnsStableIdentityAndContinuesAfterRequestIntegration(
+	t *testing.T,
+) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	store, err := postgres.Open(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	runtimeStarted := make(chan struct{})
+	releaseRuntime := make(chan struct{})
+	var startedOnce sync.Once
+	upstream := httptest.NewServer(http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		if r.Method != http.MethodPost ||
+			r.URL.Path != "/internal/v1/agent-runs:stream" {
+			writeJSONError(w, http.StatusNotFound, "not_found")
+			return
+		}
+		var run agent.RunRequest
+		if err := json.NewDecoder(r.Body).Decode(&run); err != nil {
+			t.Errorf("decode V1 run: %v", err)
+			writeJSONError(w, http.StatusBadRequest, "invalid_run")
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		startedOnce.Do(func() { close(runtimeStarted) })
+		select {
+		case <-releaseRuntime:
+		case <-r.Context().Done():
+			return
+		}
+		writeV1TestEvent(t, w, run, 1, "run.started", `{}`)
+		writeV1TestEvent(
+			t,
+			w,
+			run,
+			2,
+			"answer.delta",
+			`{"text":"后台完成"}`,
+		)
+		writeV1TestEvent(t, w, run, 3, "run.completed", `{}`)
+	}))
+	defer upstream.Close()
+
+	cfg := config.Config{
+		AppEnv:                "test",
+		PythonBaseURL:         upstream.URL,
+		MaxRequestBytes:       1 << 20,
+		UpstreamHeaderTimeout: 2 * time.Second,
+		SessionTTL:            time.Hour,
+		InternalAgentSecret:   "test-secret-that-is-at-least-32-characters",
+		AgentProtocolMode:     "v1",
+		AgentRunDeadline:      time.Minute,
+		AgentCancelTimeout:    2 * time.Second,
+		AgentReconcileTimeout: 2 * time.Second,
+	}
+	server, err := New(
+		cfg,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		auth.NewService(store, time.Hour),
+		conversation.NewService(store),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	supervisorCtx, supervisorCancel := context.WithCancel(context.Background())
+	defer supervisorCancel()
+	if err := server.Start(supervisorCtx); err != nil {
+		t.Fatalf("server Start() error = %v", err)
+	}
+	defer func() {
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer closeCancel()
+		if err := server.Close(closeCtx); err != nil {
+			t.Errorf("server Close() error = %v", err)
+		}
+	}()
+
+	cookie, csrfToken := registerIntegrationUser(t, server)
+	createConversation := authenticatedRequest(
+		http.MethodPost,
+		"/api/v1/conversations",
+		`{"agent_name":"default_llm_agent"}`,
+		cookie,
+		csrfToken,
+	)
+	createConversationResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(createConversationResponse, createConversation)
+	if createConversationResponse.Code != http.StatusCreated {
+		t.Fatalf(
+			"create conversation status=%d body=%s",
+			createConversationResponse.Code,
+			createConversationResponse.Body.String(),
+		)
+	}
+	var item conversation.Conversation
+	if err := json.Unmarshal(
+		createConversationResponse.Body.Bytes(),
+		&item,
+	); err != nil {
+		t.Fatalf("decode conversation: %v", err)
+	}
+
+	clientMessageID := auth.NewID()
+	idempotencyKey := "http-create-" + clientMessageID
+	body, _ := json.Marshal(map[string]string{
+		"content":           "请求返回后继续运行",
+		"client_message_id": clientMessageID,
+		"idempotency_key":   idempotencyKey,
+		"agent_name":        conversation.DefaultAgent,
+	})
+	createRun := authenticatedRequest(
+		http.MethodPost,
+		"/api/v1/conversations/"+item.ID+"/runs",
+		string(body),
+		cookie,
+		csrfToken,
+	)
+	createRequestCtx, cancelCreateRequest := context.WithCancel(context.Background())
+	createRun = createRun.WithContext(createRequestCtx)
+	createRun.Header.Set(requestIDHeader, auth.NewID())
+	createRunResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(createRunResponse, createRun)
+	cancelCreateRequest()
+	if createRunResponse.Code != http.StatusCreated {
+		t.Fatalf(
+			"create run status=%d body=%s",
+			createRunResponse.Code,
+			createRunResponse.Body.String(),
+		)
+	}
+	var first map[string]any
+	if err := json.Unmarshal(createRunResponse.Body.Bytes(), &first); err != nil {
+		t.Fatalf("decode create run: %v", err)
+	}
+	for _, field := range []string{
+		"run_id",
+		"execution_id",
+		"user_message_id",
+		"assistant_message_id",
+	} {
+		if value, _ := first[field].(string); value == "" {
+			t.Fatalf("create run missing %s: %#v", field, first)
+		}
+	}
+	if first["status"] != string(agent.StatusQueued) ||
+		first["protocol_version"] != float64(agent.ProtocolVersion) {
+		t.Fatalf("unexpected create run response: %#v", first)
+	}
+
+	select {
+	case <-runtimeStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("supervisor did not start runtime")
+	}
+
+	replay := authenticatedRequest(
+		http.MethodPost,
+		"/api/v1/conversations/"+item.ID+"/runs",
+		string(body),
+		cookie,
+		csrfToken,
+	)
+	replay.Header.Set(requestIDHeader, auth.NewID())
+	replayResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(replayResponse, replay)
+	if replayResponse.Code != http.StatusOK {
+		t.Fatalf(
+			"replay status=%d body=%s",
+			replayResponse.Code,
+			replayResponse.Body.String(),
+		)
+	}
+	var second map[string]any
+	if err := json.Unmarshal(replayResponse.Body.Bytes(), &second); err != nil {
+		t.Fatalf("decode replay: %v", err)
+	}
+	for _, field := range []string{
+		"run_id",
+		"execution_id",
+		"user_message_id",
+		"assistant_message_id",
+	} {
+		if first[field] != second[field] {
+			t.Fatalf("%s changed across retry: %#v / %#v", field, first, second)
+		}
+	}
+
+	missingCSRF := authenticatedRequest(
+		http.MethodPost,
+		"/api/v1/conversations/"+item.ID+"/runs",
+		string(body),
+		cookie,
+		"",
+	)
+	missingCSRFResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(missingCSRFResponse, missingCSRF)
+	if missingCSRFResponse.Code != http.StatusForbidden {
+		t.Fatalf("missing CSRF status=%d", missingCSRFResponse.Code)
+	}
+
+	otherCookie, otherCSRF := registerIntegrationUser(t, server)
+	crossUser := authenticatedRequest(
+		http.MethodPost,
+		"/api/v1/conversations/"+item.ID+"/runs",
+		string(body),
+		otherCookie,
+		otherCSRF,
+	)
+	crossUserResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(crossUserResponse, crossUser)
+	if crossUserResponse.Code != http.StatusNotFound {
+		t.Fatalf(
+			"cross-user status=%d body=%s",
+			crossUserResponse.Code,
+			crossUserResponse.Body.String(),
+		)
+	}
+
+	close(releaseRuntime)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		run := getIntegrationRun(t, server, cookie, item.ID)
+		if run.Status == string(agent.StatusCompleted) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("background run status=%q, want completed", run.Status)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	messages := getIntegrationMessages(t, server, cookie, item.ID)
+	if len(messages) != 2 ||
+		messages[1].Status != "completed" ||
+		messages[1].Content != "后台完成" {
+		t.Fatalf("background messages = %#v", messages)
+	}
+}
+
 func TestV1BrowserDisconnectContinuesDetachedIntegration(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -846,7 +1100,7 @@ func TestV1BrowserDisconnectContinuesDetachedIntegration(t *testing.T) {
 	request.Header.Set(requestIDHeader, auth.NewID())
 	requestContext, disconnect := context.WithCancel(request.Context())
 	request = request.WithContext(requestContext)
-	response := httptest.NewRecorder()
+	response := newObservedRecorder("前半")
 	handlerDone := make(chan struct{})
 	go func() {
 		defer close(handlerDone)
@@ -854,10 +1108,10 @@ func TestV1BrowserDisconnectContinuesDetachedIntegration(t *testing.T) {
 	}()
 
 	select {
-	case <-initialDelivered:
+	case <-response.observed:
 		disconnect()
 	case <-time.After(5 * time.Second):
-		t.Fatal("initial V1 events were not delivered")
+		t.Fatal("initial V1 answer was not delivered to the browser")
 	}
 	select {
 	case <-handlerDone:
@@ -877,7 +1131,20 @@ func TestV1BrowserDisconnectContinuesDetachedIntegration(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("detached run status = %q, want completed", run.Status)
+			errorCode := ""
+			errorDetail := ""
+			if run.ErrorCode != nil {
+				errorCode = *run.ErrorCode
+			}
+			if run.ErrorDetail != nil {
+				errorDetail = *run.ErrorDetail
+			}
+			t.Fatalf(
+				"detached run status=%q code=%q detail=%q, want completed",
+				run.Status,
+				errorCode,
+				errorDetail,
+			)
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
@@ -892,6 +1159,29 @@ func TestV1BrowserDisconnectContinuesDetachedIntegration(t *testing.T) {
 		startAfters[1] != 2 {
 		t.Fatalf("V1 start/resume cursors = %#v, want [0 2]", startAfters)
 	}
+}
+
+type observedRecorder struct {
+	*httptest.ResponseRecorder
+	needle   []byte
+	observed chan struct{}
+	once     sync.Once
+}
+
+func newObservedRecorder(needle string) *observedRecorder {
+	return &observedRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		needle:           []byte(needle),
+		observed:         make(chan struct{}),
+	}
+}
+
+func (r *observedRecorder) Write(data []byte) (int, error) {
+	count, err := r.ResponseRecorder.Write(data)
+	if bytes.Contains(data, r.needle) {
+		r.once.Do(func() { close(r.observed) })
+	}
+	return count, err
 }
 
 type integrationStreamResult struct {

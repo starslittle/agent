@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,10 +15,12 @@ import (
 	"github.com/starslittle/agent/go-backend/internal/auth"
 	"github.com/starslittle/agent/go-backend/internal/config"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
+	runsupervisor "github.com/starslittle/agent/go-backend/internal/runs"
 )
 
 type Server struct {
-	handler http.Handler
+	handler       http.Handler
+	runSupervisor *runsupervisor.Supervisor
 }
 
 func New(
@@ -46,6 +49,15 @@ func New(
 	)
 	if err != nil {
 		return nil, err
+	}
+	var runSupervisor *runsupervisor.Supervisor
+	if len(conversationServices) > 0 && conversationServices[0] != nil {
+		runSupervisor = runsupervisor.New(
+			conversationServices[0],
+			v1Client,
+			logger,
+			runsupervisor.Options{RunDeadline: cfg.AgentRunDeadline},
+		)
 	}
 
 	mux := http.NewServeMux()
@@ -88,6 +100,7 @@ func New(
 			cfg.AgentRunDeadline,
 			cfg.AgentCancelTimeout,
 			cfg.AgentReconcileTimeout,
+			runSupervisor,
 		)
 		mux.Handle(
 			"POST /api/v1/conversations",
@@ -126,6 +139,14 @@ func New(
 			authAPI.requireSession(http.HandlerFunc(conversationAPI.messages)),
 		)
 		mux.Handle(
+			"POST /api/v1/conversations/{conversationID}/runs",
+			authAPI.protectMutation(
+				authAPI.requireSession(
+					authAPI.requireCSRF(http.HandlerFunc(conversationAPI.createRun)),
+				),
+			),
+		)
+		mux.Handle(
 			"GET /api/v1/agent-runs",
 			authAPI.requireSession(http.HandlerFunc(conversationAPI.runs)),
 		)
@@ -160,11 +181,25 @@ func New(
 			loggingMiddleware(logger, mux),
 		),
 	)
-	return &Server{handler: handler}, nil
+	return &Server{handler: handler, runSupervisor: runSupervisor}, nil
 }
 
 func (s *Server) Handler() http.Handler {
 	return s.handler
+}
+
+func (s *Server) Start(ctx context.Context) error {
+	if s.runSupervisor == nil {
+		return nil
+	}
+	return s.runSupervisor.Start(ctx)
+}
+
+func (s *Server) Close(ctx context.Context) error {
+	if s.runSupervisor == nil {
+		return nil
+	}
+	return s.runSupervisor.Close(ctx)
 }
 
 func readinessHandler(

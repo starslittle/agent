@@ -118,7 +118,67 @@ func (s *Service) Start(
 	if params.ExecutionID == "" {
 		params.ExecutionID = "exec_" + strings.ReplaceAll(newID(), "-", "")
 	}
+	if params.IdempotencyKey == "" {
+		params.IdempotencyKey = params.ExecutionID
+		if params.Idempotent {
+			params.IdempotencyKey = params.ClientMessageID
+		}
+	}
+	if utf8.RuneCountInString(params.IdempotencyKey) > 200 {
+		return Generation{}, ErrInvalidInput
+	}
 	return s.store.StartGeneration(ctx, params)
+}
+
+func (s *Service) CreateRun(
+	ctx context.Context,
+	params StartGenerationParams,
+) (Generation, error) {
+	if strings.TrimSpace(params.ClientMessageID) == "" {
+		return Generation{}, ErrInvalidInput
+	}
+	params.Idempotent = true
+	params.SupervisorManaged = true
+	params.ProtocolVersion = agent.ProtocolVersion
+	return s.Start(ctx, params)
+}
+
+func (s *Service) ReconcileStartup(ctx context.Context) error {
+	return s.store.ReconcileUnmanagedRuns(ctx)
+}
+
+func (s *Service) ClaimRun(
+	ctx context.Context,
+	runID string,
+	ownerID string,
+	leaseExpiresAt time.Time,
+) (ClaimedRun, bool, error) {
+	return s.store.ClaimRun(ctx, runID, ownerID, leaseExpiresAt)
+}
+
+func (s *Service) ClaimNextRun(
+	ctx context.Context,
+	ownerID string,
+	leaseExpiresAt time.Time,
+) (ClaimedRun, bool, error) {
+	return s.store.ClaimNextRun(ctx, ownerID, leaseExpiresAt)
+}
+
+func (s *Service) RenewRunLease(
+	ctx context.Context,
+	runID string,
+	lease RunLease,
+	leaseExpiresAt time.Time,
+) error {
+	return s.store.RenewRunLease(ctx, runID, lease, leaseExpiresAt)
+}
+
+func (s *Service) ReleaseRunLease(
+	ctx context.Context,
+	runID string,
+	lease RunLease,
+) error {
+	return s.store.ReleaseRunLease(ctx, runID, lease)
 }
 
 func (s *Service) History(
@@ -138,6 +198,42 @@ func (s *Service) Checkpoint(
 	return s.store.CheckpointGeneration(ctx, userID, assistantMessageID, content)
 }
 
+func (s *Service) CheckpointOwned(
+	ctx context.Context,
+	userID string,
+	runID string,
+	assistantMessageID string,
+	content string,
+	sequence int64,
+	lease RunLease,
+) error {
+	return s.store.CheckpointGenerationOwned(
+		ctx,
+		userID,
+		runID,
+		assistantMessageID,
+		content,
+		sequence,
+		lease,
+	)
+}
+
+func (s *Service) AdvanceSequenceOwned(
+	ctx context.Context,
+	userID string,
+	runID string,
+	sequence int64,
+	lease RunLease,
+) error {
+	return s.store.AdvanceRunSequenceOwned(
+		ctx,
+		userID,
+		runID,
+		sequence,
+		lease,
+	)
+}
+
 func (s *Service) Finish(
 	ctx context.Context,
 	params FinishGenerationParams,
@@ -155,6 +251,16 @@ func (s *Service) RecordEvent(
 	event agent.Event,
 ) (bool, error) {
 	return s.store.RecordAgentEvent(ctx, userID, runID, event)
+}
+
+func (s *Service) RecordEventOwned(
+	ctx context.Context,
+	userID string,
+	runID string,
+	event agent.Event,
+	lease RunLease,
+) (bool, error) {
+	return s.store.RecordAgentEventOwned(ctx, userID, runID, event, lease)
 }
 
 func (s *Service) MarkSequenceGap(
@@ -187,10 +293,6 @@ func (s *Service) RequestCancellation(
 	runID string,
 ) error {
 	return s.store.RequestRunCancellation(ctx, userID, runID)
-}
-
-func (s *Service) Recover(ctx context.Context) error {
-	return s.store.InterruptStaleGenerations(ctx)
 }
 
 func (s *Service) ListRuns(
