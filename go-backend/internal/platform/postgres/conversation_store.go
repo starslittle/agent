@@ -458,9 +458,10 @@ func loadIdempotentGeneration(
 	item conversation.Conversation,
 ) (conversation.Generation, bool, error) {
 	var (
-		run             conversation.Run
-		existingContent string
-		existingAgent   string
+		run              conversation.Run
+		existingClientID string
+		existingContent  string
+		existingAgent    string
 	)
 	err := transaction.QueryRow(ctx, `
 		SELECT
@@ -475,6 +476,7 @@ func loadIdempotentGeneration(
 			r.status,
 			r.protocol_version,
 			r.last_sequence,
+			um.client_message_id::text,
 			um.content,
 			r.agent_name
 		FROM app_core.agent_runs r
@@ -505,6 +507,7 @@ func loadIdempotentGeneration(
 		&run.Status,
 		&run.ProtocolVersion,
 		&run.LastSequence,
+		&existingClientID,
 		&existingContent,
 		&existingAgent,
 	)
@@ -514,7 +517,8 @@ func loadIdempotentGeneration(
 	if err != nil {
 		return conversation.Generation{}, false, err
 	}
-	if run.IdempotencyKey != params.IdempotencyKey ||
+	if existingClientID != params.ClientMessageID ||
+		run.IdempotencyKey != params.IdempotencyKey ||
 		existingContent != params.Content ||
 		(params.AgentName != "" && existingAgent != params.AgentName) {
 		return conversation.Generation{}, false, conversation.ErrIdempotencyConflict

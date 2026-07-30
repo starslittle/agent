@@ -192,6 +192,34 @@ func TestRunCreateIdempotencyAndSupervisorClaimIntegration(t *testing.T) {
 		t.Fatalf("terminal ClaimRun() ok=%v error=%v", ok, err)
 	}
 
+	secondParams := params
+	secondParams.ClientMessageID = auth.NewID()
+	secondParams.IdempotencyKey = "create-run-" + secondParams.ClientMessageID
+	secondParams.RequestID = auth.NewID()
+	secondParams.Content = "同一会话的第二个 Run"
+	nextRun, err := service.CreateRun(ctx, secondParams)
+	if err != nil {
+		t.Fatalf("second CreateRun() error = %v", err)
+	}
+	crossedIdentity := secondParams
+	crossedIdentity.ClientMessageID = params.ClientMessageID
+	if _, err := service.CreateRun(
+		ctx,
+		crossedIdentity,
+	); !errors.Is(err, conversation.ErrIdempotencyConflict) {
+		t.Fatalf("crossed identity CreateRun() error = %v", err)
+	}
+	if _, err := service.Finish(ctx, conversation.FinishGenerationParams{
+		UserID:              userID,
+		RunID:               nextRun.Run.ID,
+		AssistantMessageID:  nextRun.Assistant.ID,
+		Content:             "第二个完成",
+		Status:              string(agent.StatusCompleted),
+		GenerationCompleted: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("finish second Run: %v", err)
+	}
+
 	legacyConversation, err := service.Create(
 		ctx,
 		userID,
