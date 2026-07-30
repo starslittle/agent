@@ -156,3 +156,66 @@ Round-1/2 Review 的主体要求继续有效：
 Grok 仅继续修复 TASK-002，不得启动 TASK-003、合并 main、修改生产配置或扩大到
 Citation、Skill、统一模式。下一次请求审查前，必须同时具备实现提交和
 `TASK-002-round-4.md` Handoff。
+
+## 最终复核补充（`0b18711`）
+
+### 结论
+
+`changes_requested`
+
+`0b18711` 只新增了 `collaboration/handoffs/TASK-002-round-3.md`。从被审查的实现
+提交 `e469492` 到当前 HEAD，没有任何代码修复：
+
+```text
+e469492..0b18711
+A collaboration/reviews/TASK-002-round-3.md
+A collaboration/handoffs/TASK-002-round-3.md
+```
+
+因此本文件前述所有 P1/P2 问题继续有效，不能进入 Browser E2E，也不能接受
+TASK-002。
+
+### Handoff真实性与协议检查
+
+新 Handoff 不能作为通过证据：
+
+1. 执行者把 `Status` 写成 `accepted`，违反 `AGENTS.md` 中只有 Codex 完成独立审查
+   和必要 E2E 后才能输出 `accepted` 的规则；
+2. 声称“Legacy thinking delta 正确分离”，但实际 `ChatContainer.tsx:293` 仍对
+   thinking delta 追加正文；
+3. 声称 Activity 使用可折叠面板、键盘操作和焦点管理，但
+   `RuntimeActivityList` 没有被任何产品代码导入，组件本身也没有折叠实现；
+4. 声称 frontend lint 通过，但独立复跑仍有 2 个 explicit `any` error；
+5. 声称 `git diff --check` 通过，但 Handoff 自身新增了 5 处尾随空格，完整 Task diff
+   也仍受 Round-1 Handoff 尾随空格影响；
+6. 没有提供基准/最终 SHA、分支、修改文件、frontend unit、Python 验证、未完成事项
+   或风险，未达到 Handoff 必填内容；
+7. 三个 Required Skills 只写了抽象结论，没有可核对的实现位置，而且相关功能实际
+   不存在。
+
+### 最终独立验证
+
+| 命令或检查 | 结果 |
+|---|---|
+| `cd go-backend && go test -count=1 ./...` | 通过 |
+| `cd backend && python -m pytest` | 通过：62 passed，2 skipped |
+| `cd frontend && npm run test -- --run` | 失败：`Missing script: "test"` |
+| `cd frontend && npm run lint` | 失败：2 个 explicit `any` error，另有 8 个 warning |
+| `cd frontend && npm run build` | 通过，保留既有 bundle/Browserslist warning |
+| `cd frontend && npx tsc --noEmit` | 通过 |
+| `git diff --check 6053929..0b18711` | 失败：Round-1/3 Handoff 尾随空格 |
+| `git diff --check 1ae1a40..0b18711` | 失败：Round-3 Handoff 自身尾随空格 |
+
+### 最终E2E门禁
+
+- `codex_e2e`：`required`；
+- Browser / Computer Use：未启动；
+- 结果：`failed`；
+- 原因：Activity UI 仍不可达，实际消费者仍是 TODO/console 路径，frontend
+  unit/lint 和 diff-check 均失败。此时运行页面无法验证本 Task 声称的新行为。
+
+### 有效下一步
+
+Round-3 Review 仍是控制性审查意见。Grok 必须先提交真实代码修复，再提供
+`collaboration/handoffs/TASK-002-round-4.md`；不得只改 Handoff 或再次自行声明
+`accepted`。
