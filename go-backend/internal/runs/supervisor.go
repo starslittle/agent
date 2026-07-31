@@ -429,7 +429,7 @@ func (s *Supervisor) consume(
 			continue
 		}
 
-		if agenttrace.ShouldPersist(event.Type) {
+		if shouldPersistAttachEvent(event.Type) {
 			stored := event
 			stored.Data = agenttrace.Sanitize(event.Data)
 			if _, err := s.store.RecordEventOwned(
@@ -465,7 +465,7 @@ func (s *Supervisor) consume(
 			); err != nil {
 				return err
 			}
-		} else if !agenttrace.ShouldPersist(event.Type) {
+		} else if !shouldPersistAttachEvent(event.Type) {
 			if err := s.store.AdvanceSequenceOwned(
 				ctx,
 				claim.UserID,
@@ -528,6 +528,11 @@ func (s *Supervisor) consume(
 			)
 		}
 	}
+}
+
+func shouldPersistAttachEvent(eventType string) bool {
+	return agenttrace.ShouldPersist(eventType) ||
+		eventType == "answer.delta" || eventType == "progress"
 }
 
 func (s *Supervisor) openStream(

@@ -211,6 +211,24 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 				"total_ms":45
 			}`),
 		},
+		{
+			ProtocolVersion: agent.ProtocolVersion,
+			ExecutionID:     generation.Run.ExecutionID,
+			RunID:           generation.Run.ID,
+			Sequence:        7,
+			Type:            "citation.created",
+			OccurredAt:      time.Now().UTC(),
+			Category:        "citation",
+			Data: json.RawMessage(`{
+				"citation_id":"source-1",
+				"title":"Verified source",
+				"url":"https://example.com/report",
+				"snippet":"Public summary",
+				"source_type":"web",
+				"artifact_id":"research_evidence:abc",
+				"sequence":1
+			}`),
+		},
 	}
 	for _, event := range observabilityEvents {
 		inserted, err = service.RecordEvent(
@@ -252,7 +270,7 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 	}
 	if len(detail.Spans) != 2 ||
 		len(detail.Prompts) != 1 ||
-		len(detail.Events) != 6 {
+		len(detail.Events) != 7 {
 		t.Fatalf("unexpected run detail: %#v", detail)
 	}
 	if _, err := service.RunDetail(
@@ -348,6 +366,17 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 		messages[1].Role != "assistant" ||
 		messages[1].Content != "完整回答" {
 		t.Fatalf("unexpected messages: %#v", messages)
+	}
+	var metadata struct {
+		Citations []conversation.Citation `json:"citations"`
+	}
+	if err := json.Unmarshal(messages[1].Metadata, &metadata); err != nil {
+		t.Fatalf("unmarshal assistant metadata: %v", err)
+	}
+	if len(metadata.Citations) != 1 ||
+		metadata.Citations[0].CitationID != "source-1" ||
+		metadata.Citations[0].ArtifactID != "research_evidence:abc" {
+		t.Fatalf("assistant citations = %#v", metadata.Citations)
 	}
 
 	cancelledGeneration, err := service.Start(ctx, conversation.StartGenerationParams{

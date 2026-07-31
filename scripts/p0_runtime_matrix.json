@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "risks": [
+    {
+      "id": "process_checkpoint_takeover",
+      "title": "Python 进程终止后从 checkpoint 接管",
+      "suites": ["python_postgres"],
+      "evidence": [
+        "backend/tests/integration/test_postgres_runtime_store.py::test_real_process_kill_is_resumed_by_a_second_owner",
+        "backend/tests/integration/test_postgres_runtime_store.py::test_postgres_runtime_outbox_and_lease_fencing"
+      ]
+    },
+    {
+      "id": "detach_and_reattach",
+      "title": "Go/浏览器断开不取消且可按游标重新附着",
+      "suites": ["go_all", "frontend_tests"],
+      "evidence": [
+        "go-backend/internal/httpapi/conversations_attach_test.go::TestAttachRunEventsReplaysThenFollowsToOneTerminalEvent",
+        "go-backend/internal/httpapi/conversations_attach_test.go::TestAttachRunEventsEnforcesOwnershipAndDetachDoesNotCancel",
+        "frontend/src/lib/chat-api.test.ts::reattaches after the last confirmed sequence and stops at done"
+      ]
+    },
+    {
+      "id": "terminal_unlock",
+      "title": "失败、超时、取消后消息与会话收口并可继续",
+      "suites": ["go_postgres"],
+      "evidence": [
+        "go-backend/internal/httpapi/conversation_integration_test.go::TestPersistentConversationStreamIntegration",
+        "go-backend/internal/httpapi/conversation_integration_test.go::TestV1SequenceGapReplaysOrFailsClosedIntegration"
+      ]
+    },
+    {
+      "id": "cancel_completion_race",
+      "title": "cancel_requested 与晚到完成事件保持取消语义",
+      "suites": ["python_unit", "go_all"],
+      "evidence": [
+        "backend/tests/unit/test_runtime_coordination.py::test_notifier_accelerates_remote_cancel_but_store_is_authoritative",
+        "go-backend/internal/conversation/types_test.go::TestResolveTerminalStatus"
+      ]
+    },
+    {
+      "id": "sequence_integrity",
+      "title": "sequence 连续、重复幂等且缺口失败关闭",
+      "suites": ["python_unit", "go_all", "go_postgres"],
+      "evidence": [
+        "backend/tests/unit/test_runtime_store.py::test_runtime_event_outbox_replays_monotonic_sequences",
+        "go-backend/internal/agentclient/v1_test.go::TestV1EventStreamGapDoesNotAdvanceConfirmedCursor",
+        "go-backend/internal/httpapi/conversation_integration_test.go::TestV1SequenceGapReplaysOrFailsClosedIntegration"
+      ]
+    },
+    {
+      "id": "terminal_consistency",
+      "title": "Product Run、Python execution 与 assistant message 终态一致",
+      "suites": ["python_postgres", "go_postgres"],
+      "evidence": [
+        "backend/tests/integration/test_postgres_runtime_store.py::test_real_process_kill_is_resumed_by_a_second_owner",
+        "go-backend/internal/httpapi/conversation_integration_test.go::TestV1BrowserEventSeparationIntegration"
+      ]
+    },
+    {
+      "id": "trace_provenance_redaction",
+      "title": "Trace/provenance 完整且敏感内容脱敏",
+      "suites": ["python_unit", "go_all"],
+      "evidence": [
+        "backend/tests/unit/test_observability.py::test_registry_applies_final_redaction_to_runtime_events",
+        "backend/tests/unit/test_runtime_store.py::test_run_provenance_is_sealed_when_execution_is_created",
+        "go-backend/internal/agenttrace/redaction_test.go::TestSanitize"
+      ]
+    },
+    {
+      "id": "ownership_isolation",
+      "title": "跨用户 Run、Event 与 Message 访问被拒绝",
+      "suites": ["go_all", "go_postgres"],
+      "evidence": [
+        "go-backend/internal/httpapi/conversations_attach_test.go::TestAttachRunEventsEnforcesOwnershipAndDetachDoesNotCancel",
+        "go-backend/internal/platform/postgres/conversation_store_integration_test.go::TestConversationLifecycleIntegration",
+        "go-backend/internal/httpapi/conversation_integration_test.go::TestCreateRunReturnsStableIdentityAndContinuesAfterRequestIntegration"
+      ]
+    },
+    {
+      "id": "answer_consistency",
+      "title": "实时、刷新与复制所需的正文/Activity 分离保持一致",
+      "suites": ["frontend_tests", "go_postgres"],
+      "evidence": [
+        "frontend/src/lib/conversation-stream-reducer.test.ts::keeps activity out of the answer and preserves the input state",
+        "frontend/src/lib/chat-api.test.ts::reattaches after the last confirmed sequence and stops at done",
+        "go-backend/internal/httpapi/conversation_integration_test.go::TestV1BrowserEventSeparationIntegration"
+      ]
+    }
+  ]
+}

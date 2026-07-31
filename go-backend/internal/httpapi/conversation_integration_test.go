@@ -352,8 +352,6 @@ func TestV1BrowserEventSeparationIntegration(t *testing.T) {
 				"tool.completed",
 				`{"name":"tavily_search","duration_ms":18,"result":"hidden"}`,
 			},
-			{"answer.delta", `{"text":"第一段"}`},
-			{"answer.delta", `{"text":"第二段"}`},
 			{
 				"artifact.created",
 				`{
@@ -365,6 +363,20 @@ func TestV1BrowserEventSeparationIntegration(t *testing.T) {
 					"content":"hidden"
 				}`,
 			},
+			{
+				"citation.created",
+				`{
+					"citation_id":"source-1",
+					"title":"Verified source",
+					"url":"https://example.com/report",
+					"snippet":"Public summary",
+					"source_type":"web",
+					"artifact_id":"research_report:abc",
+					"sequence":1
+				}`,
+			},
+			{"answer.delta", `{"text":"第一段[source-1]"}`},
+			{"answer.delta", `{"text":"第二段"}`},
 			{"model.completed", `{"stage":"research.synthesize","duration_ms":20}`},
 			{"run.completed", `{}`},
 		}
@@ -422,9 +434,12 @@ func TestV1BrowserEventSeparationIntegration(t *testing.T) {
 	for _, required := range []string{
 		`"type":"activity"`,
 		`"type":"artifact"`,
+		`"type":"citation"`,
+		`"citation_id":"source-1"`,
+		`"url":"https://example.com/report"`,
 		`"sequence":2`,
 		`"status":"completed"`,
-		`"data":"第一段"`,
+		`"data":"第一段[source-1]"`,
 		`"data":"第二段"`,
 	} {
 		if !strings.Contains(result.StreamBody, required) {
@@ -452,8 +467,18 @@ func TestV1BrowserEventSeparationIntegration(t *testing.T) {
 	)
 	assistant := messages[len(messages)-1]
 	if assistant.Status != "completed" ||
-		assistant.Content != "第一段第二段" {
+		assistant.Content != "第一段[source-1]第二段" {
 		t.Fatalf("assistant message = %#v", assistant)
+	}
+	var metadata struct {
+		Citations []conversation.Citation `json:"citations"`
+	}
+	if err := json.Unmarshal(assistant.Metadata, &metadata); err != nil {
+		t.Fatalf("decode assistant metadata: %v", err)
+	}
+	if len(metadata.Citations) != 1 ||
+		metadata.Citations[0].CitationID != "source-1" {
+		t.Fatalf("assistant citations = %#v", metadata.Citations)
 	}
 	for _, forbidden := range []string{
 		"tavily_search",

@@ -1,0 +1,168 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  attachAgentRun,
+  ChatAPIError,
+  createAgentRun,
+  streamLegacyConversation,
+  type ConversationStreamEvent,
+} from "./chat-api";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("Agent Run API", () => {
+  it("creates a run before attaching and sends the idempotency key", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            run_id: "run-1",
+            execution_id: "execution-1",
+            conversation_id: "conversation-1",
+            user_message_id: "user-message-1",
+            assistant_message_id: "assistant-message-1",
+            status: "queued",
+            protocol_version: 1,
+            events_url: "/api/v1/agent-runs/run-1/events",
+          }),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await createAgentRun(
+      "conversation-1",
+      {
+        content: "继续运行",
+        client_message_id: "client-1",
+        idempotency_key: "client-1",
+      },
+      "csrf-1",
+    );
+
+    expect(result.run_id).toBe("run-1");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/v1/conversations/conversation-1/runs");
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("X-CSRF-Token")).toBe("csrf-1");
+    expect(init?.body).toContain('"idempotency_key":"client-1"');
+  });
+
+  it("reattaches after the last confirmed sequence and stops at done", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          [
+            "event: message",
+            'data: {"type":"citation","sequence":8,"citation":{"citation_id":"source-1","title":"Verified source","url":"https://example.com/report","snippet":"Summary","source_type":"web","artifact_id":"research:abc","sequence":1}}',
+            "",
+            "event: message",
+            'data: {"type":"answer_delta","sequence":9,"data":"恢复[source-1]"}',
+            "",
+            "event: message",
+            'data: {"type":"done","sequence":10,"status":"completed"}',
+            "",
+          ].join("\n"),
+          {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const events: ConversationStreamEvent[] = [];
+
+    await attachAgentRun("run-1", 7, (event) => events.push(event));
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/agent-runs/run-1/events?starting_after=7",
+    );
+    expect(events.map((event) => event.type)).toEqual([
+      "citation",
+      "answer_delta",
+      "done",
+    ]);
+  });
+
+  it("preserves the create-run error code for a narrow legacy fallback", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ error: "run_create_not_enabled" }), {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    await expect(
+      createAgentRun(
+        "conversation-1",
+        {
+          content: "legacy",
+          client_message_id: "client-1",
+          idempotency_key: "client-1",
+        },
+        "csrf-1",
+      ),
+    ).rejects.toMatchObject<Partial<ChatAPIError>>({
+      code: "run_create_not_enabled",
+    });
+  });
+
+  it("streams the retained legacy conversation endpoint", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        [
+          'data: {"type":"meta","conversation_id":"conversation-1","user_message_id":"user-1","assistant_message_id":"assistant-1","run_id":"run-legacy","protocol_version":0,"title":"Legacy"}',
+          "",
+          'data: {"type":"delta","data":"Legacy 回答","isThinking":false}',
+          "",
+          'data: {"type":"done","message_id":"assistant-1","status":"completed"}',
+          "",
+        ].join("\n"),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const events: ConversationStreamEvent[] = [];
+
+    await streamLegacyConversation(
+      "conversation-1",
+      { content: "legacy", client_message_id: "client-1" },
+      "csrf-1",
+      (event) => events.push(event),
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/conversations/conversation-1/messages/stream",
+    );
+    expect(events.map((event) => event.type)).toEqual(["meta", "delta", "done"]);
+  });
+
+  it("treats a sequence gap as a reconnectable attach failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            [
+              "event: message",
+              'data: {"type":"error","code":"agent_event_sequence_gap","expected_sequence":3,"received_sequence":4}',
+              "",
+            ].join("\n"),
+            { status: 200 },
+          ),
+      ),
+    );
+
+    await expect(attachAgentRun("run-1", 2, () => undefined)).rejects.toThrow(
+      "运行事件暂时不连续，正在重新连接",
+    );
+  });
+});

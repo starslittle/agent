@@ -336,6 +336,26 @@ func (s *Service) RunDetail(
 	return s.store.FindAgentRunDetail(ctx, userID, runID)
 }
 
+func (s *Service) RunEvents(
+	ctx context.Context,
+	userID string,
+	runID string,
+	startingAfter int64,
+	limit int,
+) (RunEventPage, error) {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(runID) == "" ||
+		startingAfter < 0 {
+		return RunEventPage{}, ErrInvalidInput
+	}
+	if limit <= 0 {
+		limit = 256
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	return s.store.ListAgentRunEvents(ctx, userID, runID, startingAfter, limit)
+}
+
 func newID() string {
 	value := make([]byte, 16)
 	if _, err := rand.Read(value); err != nil {

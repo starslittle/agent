@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/starslittle/agent/go-backend/internal/agent"
+	"github.com/starslittle/agent/go-backend/internal/agenttrace"
+	"github.com/starslittle/agent/go-backend/internal/conversation"
 )
 
 type browserActivity struct {
@@ -28,6 +30,26 @@ type browserAnswerDeltaEvent struct {
 	Type     string `json:"type"`
 	Sequence int64  `json:"sequence,omitempty"`
 	Data     string `json:"data"`
+}
+
+type browserCitationEvent struct {
+	Type     string                `json:"type"`
+	Sequence int64                 `json:"sequence,omitempty"`
+	Citation conversation.Citation `json:"citation"`
+}
+
+type browserDoneEvent struct {
+	Type      string  `json:"type"`
+	Sequence  int64   `json:"sequence"`
+	Status    string  `json:"status"`
+	ErrorCode *string `json:"error_code,omitempty"`
+}
+
+type browserSequenceGapEvent struct {
+	Type     string `json:"type"`
+	Code     string `json:"code"`
+	Expected int64  `json:"expected_sequence"`
+	Received int64  `json:"received_sequence"`
 }
 
 type browserArtifact struct {
@@ -83,6 +105,18 @@ func projectBrowserEvent(event agent.Event) (any, bool) {
 			Type:     "answer_delta",
 			Sequence: event.Sequence,
 			Data:     data.Text,
+		}, true
+	case "citation.created":
+		citation, valid := conversation.ParseCitation(
+			agenttrace.Sanitize(event.Data),
+		)
+		if !valid {
+			return nil, false
+		}
+		return browserCitationEvent{
+			Type:     "citation",
+			Sequence: event.Sequence,
+			Citation: citation,
 		}, true
 	case "artifact.created":
 		if data.ArtifactID == "" ||
@@ -165,6 +199,24 @@ func projectBrowserEvent(event agent.Event) (any, bool) {
 		), true
 	default:
 		return nil, false
+	}
+}
+
+func projectBrowserDone(
+	event agent.Event,
+	status string,
+	errorCode *string,
+) (browserDoneEvent, bool) {
+	switch event.Type {
+	case "run.completed", "run.cancelled", "run.failed", "run.timed_out":
+		return browserDoneEvent{
+			Type:      "done",
+			Sequence:  event.Sequence,
+			Status:    status,
+			ErrorCode: errorCode,
+		}, true
+	default:
+		return browserDoneEvent{}, false
 	}
 }
 

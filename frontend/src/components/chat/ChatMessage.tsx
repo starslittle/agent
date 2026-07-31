@@ -12,18 +12,25 @@ import { Copy, Check, Brain, ChevronDown, ChevronRight, Download, Maximize2, Min
 import { useStreamMarkdownBuffer } from "@/hooks/useStreamMarkdownBuffer";
 import { useSmoothTyping } from "@/hooks/useSmoothTyping";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { RuntimeActivity } from "@/lib/chat-api";
+import type { RuntimeActivity, RuntimeCitation } from "@/lib/chat-api";
 import { RuntimeActivityList } from "./RuntimeActivityList";
+import { CitationList } from "@/features/citations/CitationList";
+import {
+  formatCitedAnswerForCopy,
+  remarkCitationMarkers,
+} from "@/features/citations/citations";
 
 export type ChatRole = "user" | "assistant";
 
 export interface ChatMessageProps {
+  messageId: string;
   role: ChatRole;
   content: string;
   status?: "pending" | "streaming" | "completed" | "stopped" | "failed";
   thinking?: boolean;
   thinkingFinished?: boolean;
   activities?: RuntimeActivity[];
+  citations?: RuntimeCitation[];
 }
 
 const ThinkingProcess: React.FC<{ thoughts: string[]; thinkingFinished?: boolean }> = ({ thoughts, thinkingFinished }) => {
@@ -170,12 +177,14 @@ function markdownTableToTsv(tableMarkdown: string): string {
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
+  messageId,
   role,
   content,
   status,
   thinking,
   thinkingFinished,
   activities = [],
+  citations = [],
 }) => {
   const isUser = role === "user";
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null);
@@ -241,7 +250,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   const handleCopyMessage = async () => {
-    const textToCopy = displayedContent;
+    const textToCopy = formatCitedAnswerForCopy(displayedContent, citations);
     if (!textToCopy.trim()) return;
     try {
       await navigator.clipboard.writeText(textToCopy);
@@ -286,7 +295,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           <div className={`text-sm leading-7 break-words ${isUser ? 'prose-invert' : ''}`}>
             {!isUser && <ThinkingProcess thoughts={thoughts} thinkingFinished={thinkingFinished} />}
             <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+              remarkPlugins={[
+                remarkGfm,
+                remarkBreaks,
+                remarkMath,
+                [
+                  remarkCitationMarkers,
+                  { citations, scope: messageId },
+                ] as any,
+              ]}
               rehypePlugins={[rehypeKatex]}
               components={{
                 code({ node, inline, className, children, ...props }: any) {
@@ -357,16 +374,31 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                 li({ children }: any) {
                   return <li>{children}</li>;
                 },
-                a({ href, children }: any) {
+                a({ href, children, title }: any) {
+                  if (href?.startsWith("#citation-source-")) {
+                    return (
+                      <a
+                        href={href}
+                        title={title}
+                        aria-label={
+                          title ? title + "，跳转到来源列表" : "查看来源"
+                        }
+                        className="relative mx-0.5 inline-grid h-5 min-w-5 touch-manipulation place-items-center rounded-full bg-primary/10 px-1 align-super text-[10px] font-semibold leading-none text-primary no-underline transition-[color,background-color] before:absolute before:-inset-3 hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      >
+                        {children}
+                      </a>
+                    );
+                  }
                   return (
                     <a
                       href={href}
                       target="_blank"
                       rel="noopener noreferrer"
+                      title={title}
                       className={`${
                         isUser 
-                          ? "text-white underline hover:text-gray-200" 
-                          : "text-accent hover:text-primary underline"
+                          ? "break-words text-white underline hover:text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                          : "break-words text-accent underline hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       }`}
                     >
                       {children}
@@ -468,6 +500,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             {!isUser && hasUnclosedFence && (
               <div className="text-xs text-muted-foreground mt-1">代码块生成中，已暂时使用纯文本显示。</div>
             )}
+            {!isUser && (
+              <CitationList citations={citations} scope={messageId} />
+            )}
           </div>
         )}
       </div>
@@ -489,6 +524,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             >
               {copiedMessage ? <Check size={14} /> : <Copy size={14} />}
             </button>
+          )}
+          {!isUser && (
+            <span className="sr-only" aria-live="polite">
+              {copiedMessage ? "消息与来源已复制" : ""}
+            </span>
           )}
         </div>
       )}

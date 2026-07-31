@@ -235,6 +235,27 @@ async def test_research_uses_structured_plan_and_bounded_search_fanout():
     )
     assert artifact_event.data["artifact_type"] == "research_evidence"
     assert artifact_event.data["citation_count"] == 2
+    citation_events = [
+        event for event in events if event.type == "citation.created"
+    ]
+    assert [event.data["sequence"] for event in citation_events] == [1, 2]
+    assert all(
+        event.data["artifact_id"] == artifact_event.data["artifact_id"]
+        for event in citation_events
+    )
+    assert all(
+        {
+            "citation_id",
+            "title",
+            "url",
+            "snippet",
+            "source_type",
+            "artifact_id",
+            "sequence",
+        }
+        <= event.data.keys()
+        for event in citation_events
+    )
     grade = next(
         event
         for event in events
@@ -410,6 +431,7 @@ async def test_research_partial_search_failure_keeps_valid_citations():
     assert progress.data["failed"] == 1
     assert progress.data["degraded"] is True
     assert artifact.data["citation_count"] == 1
+    assert sum(event.type == "citation.created" for event in events) == 1
     assert any(event.type == "workflow.completed" for event in events)
 
 
@@ -526,6 +548,9 @@ async def test_research_deduplicates_citations_across_queries():
     assert artifact.data["citation_count"] == 1
     assert grade.data["unique_sources"] == 1
     assert grade.data["sufficient"] is False
+    citations = [event for event in events if event.type == "citation.created"]
+    assert len(citations) == 1
+    assert citations[0].data["sequence"] == 1
 
 
 def test_inline_artifact_ids_are_content_addressed_and_stable():

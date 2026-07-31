@@ -439,6 +439,13 @@ def build_research_workflow(
             **artifact.ref.model_dump(mode="json"),
             citation_count=len(citations),
         )
+        for sequence, citation in enumerate(citations, start=1):
+            emit_runtime_event(
+                "citation.created",
+                **citation,
+                artifact_id=artifact.ref.artifact_id,
+                sequence=sequence,
+            )
         return {
             "artifacts": [
                 *state.get("artifacts", []),
