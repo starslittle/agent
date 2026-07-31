@@ -107,6 +107,7 @@ class LangGraphAgentApplication:
             self._capabilities,
             self._catalog,
             checkpointer,
+            skill_registry=self._skill_registry,
         )
 
     async def has_checkpoint(self, execution_id: str) -> bool:
@@ -137,6 +138,11 @@ class LangGraphAgentApplication:
         spec = self._catalog.resolve(requested_workflow)
         profile = self._gateway.profile(spec.model_profile)
         resolved_model = self._model_catalog.resolve(model_id)
+        selected_skill = None
+        if selection is not None and selection.primary_skill is not None:
+            selected_skill = self._skill_registry.resolve(selection.primary_skill)
+            if selected_skill.workflow != spec.workflow:
+                raise ValueError("Skill workflow does not match compatibility spec")
         prompt_versions = {
             stage: {
                 "path": path,
@@ -153,6 +159,11 @@ class LangGraphAgentApplication:
                 separators=(",", ":"),
             ).encode("utf-8")
         ).hexdigest()
+        allowed_capabilities = (
+            selected_skill.allowed_capabilities
+            if selected_skill is not None
+            else spec.allowed_capabilities
+        )
         capabilities = [
             {
                 "name": capability.name,
@@ -162,19 +173,27 @@ class LangGraphAgentApplication:
             }
             for capability in (
                 TARGET_CAPABILITY_SPECS[name]
-                for name in sorted(spec.allowed_capabilities)
+                for name in sorted(allowed_capabilities)
             )
         ]
         skill_snapshot = None
-        if selection is not None and selection.primary_skill is not None:
-            skill = self._skill_registry.resolve(selection.primary_skill)
+        if selected_skill is not None:
             skill_snapshot = {
-                "id": skill.id,
-                "version": skill.version,
-                "workflow": skill.workflow,
-                "allowed_capabilities": sorted(skill.allowed_capabilities),
+                **selected_skill.model_dump(mode="json"),
+                "allowed_capabilities": sorted(
+                    selected_skill.allowed_capabilities
+                ),
                 "fingerprint": self._skill_registry.fingerprint(),
             }
+        model_snapshot = {
+            **resolved_model.model_dump(mode="json"),
+            "execution_profile": spec.model_profile,
+            "execution_provider": profile.provider,
+            "execution_model": profile.model,
+            "execution_capabilities": profile.capabilities.model_dump(
+                mode="json"
+            ),
+        }
         return {
             "workflow_name": spec.workflow,
             "workflow_version": spec.workflow.rsplit("_v", 1)[-1],
@@ -189,7 +208,7 @@ class LangGraphAgentApplication:
             "capabilities": capabilities,
             "model_id": resolved_model.model_id,
             "model_catalog_fingerprint": self._model_catalog.fingerprint(),
-            "model_snapshot": resolved_model.model_dump(mode="json"),
+            "model_snapshot": model_snapshot,
             "requested_skill": (
                 selection.requested_skill if selection is not None else None
             ),
@@ -264,9 +283,19 @@ class LangGraphAgentApplication:
             )
         )
         spec = self._catalog.resolve(command.resolution.workflow)
+        skill = (
+            self._skill_registry.resolve(command.resolution.primary_skill)
+            if command.resolution.primary_skill is not None
+            else None
+        )
+        policy_deadline = (
+            skill.budgets.deadline_seconds
+            if skill is not None
+            else spec.budgets.deadline_seconds
+        )
         deadline_seconds = min(
             command.deadline_ms / 1000,
-            spec.budgets.deadline_seconds,
+            policy_deadline,
         )
         cancel_event = command.cancel_event or asyncio.Event()
         context = RunContext(
