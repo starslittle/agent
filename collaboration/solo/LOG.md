@@ -105,3 +105,12 @@
 - summary：Research/Fortune 通过 Skill Registry 进入原 Subworkflow，Manifest 成为 Capability、预算和 Skill 快照来源，Direct 与旧 Agent Alias 保持兼容；
 - validation：Skill/Root targeted 27 passed；Python 全量 103 passed/2 skipped；Ruff passed；
 - risk：Research/Fortune 工作流文件未改动；真实 Provider、Citation、取消与确认链进入 Round E2E。
+
+### TASK-012
+
+- commit：`83ac2cf`；
+- result：completed；
+- summary：正式前端统一迁移为启点，新增未登录静态工作区预览、真实登录/注册页、Slash Skill 菜单与可移除 Chip；新 Run 仅发送 `model_id=auto` 和可选 `requested_skill`，确认操作创建显式后续 Turn，并展示权威 Skill 来源、Activity、Artifact、Citation 与正文分层；
+- validation：前端 34 tests passed、lint 0 errors（8 条既有 warning）、production build passed；Browser 覆盖亮暗色、375/768/1024/1440、登录表单错误聚焦和未登录私有请求边界；
+- skills：`frontend-design` 与 `ui-ux-pro-max` 收敛为文档式松石绿/珊瑚启点线视觉，`web-design-guidelines` 推动语义导航、单一 H1、动态视口、44px 触控、可见焦点、表单名称/错误关联与 reduced-motion；
+- risk：完整登录后普通/Research/Fortune/确认/取消/恢复/Citation 场景按 Solo 协议并入 Round 唯一一次产品 E2E；保留既有 bundle 体积与 browserslist 陈旧提示。
