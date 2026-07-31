@@ -63,3 +63,13 @@
 - validation：Browser 产品 E2E 通过；隔离 PostgreSQL `full` profile 11 suites passed、9 risks passed（Python 62 unit、2 PostgreSQL integration、Go 全包与 PostgreSQL integration、前端 27 tests/lint/build、Compose 与 diff check）；
 - risk：保留 8 条既有 Fast Refresh warning、既有 bundle 体积提示与 browserslist 数据陈旧提示；Fortune 当前仅有 Runtime 工作流入口，统一前端 `/fortune` 属于 ROUND-02 TASK-012；无本轮阻塞风险；
 - cleanup：隔离 Go/Vite/测试 Agent、两套临时 PostgreSQL、测试账号/对话和临时报告已删除；未 push、merge 或部署。
+
+## ROUND-02
+
+### TASK-001
+
+- commit：`5a1a619`；
+- result：completed；
+- summary：新增强类型 Skill Manifest、仅含 Research/Fortune 的配置与启动即失败的稳定 Registry，未接入现有请求链；
+- validation：Skill tests 12 passed、Python unit 74 passed、Ruff passed；
+- risk：无。

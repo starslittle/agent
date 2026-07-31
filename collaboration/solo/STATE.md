@@ -10,10 +10,11 @@ round_accepted_commit: pending
 round_branch: codex/round-02-solo
 round_worktree: C:/Users/10245/Desktop/qidianAgent-round-02-solo
 
-completed: []
+completed:
+  - TASK-001
 
-current_task: TASK-001
-next_task: TASK-008
+current_task: TASK-008
+next_task: TASK-009
 
 start_gate: explicit_user_instruction_to_start_or_continue_solo
 production_authorized: false
