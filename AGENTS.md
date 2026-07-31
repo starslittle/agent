@@ -2,6 +2,23 @@
 
 本文件适用于所有在本仓库内工作的编码 Agent。
 
+## 0. 执行模式
+
+执行任何规划、实现、修复或验收工作前，必须先读取
+`collaboration/ACTIVE_MODE.yaml`，再读取其中 `protocol` 指向的模式协议。
+
+- `mode: solo`：执行 `collaboration/solo/PROTOCOL.md`。该协议覆盖本文件和
+  `collaboration/PROTOCOL.md` 中关于执行者、逐 Task Handoff、独立 Reviewer、
+  分支/worktree、Task 验收节奏和 `codex_e2e` 执行时机的规定；Solo 模式不做
+  逐 Task 产品 E2E，统一在全部 Round Task 完成后执行一次 Round 全量 E2E；
+- `mode: codex-grok`：执行现有 `collaboration/PROTOCOL.md`，继续使用 Codex/Grok
+  文件化协作模式；
+- 模式协议只覆盖执行流程，不得覆盖产品范围、架构边界、数据所有权、安全规则、
+  Task 的目标/非目标、`allowed_paths`、`forbidden_paths` 和用户授权边界；
+- 只有用户可以授权切换模式。模式只能在 Task 边界切换，进行中的 Task 必须先完成、
+  回滚或明确标记为阻塞；
+- 无法读取模式文件、模式值未知或协议路径不存在时，停止实现并报告，不能自行猜测。
+
 ## 1. 文档事实优先级
 
 执行任务前按以下顺序理解项目：
@@ -18,10 +35,12 @@
 9. `collaboration/rounds/`：当前业务交付轮次、完整验收和回滚边界；
 10. `collaboration/tasks/`：单次执行范围和验收契约。
 
-任务文件可以收窄范围，不能静默推翻更高层文档。发现冲突时停止扩大实现，在
-handoff 中报告冲突。
+任务文件可以收窄范围，不能静默推翻更高层文档。发现冲突时停止扩大实现，并按当前
+模式协议记录或报告冲突。
 
-## 2. 协作角色
+## 2. 协作角色（Codex/Grok 模式）
+
+本节在 `mode: solo` 时由 Solo Protocol 完整替代。
 
 - Codex 负责产品/架构方案、ADR、任务契约、独立代码审查，以及最终产品级 E2E
   验收；涉及真实页面和桌面交互时，由 Codex 使用 Browser / Computer Use 执行。
@@ -33,7 +52,10 @@ handoff 中报告冲突。
 Grok 提供的自动化测试结果是交付证据，不能替代 Codex 的独立审查和必要的产品级
 E2E，也不能自行把 Task 标记为 `accepted`。
 
-## 3. Task 执行规则
+## 3. Task 执行规则（Codex/Grok 模式）
+
+本节关于状态、执行者、Handoff、Review 和逐 Task E2E 的规定在 `mode: solo` 时由
+Solo Protocol 替代；Task 的产品和代码边界仍然有效。
 
 1. 只执行 `status: ready` 且 `executor` 与自身匹配的 Task。
 2. Task 所属 `business_round` 还必须已经获得用户授权并处于 `ready` 或
@@ -88,7 +110,10 @@ required_skills:
   不执行破坏性 Down Migration，不删除已确认用户数据。
 - 不在顺手修复中扩大依赖升级、格式化或目录重构范围。
 
-## 6. 验证与交付
+## 6. 验证与交付（Codex/Grok 模式）
+
+本节在 `mode: solo` 时由 Solo Protocol 的“每 Task 最小代码验证 + Round 唯一一次
+全量产品 E2E”替代。
 
 - Grok 负责代码层验证：静态检查、单元测试、模块级集成测试，以及 Task 明确要求由
   执行者运行的命令。

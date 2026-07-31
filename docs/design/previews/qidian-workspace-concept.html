@@ -1,0 +1,1705 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="启点个人 AI Wiki 与决策副驾驶的单页视觉概念稿"
+    >
+    <meta name="theme-color" content="#fafaf8">
+    <title>启点 · 工作区视觉概念</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --canvas: #fafaf8;
+        --surface: #ffffff;
+        --surface-muted: #f2f3f1;
+        --surface-strong: #e9ece9;
+        --ink: #1d2421;
+        --muted: #6c736f;
+        --muted-strong: #505853;
+        --primary: #356658;
+        --primary-hover: #2c564a;
+        --primary-soft: #e5efeb;
+        --start: #c76b42;
+        --start-soft: #f7ebe5;
+        --border: #e1e5e2;
+        --border-strong: #cfd5d1;
+        --shadow: 0 12px 34px rgba(29, 36, 33, 0.09);
+        --focus: #245447;
+        --danger: #b9473d;
+        --sidebar-width: 264px;
+        --utility-width: 280px;
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 18px;
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --canvas: #111412;
+        --surface: #171a18;
+        --surface-muted: #1c201d;
+        --surface-strong: #252b27;
+        --ink: #e7ebe8;
+        --muted: #989f9a;
+        --muted-strong: #bdc3bf;
+        --primary: #83b3a4;
+        --primary-hover: #9ac5b7;
+        --primary-soft: #20362f;
+        --start: #dc8a63;
+        --start-soft: #37271f;
+        --border: #2b302d;
+        --border-strong: #3d4540;
+        --shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+        --focus: #a6d3c1;
+        --danger: #e07a70;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: var(--canvas);
+      }
+
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        overflow-x: hidden;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family:
+          Inter, "SF Pro Text", "PingFang SC", "Noto Sans SC", "Microsoft YaHei",
+          sans-serif;
+        font-size: 16px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        -webkit-tap-highlight-color: rgba(47, 107, 87, 0.12);
+      }
+
+      button,
+      input,
+      textarea {
+        color: inherit;
+        font: inherit;
+      }
+
+      button,
+      a {
+        touch-action: manipulation;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      button:focus-visible,
+      a:focus-visible,
+      textarea:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 3px;
+      }
+
+      .skip-link {
+        position: fixed;
+        left: 16px;
+        top: 12px;
+        z-index: 1000;
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        background: var(--ink);
+        color: var(--surface);
+        transform: translateY(-160%);
+        transition: transform 160ms var(--ease);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .app-shell {
+        display: grid;
+        min-height: 100dvh;
+        grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        display: flex;
+        height: 100dvh;
+        flex-direction: column;
+        border-right: 1px solid var(--border);
+        background: color-mix(in srgb, var(--surface-muted) 92%, transparent);
+        padding:
+          max(20px, env(safe-area-inset-top))
+          16px
+          max(18px, env(safe-area-inset-bottom));
+      }
+
+      .brand {
+        display: flex;
+        min-height: 48px;
+        align-items: center;
+        gap: 12px;
+        padding: 0 8px;
+      }
+
+      .brand-mark {
+        position: relative;
+        width: 38px;
+        height: 30px;
+        flex: 0 0 38px;
+      }
+
+      .brand-mark::before {
+        position: absolute;
+        top: 13px;
+        left: 7px;
+        width: 23px;
+        height: 1px;
+        background: var(--primary);
+        content: "";
+      }
+
+      .brand-dot,
+      .brand-node {
+        position: absolute;
+        top: 8px;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+      }
+
+      .brand-dot {
+        left: 2px;
+        background: var(--start);
+      }
+
+      .brand-node {
+        right: 0;
+        border: 1.5px solid var(--primary);
+        background: var(--surface-muted);
+      }
+
+      .brand-copy {
+        min-width: 0;
+      }
+
+      .brand-name {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 720;
+        letter-spacing: 0.02em;
+        line-height: 1.1;
+      }
+
+      .brand-kicker {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .new-chat {
+        display: flex;
+        min-height: 46px;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 28px;
+        padding: 0 14px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 650;
+        transition:
+          background-color 180ms var(--ease),
+          color 180ms var(--ease),
+          transform 180ms var(--ease);
+      }
+
+      .new-chat:hover {
+        border-color: var(--primary);
+        background: var(--primary-soft);
+        color: var(--primary);
+        transform: none;
+      }
+
+      .plus {
+        display: grid;
+        width: 22px;
+        height: 22px;
+        place-items: center;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+        font-size: 17px;
+        font-weight: 400;
+        line-height: 1;
+      }
+
+      .nav-label {
+        margin: 28px 10px 8px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+      }
+
+      .nav-list,
+      .conversation-list {
+        display: grid;
+        gap: 4px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .nav-link {
+        position: relative;
+        display: flex;
+        min-height: 44px;
+        align-items: center;
+        gap: 11px;
+        border-radius: var(--radius-md);
+        padding: 0 12px;
+        color: var(--muted-strong);
+        font-size: 14px;
+        font-weight: 550;
+        transition:
+          background-color 160ms var(--ease),
+          color 160ms var(--ease);
+      }
+
+      .nav-link:hover {
+        background: color-mix(in srgb, var(--surface) 70%, transparent);
+        color: var(--ink);
+      }
+
+      .nav-link[aria-current="page"] {
+        background: var(--surface-strong);
+        color: var(--ink);
+        box-shadow: 0 1px 0 rgba(20, 32, 27, 0.04);
+      }
+
+      .nav-link[aria-current="page"]::before {
+        position: absolute;
+        left: 0;
+        width: 3px;
+        height: 18px;
+        border-radius: 0 4px 4px 0;
+        background: var(--primary);
+        content: "";
+      }
+
+      .nav-icon {
+        display: grid;
+        width: 20px;
+        height: 20px;
+        place-items: center;
+        color: currentColor;
+      }
+
+      .nav-icon svg,
+      .icon-button svg,
+      .inline-icon svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.7;
+      }
+
+      .conversation-list {
+        min-height: 0;
+        overflow-y: auto;
+      }
+
+      .conversation-link {
+        display: block;
+        min-height: 54px;
+        border-radius: var(--radius-md);
+        padding: 9px 12px 8px;
+        transition: background-color 160ms var(--ease);
+      }
+
+      .conversation-link:hover {
+        background: color-mix(in srgb, var(--surface) 62%, transparent);
+      }
+
+      .conversation-title,
+      .conversation-time {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .conversation-title {
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 560;
+      }
+
+      .conversation-time {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .sidebar-spacer {
+        flex: 1;
+      }
+
+      .sidebar-note {
+        border-top: 1px solid var(--border);
+        padding: 16px 9px 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.55;
+      }
+
+      .sidebar-note strong {
+        display: block;
+        margin-bottom: 3px;
+        color: var(--muted-strong);
+        font-size: 12px;
+      }
+
+      .main-column {
+        min-width: 0;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        min-height: 68px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--canvas);
+        padding: 0 28px;
+      }
+
+      .topbar-title {
+        min-width: 0;
+      }
+
+      .topbar h1 {
+        overflow: hidden;
+        margin: 0;
+        font-size: 15px;
+        font-weight: 680;
+        letter-spacing: -0.01em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .topbar p {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .icon-button {
+        display: grid;
+        width: 44px;
+        height: 44px;
+        place-items: center;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        color: var(--muted-strong);
+        transition:
+          border-color 160ms var(--ease),
+          background-color 160ms var(--ease),
+          color 160ms var(--ease);
+      }
+
+      .icon-button:hover {
+        border-color: var(--border-strong);
+        background: var(--primary-soft);
+        color: var(--primary);
+      }
+
+      .menu-button {
+        display: none;
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 760px) minmax(244px, var(--utility-width));
+        justify-content: center;
+        gap: clamp(28px, 3vw, 48px);
+        width: min(100%, 1120px);
+        margin: 0 auto;
+        padding: 38px 36px 120px;
+      }
+
+      .conversation {
+        min-width: 0;
+      }
+
+      .concept-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 22px;
+        color: var(--muted-strong);
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0;
+      }
+
+      .concept-label::before {
+        display: none;
+      }
+
+      .user-message {
+        width: 100%;
+        margin-left: 0;
+        border-left: 2px solid var(--border-strong);
+        border-radius: 0;
+        background: transparent;
+        padding: 3px 0 3px 16px;
+        color: var(--ink);
+        font-size: 15px;
+        line-height: 1.7;
+        text-wrap: pretty;
+      }
+
+      .assistant {
+        position: relative;
+        margin-top: 34px;
+        padding-left: 0;
+      }
+
+      .assistant::before {
+        display: none;
+      }
+
+      .assistant-start {
+        position: relative;
+        display: inline-block;
+        top: auto;
+        left: auto;
+        width: 8px;
+        height: 8px;
+        border: 0;
+        border-radius: 50%;
+        background: var(--start);
+        vertical-align: middle;
+      }
+
+      .assistant-node {
+        display: none;
+      }
+
+      .assistant-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        min-height: 28px;
+      }
+
+      .assistant-name {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      .skill-chip,
+      .meta-chip {
+        display: inline-flex;
+        min-height: 28px;
+        align-items: center;
+        gap: 5px;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .skill-chip {
+        background: transparent;
+        color: var(--primary);
+      }
+
+      .meta-chip {
+        position: relative;
+        padding-left: 12px;
+        color: var(--muted);
+      }
+
+      .meta-chip::before {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: var(--border-strong);
+        content: "";
+        transform: translateY(-50%);
+      }
+
+      .answer-title {
+        max-width: 640px;
+        margin: 18px 0 10px;
+        font-size: clamp(21px, 2.4vw, 27px);
+        font-weight: 720;
+        letter-spacing: -0.025em;
+        line-height: 1.38;
+        text-wrap: balance;
+      }
+
+      .answer-lead {
+        max-width: 680px;
+        margin: 0;
+        color: var(--muted-strong);
+        font-size: 14px;
+        line-height: 1.8;
+        text-wrap: pretty;
+      }
+
+      .reason-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0;
+        margin-top: 24px;
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .reason-card {
+        min-width: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        padding: 16px 16px 16px 0;
+      }
+
+      .reason-card + .reason-card {
+        border-left: 1px solid var(--border);
+        padding-right: 0;
+        padding-left: 18px;
+      }
+
+      .reason-number {
+        color: var(--primary);
+        font-size: 10px;
+        font-weight: 720;
+        letter-spacing: 0;
+      }
+
+      .reason-card h3 {
+        margin: 7px 0 5px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .reason-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.65;
+      }
+
+      .next-step {
+        display: flex;
+        align-items: flex-start;
+        gap: 13px;
+        margin-top: 20px;
+        border-top: 0;
+        padding: 0;
+      }
+
+      .next-step-mark {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        flex: 0 0 34px;
+        place-items: center;
+        border-radius: 8px;
+        background: var(--surface-strong);
+        color: var(--primary);
+        font-size: 16px;
+      }
+
+      .next-step h3 {
+        margin: 1px 0 4px;
+        font-size: 13px;
+      }
+
+      .next-step p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .proposal {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        margin-top: 24px;
+        border: 0;
+        border-left: 2px solid var(--start);
+        border-radius: 0;
+        background: color-mix(in srgb, var(--start-soft) 58%, transparent);
+        padding: 12px 14px;
+      }
+
+      .proposal-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--start);
+      }
+
+      .proposal-copy {
+        min-width: 0;
+      }
+
+      .proposal-copy strong,
+      .proposal-copy span {
+        display: block;
+      }
+
+      .proposal-copy strong {
+        font-size: 12px;
+      }
+
+      .proposal-copy span {
+        overflow: hidden;
+        margin-top: 2px;
+        color: var(--muted-strong);
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .text-button {
+        min-height: 44px;
+        border: 1px solid var(--border-strong);
+        border-radius: 10px;
+        background: var(--surface);
+        padding: 0 12px;
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 650;
+        transition:
+          border-color 160ms var(--ease),
+          background-color 160ms var(--ease);
+      }
+
+      .text-button:hover {
+        border-color: var(--primary);
+        background: var(--primary-soft);
+      }
+
+      .utility {
+        min-width: 0;
+      }
+
+      .utility-card {
+        border-left: 1px solid var(--border);
+        padding-left: 20px;
+      }
+
+      .utility-card + .utility-card {
+        margin-top: 34px;
+      }
+
+      .utility-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 0 0 16px;
+        font-size: 12px;
+        font-weight: 720;
+        letter-spacing: 0.02em;
+      }
+
+      .utility-count {
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .context-list,
+      .run-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .context-list {
+        display: grid;
+        gap: 0;
+      }
+
+      .context-item {
+        border-bottom: 1px solid var(--border);
+        border-radius: 0;
+        background: transparent;
+        padding: 10px 0;
+      }
+
+      .context-type {
+        display: block;
+        color: var(--primary);
+        font-size: 10px;
+        font-weight: 720;
+      }
+
+      .context-value {
+        display: block;
+        overflow-wrap: anywhere;
+        margin-top: 3px;
+        color: var(--muted-strong);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .run-list {
+        position: relative;
+        display: grid;
+        gap: 0;
+      }
+
+      .run-list::before {
+        position: absolute;
+        top: 8px;
+        bottom: 12px;
+        left: 5px;
+        width: 1px;
+        background: var(--border-strong);
+        content: "";
+      }
+
+      .run-item {
+        position: relative;
+        display: grid;
+        grid-template-columns: 12px minmax(0, 1fr);
+        gap: 10px;
+        padding-bottom: 16px;
+      }
+
+      .run-node {
+        z-index: 1;
+        width: 11px;
+        height: 11px;
+        margin-top: 4px;
+        border: 1.5px solid var(--primary);
+        border-radius: 50%;
+        background: var(--canvas);
+      }
+
+      .run-item:first-child .run-node,
+      .run-item:last-child .run-node {
+        background: var(--primary);
+      }
+
+      .run-copy strong,
+      .run-copy span {
+        display: block;
+      }
+
+      .run-copy strong {
+        font-size: 11px;
+      }
+
+      .run-copy span {
+        margin-top: 2px;
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 9px;
+        line-height: 1.45;
+      }
+
+      .composer-wrap {
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        left: var(--sidebar-width);
+        z-index: 25;
+        padding:
+          30px 28px
+          max(18px, env(safe-area-inset-bottom));
+        background: linear-gradient(
+          to bottom,
+          transparent,
+          color-mix(in srgb, var(--canvas) 94%, transparent) 34%
+        );
+        pointer-events: none;
+      }
+
+      .composer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        width: min(100%, 808px);
+        margin: 0 auto;
+        border: 1px solid var(--border-strong);
+        border-radius: 12px;
+        background: var(--surface);
+        padding: 8px;
+        box-shadow: 0 8px 28px rgba(29, 36, 33, 0.08);
+        pointer-events: auto;
+      }
+
+      .composer-main {
+        min-width: 0;
+      }
+
+      .composer textarea {
+        display: block;
+        width: 100%;
+        min-height: 44px;
+        max-height: 110px;
+        resize: vertical;
+        border: 0;
+        background: transparent;
+        padding: 10px 11px 6px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .composer textarea::placeholder {
+        color: var(--muted);
+      }
+
+      .composer textarea:focus-visible {
+        outline: none;
+      }
+
+      .composer-tools {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 36px;
+        padding: 0 5px 3px;
+      }
+
+      .skill-trigger {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        gap: 7px;
+        border: 0;
+        border-radius: 9px;
+        background: transparent;
+        padding: 0 9px;
+        color: var(--muted-strong);
+        font-size: 11px;
+        font-weight: 650;
+        transition:
+          background-color 160ms var(--ease),
+          color 160ms var(--ease);
+      }
+
+      .skill-trigger:hover,
+      .skill-trigger[aria-expanded="true"] {
+        background: var(--primary-soft);
+        color: var(--primary);
+      }
+
+      .skill-menu {
+        position: absolute;
+        bottom: 42px;
+        left: 5px;
+        z-index: 50;
+        width: min(280px, calc(100vw - 48px));
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--surface);
+        padding: 7px;
+        box-shadow: var(--shadow);
+      }
+
+      .skill-menu[hidden] {
+        display: none;
+      }
+
+      .skill-option {
+        display: grid;
+        width: 100%;
+        min-height: 48px;
+        grid-template-columns: 36px minmax(0, 1fr);
+        align-items: center;
+        gap: 9px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        padding: 6px 8px;
+        text-align: left;
+        transition: background-color 150ms var(--ease);
+      }
+
+      .skill-option:hover {
+        background: var(--surface-muted);
+      }
+
+      .skill-glyph {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 10px;
+        background: var(--primary-soft);
+        color: var(--primary);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .skill-option strong,
+      .skill-option span {
+        display: block;
+      }
+
+      .skill-option strong {
+        font-size: 12px;
+      }
+
+      .skill-option span {
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .selected-skill {
+        display: none;
+        min-height: 28px;
+        align-items: center;
+        gap: 5px;
+        border-radius: 999px;
+        background: var(--primary-soft);
+        padding: 0 9px;
+        color: var(--primary);
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .selected-skill.is-visible {
+        display: inline-flex;
+      }
+
+      .send-button {
+        display: grid;
+        width: 48px;
+        height: 48px;
+        place-items: center;
+        align-self: end;
+        border: 1px solid var(--primary);
+        border-radius: 13px;
+        background: var(--primary);
+        color: #ffffff;
+        transition:
+          background-color 160ms var(--ease),
+          transform 160ms var(--ease);
+      }
+
+      .send-button:hover {
+        background: var(--primary-hover);
+        transform: translateY(-1px);
+      }
+
+      .send-button svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.8;
+      }
+
+      .status-toast {
+        position: fixed;
+        right: 24px;
+        bottom: 112px;
+        z-index: 100;
+        max-width: min(360px, calc(100vw - 32px));
+        border: 1px solid var(--border-strong);
+        border-radius: 12px;
+        background: var(--surface);
+        padding: 11px 14px;
+        box-shadow: var(--shadow);
+        color: var(--ink);
+        font-size: 12px;
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition:
+          opacity 160ms var(--ease),
+          transform 160ms var(--ease);
+      }
+
+      .status-toast.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .mobile-scrim {
+        display: none;
+      }
+
+      @media (max-width: 1080px) {
+        .workspace {
+          grid-template-columns: minmax(0, 760px);
+          padding-right: 48px;
+          padding-left: 48px;
+        }
+
+        .utility {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 24px;
+          border-top: 1px solid var(--border);
+          padding-top: 28px;
+        }
+
+        .utility-card {
+          border-left: 0;
+          padding-left: 0;
+        }
+
+        .utility-card + .utility-card {
+          margin-top: 0;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .app-shell {
+          display: block;
+        }
+
+        .sidebar {
+          position: fixed;
+          left: 0;
+          transform: translateX(-105%);
+          width: min(86vw, 300px);
+          box-shadow: var(--shadow);
+          transition: transform 220ms var(--ease);
+        }
+
+        .sidebar.is-open {
+          transform: translateX(0);
+        }
+
+        .mobile-scrim {
+          position: fixed;
+          inset: 0;
+          z-index: 29;
+          display: block;
+          border: 0;
+          background: rgba(7, 13, 10, 0.52);
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 180ms var(--ease);
+        }
+
+        .mobile-scrim.is-open {
+          opacity: 1;
+          pointer-events: auto;
+        }
+
+        .menu-button {
+          display: grid;
+        }
+
+        .topbar {
+          padding:
+            max(8px, env(safe-area-inset-top))
+            16px
+            8px;
+        }
+
+        .topbar p {
+          display: none;
+        }
+
+        .workspace {
+          padding: 34px 20px 130px;
+        }
+
+        .composer-wrap {
+          left: 0;
+          padding-right: 14px;
+          padding-left: 14px;
+        }
+
+        .concept-label {
+          margin-bottom: 26px;
+        }
+
+        .assistant {
+          padding-left: 0;
+        }
+
+        .assistant::before {
+          left: 6px;
+        }
+
+        .assistant-start,
+        .assistant-node {
+          left: auto;
+        }
+
+        .reason-grid,
+        .utility {
+          grid-template-columns: 1fr;
+        }
+
+        .reason-card + .reason-card {
+          border-top: 1px solid var(--border);
+          border-left: 0;
+          padding-left: 0;
+        }
+
+        .utility-card + .utility-card {
+          margin-top: 8px;
+        }
+
+        .proposal {
+          grid-template-columns: auto minmax(0, 1fr);
+        }
+
+        .proposal .text-button {
+          grid-column: 1 / -1;
+          width: 100%;
+        }
+      }
+
+      @media (max-width: 420px) {
+        .workspace {
+          padding-right: 16px;
+          padding-left: 16px;
+        }
+
+        .topbar {
+          gap: 8px;
+        }
+
+        .topbar h1 {
+          max-width: 160px;
+        }
+
+        .user-message {
+          width: 100%;
+        }
+
+        .answer-title {
+          font-size: 28px;
+        }
+
+        .composer textarea {
+          font-size: 16px;
+        }
+
+        .selected-skill {
+          max-width: 118px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+
+      @media (max-height: 520px) {
+        .workspace {
+          padding-bottom: 28px;
+        }
+
+        .composer-wrap {
+          position: static;
+          padding: 16px 28px max(18px, env(safe-area-inset-bottom));
+          background: transparent;
+        }
+
+        .composer {
+          box-shadow: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="启点主导航">
+        <a class="brand" href="#conversation" aria-label="启点首页">
+          <span class="brand-mark" aria-hidden="true">
+            <span class="brand-dot"></span>
+            <span class="brand-node"></span>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-name">启点</span>
+            <span class="brand-kicker" translate="no">QIDIAN</span>
+          </span>
+        </a>
+
+        <button class="new-chat" type="button" id="new-chat">
+          <span>新建对话</span>
+          <span class="plus" aria-hidden="true">+</span>
+        </button>
+
+        <p class="nav-label">工作空间</p>
+        <nav aria-label="工作空间">
+          <ul class="nav-list">
+            <li>
+              <a class="nav-link" href="#conversation" aria-current="page">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M7 8h10M7 12h6m8 0a8 8 0 0 1-8 8H5l-3 2V12a10 10 0 1 1 19 0Z"></path>
+                  </svg>
+                </span>
+                对话
+              </a>
+            </li>
+            <li>
+              <a class="nav-link" href="#agent-run">
+                <span class="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <circle cx="6" cy="6" r="2"></circle>
+                    <circle cx="18" cy="12" r="2"></circle>
+                    <circle cx="8" cy="19" r="2"></circle>
+                    <path d="M8 6h3a4 4 0 0 1 4 4v0M16.5 13.5l-6.8 4"></path>
+                  </svg>
+                </span>
+                Agent Runs
+              </a>
+            </li>
+          </ul>
+        </nav>
+
+        <p class="nav-label">最近对话</p>
+        <ul class="conversation-list">
+          <li>
+            <a class="conversation-link" href="#conversation">
+              <span class="conversation-title">下一轮面试准备优先级</span>
+              <span class="conversation-time">刚刚</span>
+            </a>
+          </li>
+          <li>
+            <a class="conversation-link" href="#conversation">
+              <span class="conversation-title">项目架构迁移计划</span>
+              <span class="conversation-time">昨天</span>
+            </a>
+          </li>
+          <li>
+            <a class="conversation-link" href="#conversation">
+              <span class="conversation-title">命理 Skill 的产品边界</span>
+              <span class="conversation-time">7 月 29 日</span>
+            </a>
+          </li>
+        </ul>
+
+        <div class="sidebar-spacer"></div>
+        <div class="sidebar-note">
+          <strong>视觉概念 01</strong>
+          安静、可信、从问题走向沉淀。
+        </div>
+      </aside>
+
+      <button
+        class="mobile-scrim"
+        type="button"
+        id="mobile-scrim"
+        aria-label="关闭导航"
+        tabindex="-1"
+      ></button>
+
+      <div class="main-column">
+        <header class="topbar">
+          <div class="topbar-actions">
+            <button
+              class="icon-button menu-button"
+              type="button"
+              id="menu-button"
+              aria-label="打开导航"
+              aria-controls="sidebar"
+              aria-expanded="false"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16M4 12h16M4 17h16"></path>
+              </svg>
+            </button>
+            <div class="topbar-title">
+              <h1>下一轮面试准备优先级</h1>
+              <p>面试准备 · 个人记录</p>
+            </div>
+          </div>
+
+          <div class="topbar-actions">
+            <button
+              class="icon-button"
+              type="button"
+              id="theme-toggle"
+              aria-label="切换为深色模式"
+              aria-pressed="false"
+              title="切换主题"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"></path>
+                <circle cx="12" cy="12" r="4"></circle>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <main class="workspace" id="main-content">
+          <section class="conversation" id="conversation" aria-labelledby="answer-title">
+            <div class="concept-label">你问</div>
+
+            <div class="user-message">
+              结合我最近两次面试复盘，下一轮我应该优先准备系统设计还是算法？
+            </div>
+
+            <article class="assistant">
+              <span class="assistant-node" aria-hidden="true"></span>
+
+              <header class="assistant-meta">
+                <span class="assistant-start" aria-hidden="true"></span>
+                <span class="assistant-name">启点助手</span>
+                <span class="skill-chip">决策 Skill</span>
+                <span class="meta-chip">自动选择</span>
+              </header>
+
+              <h2 class="answer-title" id="answer-title">
+                我的判断：先补系统设计，同时保持算法手感。
+              </h2>
+              <p class="answer-lead">
+                你最近两次复盘中，算法失分主要来自时间分配；系统设计则反复暴露出边界定义和容量估算不够完整。前者适合短时维持，后者更可能决定下一轮面试上限。
+              </p>
+
+              <div class="reason-grid">
+                <section class="reason-card">
+                  <span class="reason-number">主要缺口</span>
+                  <h3>系统设计缺少稳定框架</h3>
+                  <p>两次回答都跳过需求澄清，导致后续存储和扩展方案缺少共同前提。</p>
+                </section>
+                <section class="reason-card">
+                  <span class="reason-number">需要保持</span>
+                  <h3>算法能力不需要重建</h3>
+                  <p>正确率稳定，当前更适合每天用 30 分钟维持题感，而不是重新刷完整题库。</p>
+                </section>
+              </div>
+
+              <section class="next-step">
+                <span class="next-step-mark" aria-hidden="true">→</span>
+                <div>
+                  <h3>建议的下一步</h3>
+                  <p>今天先用一题 45 分钟系统设计模拟，结束后按“需求—容量—数据—接口—扩展”复盘。</p>
+                </div>
+              </section>
+
+              <section class="proposal" aria-label="个人信息更新建议">
+                <span class="proposal-dot" aria-hidden="true"></span>
+                <div class="proposal-copy">
+                  <strong>是否记住这条变化？</strong>
+                  <span>当前面试准备优先级：系统设计高于算法</span>
+                </div>
+                <button class="text-button" type="button" id="review-proposal">
+                  查看并确认
+                </button>
+              </section>
+            </article>
+          </section>
+
+          <aside class="utility" aria-label="本次回答详情">
+            <section class="utility-card">
+              <h2 class="utility-title">
+                这次参考了
+                <span class="utility-count">4 条</span>
+              </h2>
+              <ul class="context-list">
+                <li class="context-item">
+                  <span class="context-type">当前状态</span>
+                  <span class="context-value">正在准备秋招后端 / Agent 岗位</span>
+                </li>
+                <li class="context-item">
+                  <span class="context-type">面试复盘</span>
+                  <span class="context-value">系统设计两次遗漏容量估算</span>
+                </li>
+                <li class="context-item">
+                  <span class="context-type">个人规则</span>
+                  <span class="context-value">优先补齐会影响上限的短板</span>
+                </li>
+                <li class="context-item">
+                  <span class="context-type">近期记录</span>
+                  <span class="context-value">算法正确率稳定，速度波动</span>
+                </li>
+              </ul>
+            </section>
+
+            <section class="utility-card" id="agent-run">
+              <h2 class="utility-title">
+                运行记录
+                <span class="utility-count">18.4 秒</span>
+              </h2>
+              <ol class="run-list">
+                <li class="run-item">
+                  <span class="run-node" aria-hidden="true"></span>
+                  <span class="run-copy">
+                    <strong>理解问题</strong>
+                    <span>ROUTE · DECISION</span>
+                  </span>
+                </li>
+                <li class="run-item">
+                  <span class="run-node" aria-hidden="true"></span>
+                  <span class="run-copy">
+                    <strong>读取相关信息</strong>
+                    <span>CONTEXT · 4 ITEMS</span>
+                  </span>
+                </li>
+                <li class="run-item">
+                  <span class="run-node" aria-hidden="true"></span>
+                  <span class="run-copy">
+                    <strong>比较优先级</strong>
+                    <span>SKILL · DECISION_V1</span>
+                  </span>
+                </li>
+                <li class="run-item">
+                  <span class="run-node" aria-hidden="true"></span>
+                  <span class="run-copy">
+                    <strong>完成回答</strong>
+                    <span>COMPLETED · 18.4S</span>
+                  </span>
+                </li>
+              </ol>
+            </section>
+          </aside>
+        </main>
+
+        <div class="composer-wrap">
+          <form class="composer" id="composer">
+            <div class="composer-main">
+              <label class="sr-only" for="message">
+                向启点发送消息
+              </label>
+              <textarea
+                id="message"
+                name="message"
+                rows="1"
+                autocomplete="off"
+                placeholder="继续追问，或描述另一个问题…"
+              ></textarea>
+              <div class="composer-tools">
+                <button
+                  class="skill-trigger"
+                  type="button"
+                  id="skill-trigger"
+                  aria-expanded="false"
+                  aria-controls="skill-menu"
+                >
+                  <span aria-hidden="true">/</span>
+                  选择 Skill
+                </button>
+                <span class="selected-skill" id="selected-skill"></span>
+
+                <div class="skill-menu" id="skill-menu" hidden>
+                  <button class="skill-option" type="button" data-skill="决策 Skill">
+                    <span class="skill-glyph" aria-hidden="true">D</span>
+                    <span>
+                      <strong>决策 Skill</strong>
+                      <span>比较选项、代价与未知项</span>
+                    </span>
+                  </button>
+                  <button class="skill-option" type="button" data-skill="命理 Skill">
+                    <span class="skill-glyph" aria-hidden="true">F</span>
+                    <span>
+                      <strong>命理 Skill</strong>
+                      <span>从命理视角分析问题</span>
+                    </span>
+                  </button>
+                  <button class="skill-option" type="button" data-skill="调研 Skill">
+                    <span class="skill-glyph" aria-hidden="true">R</span>
+                    <span>
+                      <strong>调研 Skill</strong>
+                      <span>检索资料并整理证据</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <button class="send-button" type="submit" aria-label="发送消息">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m5 12 14-7-4.5 14-3-5.5L5 12Z"></path>
+                <path d="m11.5 13.5 3-3"></path>
+              </svg>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-toast" id="status-toast" role="status" aria-live="polite"></div>
+
+    <script>
+      const root = document.documentElement;
+      const themeToggle = document.querySelector("#theme-toggle");
+      const themeColor = document.querySelector('meta[name="theme-color"]');
+      const skillTrigger = document.querySelector("#skill-trigger");
+      const skillMenu = document.querySelector("#skill-menu");
+      const selectedSkill = document.querySelector("#selected-skill");
+      const menuButton = document.querySelector("#menu-button");
+      const sidebar = document.querySelector("#sidebar");
+      const scrim = document.querySelector("#mobile-scrim");
+      const toast = document.querySelector("#status-toast");
+      let toastTimer;
+
+      function showToast(message) {
+        window.clearTimeout(toastTimer);
+        toast.textContent = message;
+        toast.classList.add("is-visible");
+        toastTimer = window.setTimeout(() => {
+          toast.classList.remove("is-visible");
+        }, 3200);
+      }
+
+      function applyTheme(theme) {
+        const isDark = theme === "dark";
+        root.dataset.theme = isDark ? "dark" : "light";
+        themeToggle.setAttribute("aria-pressed", String(isDark));
+        themeToggle.setAttribute(
+          "aria-label",
+          isDark ? "切换为浅色模式" : "切换为深色模式",
+        );
+        themeColor.setAttribute("content", isDark ? "#111412" : "#fafaf8");
+      }
+
+      const savedTheme = localStorage.getItem("qidian-preview-theme");
+      const preferredTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+      applyTheme(savedTheme || preferredTheme);
+
+      themeToggle.addEventListener("click", () => {
+        const nextTheme = root.dataset.theme === "dark" ? "light" : "dark";
+        localStorage.setItem("qidian-preview-theme", nextTheme);
+        applyTheme(nextTheme);
+      });
+
+      skillTrigger.addEventListener("click", () => {
+        const willOpen = skillMenu.hidden;
+        skillMenu.hidden = !willOpen;
+        skillTrigger.setAttribute("aria-expanded", String(willOpen));
+      });
+
+      document.querySelectorAll(".skill-option").forEach((option) => {
+        option.addEventListener("click", () => {
+          selectedSkill.textContent = option.dataset.skill;
+          selectedSkill.classList.add("is-visible");
+          skillMenu.hidden = true;
+          skillTrigger.setAttribute("aria-expanded", "false");
+          showToast(`已选择${option.dataset.skill}`);
+        });
+      });
+
+      document.addEventListener("click", (event) => {
+        if (!skillMenu.hidden && !event.target.closest(".composer-tools")) {
+          skillMenu.hidden = true;
+          skillTrigger.setAttribute("aria-expanded", "false");
+        }
+      });
+
+      function closeSidebar() {
+        sidebar.classList.remove("is-open");
+        scrim.classList.remove("is-open");
+        menuButton.setAttribute("aria-expanded", "false");
+        menuButton.setAttribute("aria-label", "打开导航");
+        scrim.tabIndex = -1;
+      }
+
+      menuButton.addEventListener("click", () => {
+        const willOpen = !sidebar.classList.contains("is-open");
+        sidebar.classList.toggle("is-open", willOpen);
+        scrim.classList.toggle("is-open", willOpen);
+        menuButton.setAttribute("aria-expanded", String(willOpen));
+        menuButton.setAttribute("aria-label", willOpen ? "关闭导航" : "打开导航");
+        scrim.tabIndex = willOpen ? 0 : -1;
+      });
+
+      scrim.addEventListener("click", closeSidebar);
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          skillMenu.hidden = true;
+          skillTrigger.setAttribute("aria-expanded", "false");
+          closeSidebar();
+        }
+      });
+
+      document.querySelector("#review-proposal").addEventListener("click", () => {
+        showToast("概念稿：这里会打开可修改、确认或拒绝的更新建议。");
+      });
+
+      document.querySelector("#new-chat").addEventListener("click", () => {
+        showToast("概念稿：新对话会保留同一个启点助手与个人 Wiki。");
+      });
+
+      document.querySelector("#composer").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const message = document.querySelector("#message");
+        if (!message.value.trim()) {
+          message.focus();
+          showToast("先输入你想继续讨论的问题。");
+          return;
+        }
+        showToast("概念稿不会真的发送消息。");
+      });
+    </script>
+  </body>
+</html>

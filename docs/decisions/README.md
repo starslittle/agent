@@ -15,3 +15,4 @@ ADR 记录“决定了什么、为什么、约束和后果”，不替代目标�
 
 - [ADR-010：Codex 与 Grok 的文件化协作协议](ADR-010-codex-grok-delivery-workspace.md)
 - [ADR-011：按业务轮次交付并支持依赖感知的局部回滚](ADR-011-business-rounds-and-localized-rollback.md)
+- [ADR-012：奇点 AI 只作为设计档案保留](ADR-012-singularity-ui-design-archive.md)

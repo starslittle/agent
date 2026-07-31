@@ -23,6 +23,11 @@
 
 - [Agent Runtime 上线与回滚](operations/agent-runtime-rollout.md)：生产备份、schema、权限、分阶段切换、观测、回滚与人工批准清单。
 
+## 设计
+
+- [启点 Web 视觉与交互设计基线](design/qidian-web-visual-ux-spec.md)：奇点 AI 到启点的品牌迁移、视觉系统、页面结构、分轮落地和现有前端审计。
+- [奇点 AI 设计档案](design/archive/singularity-ai.md)：旧品牌的视觉特征、源码基线和只归档不维护的约束。
+
 ## 决策与协作
 
 - [架构决策记录](decisions/README.md)：已经接受或正在评审的跨模块架构决定。

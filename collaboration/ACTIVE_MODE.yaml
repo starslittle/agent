@@ -1,0 +1,15 @@
+mode: solo
+protocol: collaboration/solo/PROTOCOL.md
+profile: minimum-token
+per_task_handoff: false
+per_task_review: false
+per_task_product_e2e: false
+round_product_e2e: once_after_all_tasks
+branch_scope: round
+per_task_branch: false
+per_task_commit: true
+merge_scope: round
+activated_by: user
+activated_at: 2026-07-31
+legacy_mode: codex-grok
+legacy_protocol: collaboration/PROTOCOL.md
