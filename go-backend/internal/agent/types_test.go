@@ -165,3 +165,24 @@ func TestParseSkillResolutionRejectsInconsistentProjection(t *testing.T) {
 		t.Fatal("inconsistent projection must fail")
 	}
 }
+
+func TestParseSkillResolutionAcceptsConfirmationOnlyProjection(t *testing.T) {
+	resolution, err := ParseSkillResolution(json.RawMessage(`{
+		"model_id":"auto",
+		"requested_skill":null,
+		"resolved_skills":[],
+		"primary_skill":null,
+		"selection_source":"automatic",
+		"skill_snapshot":null,
+		"model_snapshot":{"model_id":"auto"},
+		"context_package_id":null,
+		"suggested_skill":"fortune",
+		"confidence":0.99,
+		"requires_confirmation":true,
+		"reason_code":"automatic_confirmation_required"
+	}`))
+	if err != nil || !resolution.RequiresConfirm ||
+		resolution.SuggestedSkill == nil || *resolution.SuggestedSkill != "fortune" {
+		t.Fatalf("resolution = %#v, error = %v", resolution, err)
+	}
+}

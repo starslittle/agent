@@ -92,6 +92,13 @@ class AgentRunRequest(BaseModel):
     resolved_skills: list[str] = Field(default_factory=list, max_length=1)
     primary_skill: str | None = Field(default=None, max_length=64)
     selection_source: SelectionSource | None = None
+    suggested_skill: str | None = Field(default=None, max_length=64)
+    route_confidence: float | None = Field(default=None, ge=0, le=1)
+    route_requires_confirmation: bool = False
+    route_reason_code: str | None = Field(
+        default=None,
+        pattern=r"^[a-z][a-z0-9_]{0,63}$",
+    )
     context_package_id: str | None = Field(default=None, max_length=128)
     mode: str | None = Field(default=None, max_length=64)
     query: str = Field(min_length=1, max_length=200_000)
@@ -124,7 +131,12 @@ class AgentRunRequest(BaseModel):
             raise ValueError("query cannot be blank")
         return stripped
 
-    @field_validator("requested_skill", "primary_skill", "context_package_id")
+    @field_validator(
+        "requested_skill",
+        "primary_skill",
+        "suggested_skill",
+        "context_package_id",
+    )
     @classmethod
     def strip_optional_identifiers(cls, value: str | None) -> str | None:
         if value is None:
@@ -150,8 +162,15 @@ class AgentRunRequest(BaseModel):
         if self.primary_skill != expected_primary:
             raise ValueError("primary_skill must match resolved_skills")
         if self.selection_source is not None and not self.resolved_skills:
-            if self.selection_source not in {"direct", "fallback"}:
+            if self.selection_source not in {"direct", "fallback", "automatic"}:
                 raise ValueError("empty skill resolution requires direct or fallback")
+        if self.route_requires_confirmation:
+            if (
+                self.selection_source != "automatic"
+                or self.resolved_skills
+                or self.suggested_skill is None
+            ):
+                raise ValueError("invalid confirmation-only skill resolution")
         return self
 
 

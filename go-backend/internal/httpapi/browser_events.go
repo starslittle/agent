@@ -32,6 +32,14 @@ type browserAnswerDeltaEvent struct {
 	Data     string `json:"data"`
 }
 
+type browserConfirmationEvent struct {
+	Type           string  `json:"type"`
+	Sequence       int64   `json:"sequence,omitempty"`
+	SuggestedSkill string  `json:"suggested_skill"`
+	Confidence     float64 `json:"confidence"`
+	ReasonCode     string  `json:"reason_code"`
+}
+
 type browserCitationEvent struct {
 	Type     string                `json:"type"`
 	Sequence int64                 `json:"sequence,omitempty"`
@@ -67,15 +75,18 @@ type browserArtifactEvent struct {
 }
 
 type browserEventData struct {
-	Text         string `json:"text"`
-	Stage        string `json:"stage"`
-	Name         string `json:"name"`
-	DurationMS   *int64 `json:"duration_ms"`
-	ArtifactID   string `json:"artifact_id"`
-	ArtifactType string `json:"artifact_type"`
-	ContentHash  string `json:"content_hash"`
-	MediaType    string `json:"media_type"`
-	SizeBytes    *int64 `json:"size_bytes"`
+	Text           string   `json:"text"`
+	Stage          string   `json:"stage"`
+	Name           string   `json:"name"`
+	DurationMS     *int64   `json:"duration_ms"`
+	ArtifactID     string   `json:"artifact_id"`
+	ArtifactType   string   `json:"artifact_type"`
+	ContentHash    string   `json:"content_hash"`
+	MediaType      string   `json:"media_type"`
+	SizeBytes      *int64   `json:"size_bytes"`
+	SuggestedSkill string   `json:"suggested_skill"`
+	Confidence     *float64 `json:"confidence"`
+	ReasonCode     string   `json:"reason_code"`
 }
 
 type toolPresentation struct {
@@ -117,6 +128,19 @@ func projectBrowserEvent(event agent.Event) (any, bool) {
 			Type:     "citation",
 			Sequence: event.Sequence,
 			Citation: citation,
+		}, true
+	case "confirmation.required":
+		if (data.SuggestedSkill != "research" && data.SuggestedSkill != "fortune") ||
+			data.Confidence == nil || *data.Confidence < 0 || *data.Confidence > 1 ||
+			data.ReasonCode != "automatic_confirmation_required" {
+			return nil, false
+		}
+		return browserConfirmationEvent{
+			Type:           "confirmation_required",
+			Sequence:       event.Sequence,
+			SuggestedSkill: data.SuggestedSkill,
+			Confidence:     *data.Confidence,
+			ReasonCode:     data.ReasonCode,
 		}, true
 	case "artifact.created":
 		if data.ArtifactID == "" ||

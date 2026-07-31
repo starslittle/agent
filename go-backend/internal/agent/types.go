@@ -213,6 +213,10 @@ type SkillResolution struct {
 	SkillSnapshot    json.RawMessage `json:"skill_snapshot"`
 	ModelSnapshot    json.RawMessage `json:"model_snapshot"`
 	ContextPackageID *string         `json:"context_package_id"`
+	SuggestedSkill   *string         `json:"suggested_skill"`
+	Confidence       *float64        `json:"confidence"`
+	RequiresConfirm  bool            `json:"requires_confirmation"`
+	ReasonCode       string          `json:"reason_code"`
 }
 
 func ParseSkillResolution(raw json.RawMessage) (SkillResolution, error) {
@@ -232,13 +236,26 @@ func ParseSkillResolution(raw json.RawMessage) (SkillResolution, error) {
 		if resolution.PrimarySkill != nil {
 			return SkillResolution{}, errors.New("direct run cannot have primary skill")
 		}
-		if resolution.SelectionSource != "direct" &&
-			resolution.SelectionSource != "fallback" {
+		switch resolution.SelectionSource {
+		case "direct", "fallback":
+			if resolution.RequiresConfirm || resolution.SuggestedSkill != nil {
+				return SkillResolution{}, errors.New("invalid direct resolution")
+			}
+		case "automatic":
+			if !resolution.RequiresConfirm || resolution.SuggestedSkill == nil {
+				return SkillResolution{}, errors.New("invalid confirmation resolution")
+			}
+			if _, ok := skillAgentNames[*resolution.SuggestedSkill]; !ok {
+				return SkillResolution{}, errors.New("unknown suggested skill")
+			}
+		default:
 			return SkillResolution{}, errors.New("invalid direct selection source")
 		}
 	} else if resolution.PrimarySkill == nil ||
 		*resolution.PrimarySkill != resolution.ResolvedSkills[0] {
 		return SkillResolution{}, errors.New("primary skill must match resolution")
+	} else if resolution.RequiresConfirm || resolution.SuggestedSkill != nil {
+		return SkillResolution{}, errors.New("resolved skill cannot require confirmation")
 	}
 	if resolution.RequestedSkill != nil {
 		if _, ok := skillAgentNames[*resolution.RequestedSkill]; !ok {
@@ -252,6 +269,13 @@ func ParseSkillResolution(raw json.RawMessage) (SkillResolution, error) {
 	}
 	if len(resolution.ModelSnapshot) == 0 || string(resolution.ModelSnapshot) == "null" {
 		return SkillResolution{}, errors.New("model snapshot is required")
+	}
+	if resolution.Confidence != nil &&
+		(*resolution.Confidence < 0 || *resolution.Confidence > 1) {
+		return SkillResolution{}, errors.New("invalid route confidence")
+	}
+	if resolution.RequiresConfirm && resolution.ReasonCode == "" {
+		return SkillResolution{}, errors.New("confirmation reason is required")
 	}
 	return resolution, nil
 }

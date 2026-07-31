@@ -94,6 +94,13 @@ export type ConversationStreamEvent =
       data: string;
     }
   | {
+      type: "confirmation_required";
+      sequence?: number;
+      suggested_skill: "research" | "fortune";
+      confidence: number;
+      reason_code: "automatic_confirmation_required";
+    }
+  | {
       type: "citation";
       sequence?: number;
       citation: RuntimeCitation;
@@ -261,6 +268,19 @@ export function parseConversationStreamEvent(
     case "answer_delta":
       if (
         typeof value.data !== "string" ||
+        !hasOptionalNumber(value, "sequence")
+      ) {
+        return null;
+      }
+      return value as ConversationStreamEvent;
+    case "confirmation_required":
+      if (
+        (value.suggested_skill !== "research" &&
+          value.suggested_skill !== "fortune") ||
+        typeof value.confidence !== "number" ||
+        value.confidence < 0 ||
+        value.confidence > 1 ||
+        value.reason_code !== "automatic_confirmation_required" ||
         !hasOptionalNumber(value, "sequence")
       ) {
         return null;
