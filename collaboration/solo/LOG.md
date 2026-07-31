@@ -53,3 +53,13 @@
 - validation：Python 62 passed/2 skipped；Go 全包与隔离 PostgreSQL integration passed；前端 lint 0 errors、25 tests、build passed；
 - skills：沿用现有聊天视觉，以稳定编号、原生链接、44px 命中区、可见焦点和长内容换行满足信息层级与可访问性；
 - risk：lint 保留 8 条既有 Fast Refresh warning，构建保留既有 bundle 体积提示；产品场景进入 Round E2E。
+
+## ROUND-01 Acceptance
+
+- accepted commit：`1171358`；
+- result：accepted；
+- summary：真实浏览器完成普通与 Research 对话、Activity/正文/Citation 分层、刷新与页面断开恢复、取消/重试/竞态、失败/超时后续发、刷新引用与复制、历史和跨用户隔离；验收中修复恢复订阅生命周期和仅对 `run_create_not_enabled` 启用的 legacy fallback；
+- rollback：同一数据库保留 schema 与历史，`v1 → legacy` 后普通对话、历史、隔离通过，再切回 `v1` 后新 Run 以 protocol v1 完成；未执行 Down Migration；
+- validation：Browser 产品 E2E 通过；隔离 PostgreSQL `full` profile 11 suites passed、9 risks passed（Python 62 unit、2 PostgreSQL integration、Go 全包与 PostgreSQL integration、前端 27 tests/lint/build、Compose 与 diff check）；
+- risk：保留 8 条既有 Fast Refresh warning、既有 bundle 体积提示与 browserslist 数据陈旧提示；Fortune 当前仅有 Runtime 工作流入口，统一前端 `/fortune` 属于 ROUND-02 TASK-012；无本轮阻塞风险；
+- cleanup：隔离 Go/Vite/测试 Agent、两套临时 PostgreSQL、测试账号/对话和临时报告已删除；未 push、merge 或部署。
