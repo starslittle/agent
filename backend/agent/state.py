@@ -3,6 +3,8 @@ from __future__ import annotations
 import operator
 from typing import Annotated, Any, Literal, TypedDict
 
+from agent.root import SkillRouteResolution
+
 
 WorkflowName = Literal["chat_v1", "research_v1", "fortune_v1"]
 
@@ -14,6 +16,10 @@ class RootState(TypedDict, total=False):
     messages: list[dict[str, str]]
     requested_workflow: str
     selected_workflow: WorkflowName
+    route_target: Literal[
+        "chat_v1", "research_v1", "fortune_v1", "confirmation_required"
+    ]
+    skill_resolution: dict[str, Any]
     agent_name: str
     model_profile: str
     prompt_bundle: str
@@ -51,6 +57,7 @@ def create_root_state(
     query: str,
     messages: list[dict[str, str]] | None,
     requested_workflow: str,
+    resolution: SkillRouteResolution,
     execution_id: str,
     shadow: bool = False,
 ) -> RootState:
@@ -58,6 +65,7 @@ def create_root_state(
         "query": query,
         "messages": list(messages or []),
         "requested_workflow": requested_workflow,
+        "skill_resolution": resolution.model_dump(mode="json"),
         "execution_id": execution_id,
         "shadow": shadow,
         "answer": "",

@@ -5,7 +5,7 @@ import hashlib
 import json
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from agent.capabilities import (
@@ -29,13 +29,19 @@ from agent.models import (
     get_model_gateway,
 )
 from agent.prompts import prompt_sha256
+from agent.root import RootSkillResolver, SkillRouteResolution
 from agent.specs import (
     PROMPT_BUNDLES,
     AgentCatalog,
     get_agent_catalog,
 )
 from agent.state import create_root_state
-from agent.skills import SkillRegistry, SkillSelection, get_skill_registry
+from agent.skills import (
+    SkillRegistry,
+    SkillSelection,
+    get_skill_registry,
+    resolve_compatible_selection,
+)
 
 
 @dataclass(frozen=True)
@@ -46,6 +52,7 @@ class RunCommand:
     requested_workflow: str
     model_id: str = "auto"
     selection: SkillSelection | None = None
+    resolution: SkillRouteResolution | None = None
     context_package_id: str | None = None
     shadow: bool = False
     deadline_ms: int = 120_000
@@ -71,12 +78,14 @@ class LangGraphAgentApplication:
         catalog: AgentCatalog | None = None,
         skill_registry: SkillRegistry | None = None,
         model_catalog: ModelCatalog | None = None,
+        skill_resolver: RootSkillResolver | None = None,
         checkpointer=None,
         lease_guard=None,
         artifact_stager=None,
     ) -> None:
+        raw_gateway = gateway or get_model_gateway()
         self._gateway = ObservedModelGateway(
-            gateway or get_model_gateway(),
+            raw_gateway,
             emit_model_event,
         )
         self._capabilities = (
@@ -85,6 +94,11 @@ class LangGraphAgentApplication:
         self._catalog = catalog or get_agent_catalog()
         self._skill_registry = skill_registry or get_skill_registry()
         self._model_catalog = model_catalog or get_model_catalog()
+        self._skill_resolver = skill_resolver or RootSkillResolver(
+            gateway=raw_gateway,
+            skill_registry=self._skill_registry,
+            model_catalog=self._model_catalog,
+        )
         self._checkpointer = checkpointer
         self._lease_guard = lease_guard
         self._artifact_stager = artifact_stager
@@ -114,8 +128,12 @@ class LangGraphAgentApplication:
         *,
         model_id: str = "auto",
         selection: SkillSelection | None = None,
+        resolution: SkillRouteResolution | None = None,
         context_package_id: str | None = None,
     ) -> dict[str, Any]:
+        if resolution is not None:
+            requested_workflow = resolution.workflow
+            selection = resolution.as_selection()
         spec = self._catalog.resolve(requested_workflow)
         profile = self._gateway.profile(spec.model_profile)
         resolved_model = self._model_catalog.resolve(model_id)
@@ -186,12 +204,53 @@ class LangGraphAgentApplication:
             ),
             "skill_snapshot": skill_snapshot,
             "context_package_id": context_package_id,
+            "route_confidence": (
+                resolution.confidence if resolution is not None else 1.0
+            ),
+            "route_requires_confirmation": (
+                resolution.requires_confirmation
+                if resolution is not None
+                else False
+            ),
+            "route_reason_code": (
+                resolution.reason_code
+                if resolution is not None
+                else "pre_resolved"
+            ),
+            "suggested_skill": (
+                resolution.suggested_skill if resolution is not None else None
+            ),
+            "route_prompt": {
+                "path": "agent/prompts/skill_route_v1.txt",
+                "sha256": prompt_sha256("agent/prompts/skill_route_v1.txt"),
+            },
         }
+
+    async def resolve_command(self, command: RunCommand) -> RunCommand:
+        if command.resolution is not None:
+            return command
+        selection = command.selection or resolve_compatible_selection(
+            requested_skill=None,
+            agent_name=command.requested_workflow,
+            registry=self._skill_registry,
+        )
+        resolution = await self._skill_resolver.resolve(
+            query=command.query,
+            model_id=command.model_id,
+            selection=selection,
+        )
+        return replace(
+            command,
+            requested_workflow=resolution.workflow,
+            selection=resolution.as_selection(),
+            resolution=resolution,
+        )
 
     async def stream(
         self,
         command: RunCommand,
     ) -> AsyncIterator[RuntimeEvent]:
+        command = await self.resolve_command(command)
         state = (
             None
             if command.resume
@@ -199,11 +258,12 @@ class LangGraphAgentApplication:
                 query=command.query,
                 messages=command.messages,
                 requested_workflow=command.requested_workflow,
+                resolution=command.resolution,
                 execution_id=command.execution_id,
                 shadow=command.shadow,
             )
         )
-        spec = self._catalog.resolve(command.requested_workflow)
+        spec = self._catalog.resolve(command.resolution.workflow)
         deadline_seconds = min(
             command.deadline_ms / 1000,
             spec.budgets.deadline_seconds,
