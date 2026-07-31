@@ -37,6 +37,8 @@ Answer，也可以自动或显式使用 Research/Fortune；用户能查看自己
 - 先完成 Skill 契约、Model Catalog、Skill Run 协议、Root Resolver 和现有 Skill
   接入；
 - TASK-012 在真实协议稳定后，一次完成启点品牌/页面外壳和统一 Skill 交互；
+- TASK-012 的未登录首页只复用工作区外壳做静态预览并提供登录入口；现有未登录
+  对话概念稿保留给未来落地页设计，本轮不实现游客输入或登录后续接；
 - TASK-013、TASK-028 随后完成用户 Agent Runs 和内部观测；
 - Wiki、Context、Proposal 和 Decision 继续等待各自业务 Round，不在前端伪造。
 
@@ -45,19 +47,21 @@ Answer，也可以自动或显式使用 Research/Fortune；用户能查看自己
 
 ## 主验收旅程
 
-1. 普通问题进入 Direct Answer，默认不联网、不调用工具；
-2. 显式选择 Research，展示 Skill Chip、结构化 Activity 和 Citation；
-3. 通过自然语言自动选择 Research，并展示选择来源；
-4. 显式选择 Fortune；自动识别 Fortune 时先确认；
-5. 移除 Skill Chip 后恢复自动路由；
-6. 未知 Skill、路由模型失败和低置信度安全回退；
-7. 刷新、取消和失败继续遵守 ROUND-01 Run 语义；
-8. 普通用户在 Agent Runs 中只能查看自己的历史；
-9. `observability_admin` 可以筛选脱敏 Run，普通用户访问内部 API 被拒绝；
-10. 页面和事件不展示隐藏思维链、完整 Prompt 或敏感载荷。
-11. 登录、应用外壳和对话页统一使用启点品牌，不再出现奇点 AI、轨道图形或 Lovable
+1. 未登录访问显示工作区静态预览和右上角登录入口，不读取私有数据、不允许游客
+   发送问题；登录成功后进入真实工作区；
+2. 普通问题进入 Direct Answer，默认不联网、不调用工具；
+3. 显式选择 Research，展示 Skill Chip、结构化 Activity 和 Citation；
+4. 通过自然语言自动选择 Research，并展示选择来源；
+5. 显式选择 Fortune；自动识别 Fortune 时先确认；
+6. 移除 Skill Chip 后恢复自动路由；
+7. 未知 Skill、路由模型失败和低置信度安全回退；
+8. 刷新、取消和失败继续遵守 ROUND-01 Run 语义；
+9. 普通用户在 Agent Runs 中只能查看自己的历史；
+10. `observability_admin` 可以筛选脱敏 Run，普通用户访问内部 API 被拒绝；
+11. 页面和事件不展示隐藏思维链、完整 Prompt 或敏感载荷；
+12. 登录、应用外壳和对话页统一使用启点品牌，不再出现奇点 AI、轨道图形或 Lovable
     遗留 metadata；
-12. 页面不出现尚不可用的 Wiki、Proposal 或 Decision 入口，移动端和深浅色可用。
+13. 页面不出现尚不可用的 Wiki、Proposal 或 Decision 入口，移动端和深浅色可用。
 
 ## 必须回归
 

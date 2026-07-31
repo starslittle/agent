@@ -57,6 +57,10 @@ forbidden_paths:
 
 - 按 `docs/design/qidian-web-visual-ux-spec.md` 迁移产品名、助手名、favicon、
   metadata、全局 Design Token、登录页、应用外壳、侧栏、对话空白页和消息视觉；
+- 未登录访问工作区时复用同一应用外壳展示静态首页预览，右上角提供明确的登录入口；
+  预览态不读取私有数据、不创建会话或 Run，也不展示伪造的用户历史和业务数据；
+- 登录页只负责真实登录/注册，成功后进入已登录工作区；不承接游客问题草稿或
+  “登录并继续”状态；
 - 使用文档式、克制的启点视觉方向，不逐像素复刻概念稿，也不复制已归档奇点 AI
   代码；
 - 清理 Lovable Open Graph/Twitter 遗留内容；
@@ -82,6 +86,9 @@ forbidden_paths:
 - 不实现 Wiki 或 Decision 业务；
 - 不展示个人上下文数量、Wiki Proposal、Decision 卡或任何 ROUND-03～04 假数据；
 - 不把 HTML 概念稿当作当前业务能力清单；
+- 不实现可交互的未登录对话入口、游客草稿、登录后问题续接或匿名 Run；
+- 不在本 Task 重做营销落地页；现有 `qidian-entry-concept.html` 及其截图继续保留为
+  未来落地页设计参考，但不纳入 ROUND-02 实现与验收；
 - 不保留“普通/深度思考”作为换名后的永久按钮；
 - 不修改后端协议。
 
@@ -90,6 +97,9 @@ forbidden_paths:
 - [ ] 前端不再提交 `agent_name`；
 - [ ] 产品名、助手名、favicon、metadata 和页面外壳统一为启点；
 - [ ] 不再出现奇点 AI、“奇”字、宇宙轨道、紫蓝品牌 Token 和 Lovable 元数据；
+- [ ] 未登录访问展示工作区静态预览和右上角登录入口，不请求会话、用户、Run 等
+      私有数据，不允许游客发送问题；
+- [ ] 登录页不出现“登录并继续”或游客草稿恢复，登录成功后进入真实工作区；
 - [ ] 普通输入默认无显式 Skill；
 - [ ] Slash 与 Chip 只对 available Skill 正确设置/清除 requested Skill；
 - [ ] 自动路由结果可见；
@@ -113,10 +123,11 @@ cd frontend && npm run build
 ## Codex验收与E2E
 
 本项在 Solo 模式下并入 ROUND-02 唯一一次产品 E2E。使用 Browser / Computer Use
-验证启点登录和对话外壳、普通对话、显式 Fortune、自动 Research、Fortune 确认后的
-新 Turn、移除 Chip、取消/刷新恢复、Citation 和旧会话显示；覆盖移动端、深浅色和
-基础键盘操作。确认用户始终感知为同一个助手，并且 ROUND-02 不出现尚不可用的
-Wiki、Proposal 或 Decision 入口。
+验证未登录工作区静态预览不读取私有数据且只能进入登录页，登录后进入真实工作区；
+继续验证普通对话、显式 Fortune、自动 Research、Fortune 确认后的新 Turn、移除
+Chip、取消/刷新恢复、Citation 和旧会话显示；覆盖移动端、深浅色和基础键盘操作。
+确认用户始终感知为同一个助手，并且 ROUND-02 不出现游客问题续接或尚不可用的
+Wiki、Proposal、Decision 入口。
 
 ## Handoff
 
