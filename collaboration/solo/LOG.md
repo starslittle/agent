@@ -97,3 +97,11 @@
 - summary：新增唯一 Root Skill Resolver，支持显式、结构化自动路由、稳定置信度边界、失败回退和 Fortune 强制确认，并在执行前冻结到 provenance/Run Event；
 - validation：Root tests 21 passed、Python unit 98 passed、Ruff passed；Go 全包 passed；前端 lint 0 errors（8 条既有 warning）与 build passed；
 - risk：路由模型使用默认模型目录和 Provider 超时策略；产品级真实模型效果与确认交互进入 Round E2E。
+
+### TASK-011
+
+- commit：`eef7e18`；
+- result：completed；
+- summary：Research/Fortune 通过 Skill Registry 进入原 Subworkflow，Manifest 成为 Capability、预算和 Skill 快照来源，Direct 与旧 Agent Alias 保持兼容；
+- validation：Skill/Root targeted 27 passed；Python 全量 103 passed/2 skipped；Ruff passed；
+- risk：Research/Fortune 工作流文件未改动；真实 Provider、Citation、取消与确认链进入 Round E2E。
