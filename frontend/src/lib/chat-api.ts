@@ -60,6 +60,18 @@ export interface RuntimeArtifact {
   size_bytes: number;
 }
 
+export type CitationSourceType = "web" | "knowledge" | "tool";
+
+export interface RuntimeCitation {
+  citation_id: string;
+  title: string;
+  url: string;
+  snippet: string;
+  source_type: CitationSourceType;
+  artifact_id: string;
+  sequence: number;
+}
+
 export type ConversationStreamEvent =
   | {
       type: "meta";
@@ -80,6 +92,11 @@ export type ConversationStreamEvent =
       type: "answer_delta";
       sequence?: number;
       data: string;
+    }
+  | {
+      type: "citation";
+      sequence?: number;
+      citation: RuntimeCitation;
     }
   | {
       /**
@@ -126,6 +143,12 @@ const runtimeActivityStatuses = new Set<RuntimeActivityStatus>([
   "cancelled",
 ]);
 
+const citationSourceTypes = new Set<CitationSourceType>([
+  "web",
+  "knowledge",
+  "tool",
+]);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -149,6 +172,45 @@ function hasOptionalBoolean(
   key: string,
 ): boolean {
   return value[key] === undefined || typeof value[key] === "boolean";
+}
+
+export function parseRuntimeCitation(value: unknown): RuntimeCitation | null {
+  if (
+    !isRecord(value) ||
+    typeof value.citation_id !== "string" ||
+    value.citation_id.length === 0 ||
+    value.citation_id.length > 128 ||
+    typeof value.title !== "string" ||
+    value.title.trim().length === 0 ||
+    value.title.length > 300 ||
+    typeof value.url !== "string" ||
+    value.url.length > 500 ||
+    typeof value.snippet !== "string" ||
+    value.snippet.length > 500 ||
+    typeof value.source_type !== "string" ||
+    !citationSourceTypes.has(value.source_type as CitationSourceType) ||
+    typeof value.artifact_id !== "string" ||
+    value.artifact_id.length === 0 ||
+    value.artifact_id.length > 200 ||
+    typeof value.sequence !== "number" ||
+    !Number.isInteger(value.sequence) ||
+    value.sequence < 1
+  ) {
+    return null;
+  }
+  try {
+    const parsed = new URL(value.url);
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      parsed.username ||
+      parsed.password
+    ) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return value as unknown as RuntimeCitation;
 }
 
 export function parseConversationStreamEvent(
@@ -200,6 +262,14 @@ export function parseConversationStreamEvent(
       if (
         typeof value.data !== "string" ||
         !hasOptionalNumber(value, "sequence")
+      ) {
+        return null;
+      }
+      return value as ConversationStreamEvent;
+    case "citation":
+      if (
+        !hasOptionalNumber(value, "sequence") ||
+        parseRuntimeCitation(value.citation) === null
       ) {
         return null;
       }

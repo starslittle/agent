@@ -2,12 +2,14 @@ import {
   type ConversationStreamEvent,
   type RuntimeActivity,
   type RuntimeArtifact,
+  type RuntimeCitation,
 } from "./chat-api";
 
 export interface ConversationStreamState {
   answer: string;
   activities: RuntimeActivity[];
   artifacts: RuntimeArtifact[];
+  citations: RuntimeCitation[];
   lastSequence: number;
   legacyActivitySequence: number;
   isStreaming: boolean;
@@ -26,6 +28,7 @@ export function createConversationStreamState(): ConversationStreamState {
     answer: "",
     activities: [],
     artifacts: [],
+    citations: [],
     lastSequence: 0,
     legacyActivitySequence: 0,
     isStreaming: false,
@@ -59,6 +62,12 @@ export function conversationStreamReducer(
       return {
         ...state,
         activities: upsertActivity(state.activities, event.activity),
+        lastSequence,
+      };
+    case "citation":
+      return {
+        ...state,
+        citations: upsertCitation(state.citations, event.citation),
         lastSequence,
       };
     case "artifact":
@@ -154,6 +163,21 @@ function upsertArtifact(
   }
   return artifacts.map((artifact, index) =>
     index === existingIndex ? incoming : artifact,
+  );
+}
+
+function upsertCitation(
+  citations: RuntimeCitation[],
+  incoming: RuntimeCitation,
+): RuntimeCitation[] {
+  const next = citations.filter(
+    (citation) => citation.citation_id !== incoming.citation_id,
+  );
+  next.push(incoming);
+  return next.sort(
+    (left, right) =>
+      left.sequence - right.sequence ||
+      left.citation_id.localeCompare(right.citation_id),
   );
 }
 

@@ -2,6 +2,8 @@ package conversation
 
 import (
 	"encoding/json"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/starslittle/agent/go-backend/internal/agent"
@@ -36,6 +38,58 @@ type Message struct {
 	CreatedAt       time.Time       `json:"created_at"`
 	UpdatedAt       time.Time       `json:"updated_at"`
 	CompletedAt     *time.Time      `json:"completed_at,omitempty"`
+}
+
+type Citation struct {
+	CitationID string `json:"citation_id"`
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+	Snippet    string `json:"snippet"`
+	SourceType string `json:"source_type"`
+	ArtifactID string `json:"artifact_id"`
+	Sequence   int    `json:"sequence"`
+}
+
+// ParseCitation is the shared fail-closed boundary for durable message metadata
+// and browser-visible citation events. Event data has already passed the
+// agenttrace redaction boundary before this function is called.
+func ParseCitation(raw json.RawMessage) (Citation, bool) {
+	var citation Citation
+	if err := json.Unmarshal(raw, &citation); err != nil {
+		return Citation{}, false
+	}
+	citation.CitationID = strings.TrimSpace(citation.CitationID)
+	citation.Title = truncateCitationField(citation.Title, 300)
+	citation.URL = strings.TrimSpace(citation.URL)
+	citation.Snippet = truncateCitationField(citation.Snippet, 500)
+	citation.SourceType = strings.TrimSpace(citation.SourceType)
+	citation.ArtifactID = strings.TrimSpace(citation.ArtifactID)
+	if citation.CitationID == "" || len([]rune(citation.CitationID)) > 128 ||
+		citation.Title == "" || citation.URL == "" ||
+		len([]rune(citation.URL)) > 500 ||
+		citation.ArtifactID == "" || len([]rune(citation.ArtifactID)) > 200 ||
+		citation.Sequence < 1 || citation.Sequence > 10_000 {
+		return Citation{}, false
+	}
+	switch citation.SourceType {
+	case "web", "knowledge", "tool":
+	default:
+		return Citation{}, false
+	}
+	parsed, err := url.Parse(citation.URL)
+	if err != nil || parsed.Hostname() == "" || parsed.User != nil ||
+		(parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return Citation{}, false
+	}
+	return citation, true
+}
+
+func truncateCitationField(value string, limit int) string {
+	runes := []rune(strings.TrimSpace(value))
+	if len(runes) > limit {
+		runes = runes[:limit]
+	}
+	return string(runes)
 }
 
 type Run struct {

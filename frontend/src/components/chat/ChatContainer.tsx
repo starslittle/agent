@@ -11,8 +11,10 @@ import {
   type ConversationStreamEvent,
   type RuntimeActivity,
   type RuntimeArtifact,
+  type RuntimeCitation,
   type StoredMessage,
 } from "@/lib/chat-api";
+import { parseStoredCitations } from "@/features/citations/citations";
 import {
   conversationStreamReducer,
   createConversationStreamState,
@@ -38,6 +40,7 @@ interface Message {
   thinkingFinished?: boolean;
   activities?: RuntimeActivity[];
   artifacts?: RuntimeArtifact[];
+  citations?: RuntimeCitation[];
 }
 
 function uid() {
@@ -97,6 +100,7 @@ function toViewMessage(message: StoredMessage): Message {
     status: message.status,
     thinking: message.status === "streaming",
     thinkingFinished: message.status !== "streaming",
+    citations: parseStoredCitations(message.metadata),
   };
 }
 
@@ -294,6 +298,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                           content: streamState.answer || message.content,
                           activities: streamState.activities,
                           artifacts: streamState.artifacts,
+                          citations: streamState.citations,
                           status,
                           thinking: false,
                           thinkingFinished: true,
@@ -313,6 +318,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                         content: streamState.answer,
                         activities: streamState.activities,
                         artifacts: streamState.artifacts,
+                        citations: streamState.citations,
                         status: "streaming",
                         thinking: true,
                         thinkingFinished: false,
@@ -383,6 +389,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                   content: "",
                   activities: [],
                   artifacts: [],
+                  citations: [],
                   status: "streaming",
                   thinking: true,
                   thinkingFinished: false,
@@ -638,12 +645,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                     className={`${message.role === "user" ? "flex justify-end" : "flex justify-start"} animate-in fade-in-0 slide-in-from-bottom-2 duration-300 motion-reduce:animate-none motion-reduce:transition-none`}
                   >
                     <ChatMessage
+                      messageId={message.id}
                       role={message.role}
                       content={message.content}
                       status={message.status}
                       thinking={message.thinking}
                       thinkingFinished={message.thinkingFinished}
                       activities={message.activities}
+                      citations={message.citations}
                     />
                   </div>
                 ))}

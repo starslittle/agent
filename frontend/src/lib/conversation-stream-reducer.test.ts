@@ -124,6 +124,48 @@ describe("conversationStreamReducer", () => {
     expect(next.artifacts).toHaveLength(1);
   });
 
+  it("keeps citations structured, ordered, and outside the answer", () => {
+    const second: ConversationStreamEvent = {
+      type: "citation",
+      sequence: 3,
+      citation: {
+        citation_id: "source-2",
+        title: "Second source",
+        url: "https://example.com/second",
+        snippet: "Second summary",
+        source_type: "web",
+        artifact_id: "research:abc",
+        sequence: 2,
+      },
+    };
+    const first: ConversationStreamEvent = {
+      type: "citation",
+      sequence: 2,
+      citation: {
+        ...second.citation,
+        citation_id: "source-1",
+        title: "First source",
+        url: "https://example.com/first",
+        sequence: 1,
+      },
+    };
+    const state = conversationStreamReducer(
+      conversationStreamReducer(createConversationStreamState(), second),
+      first,
+    );
+    const updated = conversationStreamReducer(state, {
+      ...first,
+      citation: { ...first.citation, title: "Updated first source" },
+    });
+
+    expect(updated.answer).toBe("");
+    expect(updated.citations.map((citation) => citation.citation_id)).toEqual([
+      "source-1",
+      "source-2",
+    ]);
+    expect(updated.citations[0].title).toBe("Updated first source");
+  });
+
   it("deduplicates activities and orders them by sequence", () => {
     const state = conversationStreamReducer(
       createConversationStreamState(),
@@ -187,5 +229,37 @@ describe("parseConversationStreamEvent", () => {
   it("accepts a strongly typed activity event", () => {
     const event = activityEvent("tool:1", 1);
     expect(parseConversationStreamEvent(JSON.stringify(event))).toEqual(event);
+  });
+
+  it("accepts safe citations and rejects unsafe or incomplete URLs", () => {
+    const citation = {
+      type: "citation",
+      sequence: 2,
+      citation: {
+        citation_id: "source-1",
+        title: "Verified source",
+        url: "https://example.com/report",
+        snippet: "Summary",
+        source_type: "web",
+        artifact_id: "research:abc",
+        sequence: 1,
+      },
+    };
+    expect(parseConversationStreamEvent(JSON.stringify(citation))).toEqual(
+      citation,
+    );
+    expect(
+      parseConversationStreamEvent(
+        JSON.stringify({
+          ...citation,
+          citation: { ...citation.citation, url: "javascript:alert(1)" },
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parseConversationStreamEvent(
+        JSON.stringify({ ...citation, citation: { citation_id: "missing" } }),
+      ),
+    ).toBeNull();
   });
 });

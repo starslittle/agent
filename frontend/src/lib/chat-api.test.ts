@@ -57,10 +57,13 @@ describe("Agent Run API", () => {
         new Response(
           [
             "event: message",
-            'data: {"type":"answer_delta","sequence":8,"data":"恢复"}',
+            'data: {"type":"citation","sequence":8,"citation":{"citation_id":"source-1","title":"Verified source","url":"https://example.com/report","snippet":"Summary","source_type":"web","artifact_id":"research:abc","sequence":1}}',
             "",
             "event: message",
-            'data: {"type":"done","sequence":9,"status":"completed"}',
+            'data: {"type":"answer_delta","sequence":9,"data":"恢复[source-1]"}',
+            "",
+            "event: message",
+            'data: {"type":"done","sequence":10,"status":"completed"}',
             "",
           ].join("\n"),
           {
@@ -77,7 +80,11 @@ describe("Agent Run API", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       "/api/v1/agent-runs/run-1/events?starting_after=7",
     );
-    expect(events.map((event) => event.type)).toEqual(["answer_delta", "done"]);
+    expect(events.map((event) => event.type)).toEqual([
+      "citation",
+      "answer_delta",
+      "done",
+    ]);
   });
 
   it("treats a sequence gap as a reconnectable attach failure", async () => {

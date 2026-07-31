@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -1297,6 +1298,45 @@ func projectAgentEvent(
 	event agent.Event,
 ) error {
 	switch event.Type {
+	case "citation.created":
+		citation, valid := conversation.ParseCitation(event.Data)
+		if !valid {
+			return nil
+		}
+		citationJSON, err := json.Marshal(citation)
+		if err != nil {
+			return err
+		}
+		_, err = transaction.Exec(ctx, `
+			UPDATE app_core.messages m
+			SET metadata = jsonb_set(
+				COALESCE(m.metadata, '{}'::jsonb),
+				'{citations}',
+				(
+					CASE
+						WHEN jsonb_typeof(m.metadata->'citations') = 'array'
+							THEN m.metadata->'citations'
+						ELSE '[]'::jsonb
+					END
+				) || jsonb_build_array($2::jsonb),
+				true
+			)
+			FROM app_core.agent_runs r
+			WHERE r.id = $1
+				AND m.id = r.assistant_message_id
+				AND NOT EXISTS (
+					SELECT 1
+					FROM jsonb_array_elements(
+						CASE
+							WHEN jsonb_typeof(m.metadata->'citations') = 'array'
+								THEN m.metadata->'citations'
+							ELSE '[]'::jsonb
+						END
+					) existing
+					WHERE existing->>'citation_id' = $3
+				)
+		`, runID, string(citationJSON), citation.CitationID)
+		return err
 	case "prompt.used":
 		if _, err := transaction.Exec(ctx, `
 			INSERT INTO app_core.prompt_artifacts (

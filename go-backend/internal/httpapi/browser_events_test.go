@@ -108,6 +108,20 @@ func TestProjectBrowserEvent(t *testing.T) {
 			wantType:  "answer_delta",
 		},
 		{
+			name:      "citation",
+			eventType: "citation.created",
+			data: `{
+				"citation_id":"source-1",
+				"title":"Verified source",
+				"url":"https://example.com/report",
+				"snippet":"Public summary",
+				"source_type":"web",
+				"artifact_id":"research_evidence:abc",
+				"sequence":1
+			}`,
+			wantType: "citation",
+		},
+		{
 			name:      "artifact",
 			eventType: "artifact.created",
 			data: `{
@@ -189,6 +203,16 @@ func TestProjectBrowserEventRejectsMalformedOrUnknownData(t *testing.T) {
 			Type:     "artifact.created",
 			Data:     json.RawMessage(`{"artifact_id":"only-id"}`),
 		},
+		{
+			Sequence: 5,
+			Type:     "citation.created",
+			Data:     json.RawMessage(`{"citation_id":"x","title":"Unsafe","url":"javascript:alert(1)","source_type":"web","artifact_id":"a","sequence":1}`),
+		},
+		{
+			Sequence: 6,
+			Type:     "citation.created",
+			Data:     json.RawMessage(`{"citation_id":"x"}`),
+		},
 	}
 
 	for _, event := range tests {
@@ -200,5 +224,46 @@ func TestProjectBrowserEventRejectsMalformedOrUnknownData(t *testing.T) {
 				visible,
 			)
 		}
+	}
+}
+
+func TestProjectBrowserCitationKeepsOnlyTheStructuredContract(t *testing.T) {
+	t.Parallel()
+
+	payload, visible := projectBrowserEvent(agent.Event{
+		Sequence: 9,
+		Type:     "citation.created",
+		Data: json.RawMessage(`{
+			"citation_id":"source-1",
+			"title":"Verified source",
+			"url":"https://example.com/report?api_key=must-not-leak",
+			"snippet":"Public summary",
+			"source_type":"web",
+			"artifact_id":"research_evidence:abc",
+			"sequence":1,
+			"private_debug":"must-not-leak"
+		}`),
+	})
+	if !visible {
+		t.Fatal("projectBrowserEvent() visible = false")
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	for _, required := range []string{
+		`"type":"citation"`,
+		`"citation_id":"source-1"`,
+		`"artifact_id":"research_evidence:abc"`,
+		`"sequence":1`,
+	} {
+		if !strings.Contains(string(encoded), required) {
+			t.Fatalf("payload missing %q: %s", required, encoded)
+		}
+	}
+	if strings.Contains(string(encoded), "private_debug") ||
+		strings.Contains(string(encoded), "must-not-leak") ||
+		!strings.Contains(string(encoded), "api_key=[redacted]") {
+		t.Fatalf("payload leaked private field: %s", encoded)
 	}
 }

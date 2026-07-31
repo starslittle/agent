@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/starslittle/agent/go-backend/internal/agent"
+	"github.com/starslittle/agent/go-backend/internal/agenttrace"
+	"github.com/starslittle/agent/go-backend/internal/conversation"
 )
 
 type browserActivity struct {
@@ -28,6 +30,12 @@ type browserAnswerDeltaEvent struct {
 	Type     string `json:"type"`
 	Sequence int64  `json:"sequence,omitempty"`
 	Data     string `json:"data"`
+}
+
+type browserCitationEvent struct {
+	Type     string                `json:"type"`
+	Sequence int64                 `json:"sequence,omitempty"`
+	Citation conversation.Citation `json:"citation"`
 }
 
 type browserDoneEvent struct {
@@ -97,6 +105,18 @@ func projectBrowserEvent(event agent.Event) (any, bool) {
 			Type:     "answer_delta",
 			Sequence: event.Sequence,
 			Data:     data.Text,
+		}, true
+	case "citation.created":
+		citation, valid := conversation.ParseCitation(
+			agenttrace.Sanitize(event.Data),
+		)
+		if !valid {
+			return nil, false
+		}
+		return browserCitationEvent{
+			Type:     "citation",
+			Sequence: event.Sequence,
+			Citation: citation,
 		}, true
 	case "artifact.created":
 		if data.ArtifactID == "" ||
