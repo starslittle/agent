@@ -107,9 +107,13 @@ func TestDuplicateSupervisorClaimExecutesRunOnce(t *testing.T) {
 	client.mu.Unlock()
 	store.mu.Lock()
 	finishCount := store.finishCount
+	recorded := append([]agent.Event(nil), store.recorded...)
 	store.mu.Unlock()
 	if totalStarts != 1 || finishCount != 1 {
 		t.Fatalf("runtime starts=%d finishes=%d, want 1/1", totalStarts, finishCount)
+	}
+	if len(recorded) != 3 || recorded[1].Type != "answer.delta" {
+		t.Fatalf("recorded events = %#v, want contiguous attach replay", recorded)
 	}
 }
 
@@ -164,6 +168,7 @@ type supervisorStore struct {
 	finishCount     int
 	finishedStatus  string
 	finishedContent string
+	recorded        []agent.Event
 }
 
 func newSupervisorStore(
@@ -339,6 +344,7 @@ func (s *supervisorStore) RecordEventOwned(
 		return false, conversation.ErrRunLeaseLost
 	}
 	s.run.Run.LastSequence = event.Sequence
+	s.recorded = append(s.recorded, event)
 	return true, nil
 }
 

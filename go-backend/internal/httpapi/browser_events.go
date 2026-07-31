@@ -30,6 +30,20 @@ type browserAnswerDeltaEvent struct {
 	Data     string `json:"data"`
 }
 
+type browserDoneEvent struct {
+	Type      string  `json:"type"`
+	Sequence  int64   `json:"sequence"`
+	Status    string  `json:"status"`
+	ErrorCode *string `json:"error_code,omitempty"`
+}
+
+type browserSequenceGapEvent struct {
+	Type     string `json:"type"`
+	Code     string `json:"code"`
+	Expected int64  `json:"expected_sequence"`
+	Received int64  `json:"received_sequence"`
+}
+
 type browserArtifact struct {
 	ArtifactID   string `json:"artifact_id"`
 	ArtifactType string `json:"artifact_type"`
@@ -165,6 +179,24 @@ func projectBrowserEvent(event agent.Event) (any, bool) {
 		), true
 	default:
 		return nil, false
+	}
+}
+
+func projectBrowserDone(
+	event agent.Event,
+	status string,
+	errorCode *string,
+) (browserDoneEvent, bool) {
+	switch event.Type {
+	case "run.completed", "run.cancelled", "run.failed", "run.timed_out":
+		return browserDoneEvent{
+			Type:      "done",
+			Sequence:  event.Sequence,
+			Status:    status,
+			ErrorCode: errorCode,
+		}, true
+	default:
+		return browserDoneEvent{}, false
 	}
 }
 

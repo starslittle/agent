@@ -1207,6 +1207,89 @@ func (s *Store) FindAgentRunDetail(
 	return detail, nil
 }
 
+func (s *Store) ListAgentRunEvents(
+	ctx context.Context,
+	userID string,
+	runID string,
+	startingAfter int64,
+	limit int,
+) (conversation.RunEventPage, error) {
+	page := conversation.RunEventPage{Events: []agent.Event{}}
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			r.execution_id,
+			r.protocol_version,
+			r.status,
+			m.status,
+			r.last_sequence,
+			r.error_code
+		FROM app_core.agent_runs r
+		JOIN app_core.conversations c ON c.id = r.conversation_id
+		JOIN app_core.messages m ON m.id = r.assistant_message_id
+		WHERE r.id = $1 AND c.user_id = $2
+	`, runID, userID).Scan(
+		&page.ExecutionID,
+		&page.ProtocolVersion,
+		&page.RunStatus,
+		&page.AssistantStatus,
+		&page.LastSequence,
+		&page.ErrorCode,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return page, conversation.ErrNotFound
+	}
+	if err != nil {
+		return page, err
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			sequence,
+			event_type,
+			occurred_at,
+			COALESCE(trace_id, ''),
+			COALESCE(span_id, ''),
+			COALESCE(parent_span_id, ''),
+			COALESCE(category, ''),
+			COALESCE(stage, ''),
+			event_schema_version,
+			content_capture_level,
+			data
+		FROM app_core.agent_run_events
+		WHERE run_id = $1 AND sequence > $2
+		ORDER BY sequence
+		LIMIT $3
+	`, runID, startingAfter, limit)
+	if err != nil {
+		return page, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		event := agent.Event{
+			ProtocolVersion: page.ProtocolVersion,
+			ExecutionID:     page.ExecutionID,
+			RunID:           runID,
+		}
+		if err := rows.Scan(
+			&event.Sequence,
+			&event.Type,
+			&event.OccurredAt,
+			&event.TraceID,
+			&event.SpanID,
+			&event.ParentSpanID,
+			&event.Category,
+			&event.Stage,
+			&event.EventSchemaVersion,
+			&event.ContentCapture,
+			&event.Data,
+		); err != nil {
+			return page, err
+		}
+		page.Events = append(page.Events, event)
+	}
+	return page, rows.Err()
+}
+
 func projectAgentEvent(
 	ctx context.Context,
 	transaction pgx.Tx,

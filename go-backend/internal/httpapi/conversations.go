@@ -35,6 +35,12 @@ type conversationHTTP struct {
 
 const maxV1SequenceResumeAttempts = 2
 
+const (
+	attachEventBatchSize = 256
+	attachPollInterval   = 100 * time.Millisecond
+	attachHeartbeat      = 15 * time.Second
+)
+
 type createConversationRequest struct {
 	AgentName string `json:"agent_name"`
 }
@@ -140,10 +146,12 @@ func (h *conversationHTTP) createRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, map[string]any{
 		"run_id":               generation.Run.ID,
 		"execution_id":         generation.Run.ExecutionID,
+		"conversation_id":      generation.Conversation.ID,
 		"user_message_id":      generation.UserMessage.ID,
 		"assistant_message_id": generation.Assistant.ID,
 		"status":               generation.Run.Status,
 		"protocol_version":     generation.Run.ProtocolVersion,
+		"events_url":           "/api/v1/agent-runs/" + generation.Run.ID + "/events",
 	})
 }
 
@@ -369,6 +377,122 @@ func (h *conversationHTTP) runDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
+}
+
+func (h *conversationHTTP) attachRunEvents(w http.ResponseWriter, r *http.Request) {
+	session, ok := sessionFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required")
+		return
+	}
+	startingAfter := int64(0)
+	if raw := strings.TrimSpace(r.URL.Query().Get("starting_after")); raw != "" {
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || value < 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid_cursor")
+			return
+		}
+		startingAfter = value
+	}
+
+	page, err := h.service.RunEvents(
+		r.Context(),
+		session.User.ID,
+		r.PathValue("runID"),
+		startingAfter,
+		attachEventBatchSize,
+	)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	if startingAfter > page.LastSequence {
+		writeJSONError(w, http.StatusBadRequest, "invalid_cursor")
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSONError(w, http.StatusInternalServerError, "streaming_not_supported")
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	cursor := startingAfter
+	heartbeat := time.NewTicker(attachHeartbeat)
+	defer heartbeat.Stop()
+	poll := time.NewTicker(attachPollInterval)
+	defer poll.Stop()
+
+	for {
+		terminalPending := false
+		for _, event := range page.Events {
+			expected := cursor + 1
+			if event.Sequence != expected {
+				writeSSEJSON(w, browserSequenceGapEvent{
+					Type:     "error",
+					Code:     "agent_event_sequence_gap",
+					Expected: expected,
+					Received: event.Sequence,
+				})
+				flusher.Flush()
+				return
+			}
+			if done, terminal := projectBrowserDone(
+				event,
+				page.RunStatus,
+				page.ErrorCode,
+			); terminal {
+				if !runStatusTerminal(page.RunStatus) ||
+					page.AssistantStatus == "streaming" {
+					terminalPending = true
+					break
+				}
+				writeSSEJSON(w, done)
+				flusher.Flush()
+				return
+			}
+
+			cursor = event.Sequence
+			if payload, visible := projectBrowserEvent(event); visible {
+				writeSSEJSON(w, payload)
+				flusher.Flush()
+			}
+		}
+		if !terminalPending && runStatusTerminal(page.RunStatus) &&
+			cursor >= page.LastSequence {
+			return
+		}
+
+		select {
+		case <-r.Context().Done():
+			return
+		case <-heartbeat.C:
+			_, _ = io.WriteString(w, ": keep-alive\n\n")
+			flusher.Flush()
+		case <-poll.C:
+		}
+
+		page, err = h.service.RunEvents(
+			r.Context(),
+			session.User.ID,
+			r.PathValue("runID"),
+			cursor,
+			attachEventBatchSize,
+		)
+		if err != nil {
+			h.logger.Warn(
+				"attach Agent Run events",
+				"run_id", r.PathValue("runID"),
+				"error", err,
+			)
+			return
+		}
+	}
 }
 
 func (h *conversationHTTP) cancelRun(w http.ResponseWriter, r *http.Request) {

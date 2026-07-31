@@ -155,6 +155,10 @@ func New(
 			authAPI.requireSession(http.HandlerFunc(conversationAPI.runDetail)),
 		)
 		mux.Handle(
+			"GET /api/v1/agent-runs/{runID}/events",
+			authAPI.requireSession(http.HandlerFunc(conversationAPI.attachRunEvents)),
+		)
+		mux.Handle(
 			"DELETE /api/v1/agent-runs/{runID}",
 			authAPI.protectMutation(
 				authAPI.requireSession(

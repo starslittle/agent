@@ -131,6 +131,16 @@ type RunDetail struct {
 	Prompts []RunPrompt `json:"prompts"`
 }
 
+type RunEventPage struct {
+	ExecutionID     string
+	ProtocolVersion int
+	RunStatus       string
+	AssistantStatus string
+	LastSequence    int64
+	ErrorCode       *string
+	Events          []agent.Event
+}
+
 type RunListParams struct {
 	UserID string
 	Status string

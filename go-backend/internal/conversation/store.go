@@ -56,4 +56,5 @@ type Store interface {
 	ReconcileUnmanagedRuns(context.Context) error
 	ListAgentRuns(context.Context, RunListParams) ([]RunSummary, error)
 	FindAgentRunDetail(context.Context, string, string) (RunDetail, error)
+	ListAgentRunEvents(context.Context, string, string, int64, int) (RunEventPage, error)
 }
