@@ -114,3 +114,12 @@
 - validation：前端 34 tests passed、lint 0 errors（8 条既有 warning）、production build passed；Browser 覆盖亮暗色、375/768/1024/1440、登录表单错误聚焦和未登录私有请求边界；
 - skills：`frontend-design` 与 `ui-ux-pro-max` 收敛为文档式松石绿/珊瑚启点线视觉，`web-design-guidelines` 推动语义导航、单一 H1、动态视口、44px 触控、可见焦点、表单名称/错误关联与 reduced-motion；
 - risk：完整登录后普通/Research/Fortune/确认/取消/恢复/Citation 场景按 Solo 协议并入 Round 唯一一次产品 E2E；保留既有 bundle 体积与 browserslist 陈旧提示。
+
+### TASK-013
+
+- commit：`471f3f3`；
+- result：completed；
+- summary：新增普通用户 Agent Runs 列表和详情，支持状态筛选、游标分页、移动端列表/详情路由、运行状态、稳定 sequence 时间线、Skill/Workflow/Model、Capability/Tool、Artifact/Citation、Token/调用/耗时、错误与 provenance 摘要，并从当前聊天回答链接到关联 Run；
+- validation：前端 41 tests passed、lint 0 errors（8 条既有 warning）、production build passed；未登录 `/agent-runs` Browser 门禁跳转登录且未请求 Agent Runs API；
+- skills：延续 TASK-012 的启点视觉和响应式外壳，以用户问题“这次任务发生了什么”组织信息；状态控件、分页、深链接、44px 触控和错误/空/加载状态遵循 Web Guidelines；
+- risk：前端明确忽略 Prompt 集合、Span attributes 和 Event 原始 data，仅对白名单 Citation/Artifact 字段投影；真实完成/取消/失败 Run 的页面验收进入 Round E2E。
