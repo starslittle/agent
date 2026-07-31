@@ -678,62 +678,54 @@
 
       .proposal {
         display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
-        gap: 12px;
+        gap: 16px;
         margin-top: 24px;
-        border: 0;
-        border-left: 2px solid var(--start);
-        border-radius: 0;
-        background: color-mix(in srgb, var(--start-soft) 58%, transparent);
-        padding: 12px 14px;
-      }
-
-      .proposal-dot {
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: var(--start);
+        border-top: 1px solid var(--border);
+        padding-top: 14px;
       }
 
       .proposal-copy {
         min-width: 0;
       }
 
-      .proposal-copy strong,
-      .proposal-copy span {
-        display: block;
+      .proposal-heading {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
       }
 
-      .proposal-copy strong {
+      .proposal-heading strong {
         font-size: 12px;
       }
 
-      .proposal-copy span {
-        overflow: hidden;
-        margin-top: 2px;
-        color: var(--muted-strong);
+      .proposal-status {
+        color: var(--muted);
         font-size: 11px;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      }
+
+      .proposal-value {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted-strong);
+        font-size: 12px;
+        line-height: 1.5;
       }
 
       .text-button {
         min-height: 44px;
-        border: 1px solid var(--border-strong);
-        border-radius: 10px;
-        background: var(--surface);
-        padding: 0 12px;
-        color: var(--ink);
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        padding: 0 10px;
+        color: var(--primary);
         font-size: 12px;
         font-weight: 650;
-        transition:
-          border-color 160ms var(--ease),
-          background-color 160ms var(--ease);
+        transition: background-color 160ms var(--ease);
       }
 
       .text-button:hover {
-        border-color: var(--primary);
         background: var(--primary-soft);
       }
 
@@ -1205,12 +1197,7 @@
         }
 
         .proposal {
-          grid-template-columns: auto minmax(0, 1fr);
-        }
-
-        .proposal .text-button {
-          grid-column: 1 / -1;
-          width: 100%;
+          gap: 12px;
         }
       }
 
@@ -1446,13 +1433,15 @@
               </section>
 
               <section class="proposal" aria-label="个人信息更新建议">
-                <span class="proposal-dot" aria-hidden="true"></span>
                 <div class="proposal-copy">
-                  <strong>是否记住这条变化？</strong>
-                  <span>当前面试准备优先级：系统设计高于算法</span>
+                  <div class="proposal-heading">
+                    <strong>个人信息更新</strong>
+                    <span class="proposal-status">待确认</span>
+                  </div>
+                  <span class="proposal-value">面试准备优先级：系统设计高于算法</span>
                 </div>
                 <button class="text-button" type="button" id="review-proposal">
-                  查看并确认
+                  查看更新
                 </button>
               </section>
             </article>
@@ -1683,7 +1672,7 @@
       });
 
       document.querySelector("#review-proposal").addEventListener("click", () => {
-        showToast("概念稿：这里会打开可修改、确认或拒绝的更新建议。");
+        showToast("概念稿：这里会打开更新详情，你可以接受、修改、暂缓或拒绝。");
       });
 
       document.querySelector("#new-chat").addEventListener("click", () => {
