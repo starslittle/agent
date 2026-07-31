@@ -164,6 +164,12 @@ AGENT_RUNTIME_COORDINATION=none
 | 最终镜像无 Node/npm | passed |
 | Compose config | passed |
 | `git diff --check` | passed（仅 Git 行尾提示） |
+| P0 Product Run 风险矩阵（2026-07-31） | 11 suites passed，9 risks passed |
+
+P0 的统一入口、隔离数据库要求、状态语义和报告位置见
+[`p0-runtime-acceptance.md`](../operations/p0-runtime-acceptance.md)；风险到可定位测试的
+映射由 `scripts/p0_runtime_matrix.json` 维护。报告不保存命令输出、用户内容、Prompt
+或环境变量值。
 
 真实 Provider smoke 在迁移期间已验证百炼 Chat 流式与 Fortune 结构化提取；最终回归
 不读取或输出真实 Key，也不把外部 Provider 可用性作为本地架构测试前提。
@@ -193,8 +199,9 @@ P0 的协议、实施顺序和自动验收矩阵见
    最终状态一致；
 2. 已完成（2026-07-31）：运行事件与最终正文分层，`tool/progress` 保持结构化事件，
    `answer.delta` 才能进入最终消息；实时页面、刷新结果和复制内容保持一致；
-3. 完成服务重启恢复、失败/超时解锁、事件序号、Trace/provenance 脱敏和跨用户权限
-   的自动技术验收并形成报告。
+3. 已完成（2026-07-31）：服务重启恢复、失败/超时解锁、事件序号、
+   Trace/provenance 脱敏和跨用户权限已纳入统一自动技术验收；隔离 PostgreSQL 的
+   `full` profile 验证为 11 suites passed、9 risks passed。
 
 迁移实现可以保存在 `main`，但生产 Compose 必须继续保持 legacy 默认链路，直到
 上述剩余 P0 自动门禁、生产数据库准备和小流量观测全部完成。代码合入不等于生产
