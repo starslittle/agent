@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="启点独立登录页视觉概念稿">
+    <meta name="theme-color" content="#fafaf8">
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='9' cy='16' r='5' fill='%23c76b42'/%3E%3Cpath d='M14 16h7' stroke='%23356658' stroke-width='2'/%3E%3Ccircle cx='24' cy='16' r='4' fill='none' stroke='%23356658' stroke-width='2'/%3E%3C/svg%3E"
+    >
+    <title>启点 · 登录</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --canvas: #fafaf8;
+        --surface: #ffffff;
+        --surface-muted: #f2f3f1;
+        --ink: #1d2421;
+        --muted: #6c736f;
+        --muted-strong: #505853;
+        --primary: #356658;
+        --primary-hover: #2c564a;
+        --primary-soft: #e5efeb;
+        --start: #c76b42;
+        --border: #e1e5e2;
+        --border-strong: #cfd5d1;
+        --danger: #a43f37;
+        --danger-soft: #f8e9e7;
+        --focus: #245447;
+        --shadow: 0 18px 54px rgba(29, 36, 33, 0.07);
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 18px;
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --canvas: #111412;
+        --surface: #171a18;
+        --surface-muted: #1c201d;
+        --ink: #e7ebe8;
+        --muted: #989f9a;
+        --muted-strong: #bdc3bf;
+        --primary: #83b3a4;
+        --primary-hover: #9ac5b7;
+        --primary-soft: #20362f;
+        --start: #dc8a63;
+        --border: #2b302d;
+        --border-strong: #3d4540;
+        --danger: #ec8a82;
+        --danger-soft: #3a2421;
+        --focus: #a6d3c1;
+        --shadow: 0 22px 64px rgba(0, 0, 0, 0.24);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        min-height: 100%;
+        background: var(--canvas);
+      }
+
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        overflow-x: hidden;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family:
+          Inter, "SF Pro Text", "PingFang SC", "Noto Sans SC", "Microsoft YaHei",
+          sans-serif;
+        font-size: 16px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        -webkit-tap-highlight-color: rgba(53, 102, 88, 0.14);
+      }
+
+      button,
+      input {
+        color: inherit;
+        font: inherit;
+      }
+
+      button,
+      a {
+        touch-action: manipulation;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      button:focus-visible,
+      input:focus-visible,
+      a:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 3px;
+      }
+
+      .skip-link {
+        position: fixed;
+        top: 12px;
+        left: 16px;
+        z-index: 100;
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        background: var(--ink);
+        color: var(--surface);
+        transform: translateY(-160%);
+        transition: transform 160ms var(--ease);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .page {
+        display: grid;
+        min-height: 100dvh;
+        grid-template-rows: auto 1fr auto;
+      }
+
+      .site-header,
+      .site-footer {
+        display: flex;
+        width: min(100%, 1180px);
+        align-items: center;
+        justify-content: space-between;
+        margin: 0 auto;
+        padding-right: 28px;
+        padding-left: 28px;
+      }
+
+      .site-header {
+        min-height: 76px;
+        padding-top: max(12px, env(safe-area-inset-top));
+      }
+
+      .brand {
+        display: inline-flex;
+        min-height: 48px;
+        align-items: center;
+        gap: 11px;
+      }
+
+      .brand-mark {
+        position: relative;
+        width: 40px;
+        height: 28px;
+        flex: 0 0 40px;
+      }
+
+      .brand-mark::before {
+        position: absolute;
+        top: 13px;
+        left: 8px;
+        width: 24px;
+        height: 1px;
+        background: var(--primary);
+        content: "";
+      }
+
+      .brand-dot,
+      .brand-node {
+        position: absolute;
+        top: 8px;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+      }
+
+      .brand-dot {
+        left: 2px;
+        background: var(--start);
+      }
+
+      .brand-node {
+        right: 0;
+        border: 1.5px solid var(--primary);
+        background: var(--canvas);
+      }
+
+      .brand-name {
+        font-size: 18px;
+        font-weight: 720;
+        letter-spacing: 0.02em;
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .back-link,
+      .theme-button {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-md);
+        color: var(--muted-strong);
+        transition:
+          border-color 180ms var(--ease),
+          background-color 180ms var(--ease),
+          color 180ms var(--ease);
+      }
+
+      .back-link {
+        gap: 7px;
+        padding: 0 12px;
+        font-size: 13px;
+      }
+
+      .back-link:hover,
+      .theme-button:hover {
+        background: var(--surface-muted);
+        color: var(--ink);
+      }
+
+      .back-link svg,
+      .theme-button svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.7;
+      }
+
+      .theme-button {
+        width: 44px;
+        border: 1px solid transparent;
+        background: transparent;
+      }
+
+      .sun-icon {
+        display: none;
+      }
+
+      html[data-theme="dark"] .moon-icon {
+        display: none;
+      }
+
+      html[data-theme="dark"] .sun-icon {
+        display: block;
+      }
+
+      .login-main {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 48px 20px 72px;
+      }
+
+      .login-panel {
+        width: min(100%, 430px);
+        margin-top: -3vh;
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        background: var(--surface);
+        padding: 38px 38px 32px;
+        box-shadow: var(--shadow);
+      }
+
+      .point-line {
+        position: relative;
+        width: 52px;
+        height: 14px;
+        margin-bottom: 22px;
+      }
+
+      .point-line::before {
+        position: absolute;
+        top: 6px;
+        left: 7px;
+        width: 36px;
+        height: 1px;
+        background: var(--primary);
+        content: "";
+      }
+
+      .point-line::after {
+        position: absolute;
+        top: 1px;
+        left: 0;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: var(--start);
+        box-shadow: 41px 0 0 -1px var(--surface), 41px 0 0 0.5px var(--primary);
+        content: "";
+      }
+
+      .mode-switch {
+        display: inline-flex;
+        gap: 22px;
+        margin-bottom: 28px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .mode-tab {
+        position: relative;
+        min-width: 52px;
+        min-height: 44px;
+        padding: 0 0 10px;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 580;
+        transition: color 180ms var(--ease);
+      }
+
+      .mode-tab::after {
+        position: absolute;
+        right: 0;
+        bottom: -1px;
+        left: 0;
+        height: 2px;
+        background: var(--primary);
+        content: "";
+        opacity: 0;
+        transform: scaleX(0.45);
+        transition:
+          opacity 180ms var(--ease),
+          transform 180ms var(--ease);
+      }
+
+      .mode-tab:hover,
+      .mode-tab[aria-selected="true"] {
+        color: var(--ink);
+      }
+
+      .mode-tab[aria-selected="true"]::after {
+        opacity: 1;
+        transform: scaleX(1);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 29px;
+        font-weight: 680;
+        letter-spacing: -0.035em;
+        line-height: 1.25;
+        text-wrap: balance;
+      }
+
+      .description {
+        margin: 9px 0 26px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .continuation {
+        margin: -4px 0 24px;
+        border-left: 2px solid var(--start);
+        background: var(--surface-muted);
+        padding: 11px 13px;
+        color: var(--muted-strong);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .continuation[hidden] {
+        display: none;
+      }
+
+      .continuation strong,
+      .continuation span {
+        display: block;
+      }
+
+      .continuation strong {
+        margin-bottom: 2px;
+        color: var(--ink);
+        font-size: 12px;
+      }
+
+      .continuation span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .field-list {
+        display: grid;
+        gap: 17px;
+      }
+
+      .field[hidden] {
+        display: none;
+      }
+
+      .field-label {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 7px;
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 620;
+      }
+
+      .field-optional {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 450;
+      }
+
+      .input-shell {
+        position: relative;
+      }
+
+      .input-shell input {
+        width: 100%;
+        height: 50px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        padding: 0 14px;
+        color: var(--ink);
+        font-size: 16px;
+        transition:
+          border-color 180ms var(--ease),
+          box-shadow 180ms var(--ease),
+          background-color 180ms var(--ease);
+      }
+
+      .input-shell input::placeholder {
+        color: var(--muted);
+        opacity: 0.78;
+      }
+
+      .input-shell input:hover {
+        border-color: var(--muted);
+      }
+
+      .input-shell input:focus-visible {
+        border-color: var(--primary);
+        outline: 0;
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
+      }
+
+      .input-shell.has-action input {
+        padding-right: 54px;
+      }
+
+      .input-shell input[aria-invalid="true"] {
+        border-color: var(--danger);
+        background: color-mix(in srgb, var(--danger-soft) 42%, var(--surface));
+      }
+
+      .password-toggle {
+        position: absolute;
+        top: 3px;
+        right: 3px;
+        display: grid;
+        width: 44px;
+        height: 44px;
+        place-items: center;
+        border: 0;
+        border-radius: 9px;
+        background: transparent;
+        color: var(--muted);
+        transition:
+          background-color 180ms var(--ease),
+          color 180ms var(--ease);
+      }
+
+      .password-toggle:hover {
+        background: var(--surface-muted);
+        color: var(--ink);
+      }
+
+      .password-toggle svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.7;
+      }
+
+      .field-error {
+        margin: 5px 0 0;
+        color: var(--danger);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .field-error:empty {
+        display: none;
+      }
+
+      .primary-button {
+        display: flex;
+        width: 100%;
+        min-height: 50px;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        margin-top: 24px;
+        border: 1px solid var(--primary);
+        border-radius: var(--radius-md);
+        background: var(--primary);
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 650;
+        transition:
+          border-color 180ms var(--ease),
+          background-color 180ms var(--ease),
+          opacity 180ms var(--ease),
+          transform 180ms var(--ease);
+      }
+
+      html[data-theme="dark"] .primary-button {
+        color: #111412;
+      }
+
+      .primary-button:hover:not(:disabled) {
+        border-color: var(--primary-hover);
+        background: var(--primary-hover);
+        transform: translateY(-1px);
+      }
+
+      .primary-button:active:not(:disabled) {
+        transform: translateY(0);
+      }
+
+      .primary-button:disabled {
+        cursor: wait;
+        opacity: 0.58;
+      }
+
+      .primary-button svg {
+        width: 17px;
+        height: 17px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.8;
+      }
+
+      .spinner {
+        display: none;
+        width: 16px;
+        height: 16px;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spin 700ms linear infinite;
+      }
+
+      .primary-button.is-loading .spinner {
+        display: block;
+      }
+
+      .primary-button.is-loading svg {
+        display: none;
+      }
+
+      .form-status {
+        min-height: 20px;
+        margin: 11px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+        text-align: center;
+      }
+
+      .form-status.is-error {
+        color: var(--danger);
+      }
+
+      .site-footer {
+        min-height: 64px;
+        padding-bottom: max(12px, env(safe-area-inset-bottom));
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .site-footer p {
+        margin: 0;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (max-width: 640px) {
+        .site-header {
+          min-height: 68px;
+          padding-right: 16px;
+          padding-left: 16px;
+        }
+
+        .back-link span {
+          display: none;
+        }
+
+        .back-link {
+          width: 44px;
+          padding: 0;
+        }
+
+        .login-main {
+          align-items: flex-start;
+          padding: 7vh 20px 46px;
+        }
+
+        .login-panel {
+          margin-top: 0;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          padding: 0;
+          box-shadow: none;
+        }
+
+        .point-line {
+          margin-bottom: 18px;
+        }
+
+        .mode-switch {
+          margin-bottom: 24px;
+        }
+
+        h1 {
+          font-size: 27px;
+        }
+
+        .site-footer {
+          justify-content: center;
+          min-height: 52px;
+          padding-right: 16px;
+          padding-left: 16px;
+          text-align: center;
+        }
+
+        .site-footer p:last-child {
+          display: none;
+        }
+      }
+
+      @media (max-height: 620px) and (min-width: 641px) {
+        .login-main {
+          align-items: flex-start;
+          padding-top: 28px;
+        }
+
+        .login-panel {
+          margin-top: 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#email">跳到登录表单</a>
+
+    <div class="page">
+      <header class="site-header">
+        <a class="brand" href="./qidian-entry-concept.html" aria-label="返回启点对话入口">
+          <span class="brand-mark" aria-hidden="true">
+            <span class="brand-dot"></span>
+            <span class="brand-node"></span>
+          </span>
+          <span class="brand-name" translate="no">启点</span>
+        </a>
+
+        <div class="header-actions">
+          <a class="back-link" href="./qidian-entry-concept.html" aria-label="返回对话">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m15 18-6-6 6-6"></path>
+            </svg>
+            <span>返回对话</span>
+          </a>
+          <button
+            class="theme-button"
+            id="theme-toggle"
+            type="button"
+            aria-label="切换到深色主题"
+            aria-pressed="false"
+          >
+            <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20.4 15.4A8.5 8.5 0 0 1 8.6 3.6 8.5 8.5 0 1 0 20.4 15.4Z"></path>
+            </svg>
+            <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3.8"></circle>
+              <path d="M12 2.5v2M12 19.5v2M21.5 12h-2M4.5 12h-2M18.72 5.28l-1.42 1.42M6.7 17.3l-1.42 1.42M18.72 18.72l-1.42-1.42M6.7 6.7 5.28 5.28"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="login-main">
+        <section class="login-panel" aria-labelledby="form-title">
+          <div class="point-line" aria-hidden="true"></div>
+
+          <div class="mode-switch" role="tablist" aria-label="账号操作">
+            <button
+              class="mode-tab"
+              id="login-tab"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              aria-controls="auth-form"
+              data-mode="login"
+            >
+              登录
+            </button>
+            <button
+              class="mode-tab"
+              id="register-tab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="auth-form"
+              data-mode="register"
+              tabindex="-1"
+            >
+              创建账号
+            </button>
+          </div>
+
+          <h1 id="form-title">欢迎回来</h1>
+          <p class="description" id="form-description">使用你的启点账号登录。</p>
+
+          <div class="continuation" id="continuation" hidden>
+            <strong>登录后继续发送</strong>
+            <span id="pending-prompt"></span>
+          </div>
+
+          <form
+            id="auth-form"
+            role="tabpanel"
+            aria-labelledby="login-tab"
+            aria-describedby="form-description form-status"
+            novalidate
+          >
+            <div class="field-list">
+              <div class="field" id="name-field" hidden>
+                <label class="field-label" for="display-name">
+                  <span>称呼</span>
+                  <span class="field-optional">选填</span>
+                </label>
+                <div class="input-shell">
+                  <input
+                    id="display-name"
+                    name="display_name"
+                    type="text"
+                    autocomplete="name"
+                    maxlength="80"
+                    placeholder="希望启点如何称呼你…"
+                  >
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="field-label" for="email">邮箱</label>
+                <div class="input-shell">
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    inputmode="email"
+                    autocomplete="email"
+                    spellcheck="false"
+                    required
+                    placeholder="name@example.com…"
+                    aria-describedby="email-error"
+                  >
+                </div>
+                <p class="field-error" id="email-error" aria-live="polite"></p>
+              </div>
+
+              <div class="field">
+                <label class="field-label" for="password">密码</label>
+                <div class="input-shell has-action">
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    minlength="12"
+                    maxlength="128"
+                    required
+                    placeholder="至少 12 个字符…"
+                    aria-describedby="password-error"
+                  >
+                  <button
+                    class="password-toggle"
+                    id="password-toggle"
+                    type="button"
+                    aria-label="显示密码"
+                    aria-pressed="false"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M2.8 12s3.2-5 9.2-5 9.2 5 9.2 5-3.2 5-9.2 5-9.2-5-9.2-5Z"></path>
+                      <circle cx="12" cy="12" r="2.4"></circle>
+                    </svg>
+                  </button>
+                </div>
+                <p class="field-error" id="password-error" aria-live="polite"></p>
+              </div>
+            </div>
+
+            <button class="primary-button" id="submit-button" type="submit">
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="button-label">登录</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h13M14 7l5 5-5 5"></path>
+              </svg>
+            </button>
+            <p class="form-status" id="form-status" aria-live="polite"></p>
+          </form>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <p>登录后继续你的对话与个人记录</p>
+        <p>启点 · 个人信息由你确认，也由你管理</p>
+      </footer>
+    </div>
+
+    <script>
+      const root = document.documentElement;
+      const themeToggle = document.querySelector("#theme-toggle");
+      const themeColor = document.querySelector('meta[name="theme-color"]');
+      const modeTabs = [...document.querySelectorAll(".mode-tab")];
+      const form = document.querySelector("#auth-form");
+      const nameField = document.querySelector("#name-field");
+      const emailInput = document.querySelector("#email");
+      const passwordInput = document.querySelector("#password");
+      const passwordToggle = document.querySelector("#password-toggle");
+      const submitButton = document.querySelector("#submit-button");
+      const buttonLabel = document.querySelector(".button-label");
+      const formTitle = document.querySelector("#form-title");
+      const formDescription = document.querySelector("#form-description");
+      const formStatus = document.querySelector("#form-status");
+      const continuation = document.querySelector("#continuation");
+      const pendingPrompt = document.querySelector("#pending-prompt");
+      let mode = "login";
+
+      function readSession(key) {
+        try {
+          return window.sessionStorage.getItem(key);
+        } catch {
+          return null;
+        }
+      }
+
+      function writeSession(key, value) {
+        try {
+          window.sessionStorage.setItem(key, value);
+        } catch {
+          return;
+        }
+      }
+
+      function applyTheme(theme) {
+        const isDark = theme === "dark";
+        root.dataset.theme = isDark ? "dark" : "light";
+        themeToggle.setAttribute("aria-pressed", String(isDark));
+        themeToggle.setAttribute("aria-label", isDark ? "切换到浅色主题" : "切换到深色主题");
+        themeColor.setAttribute("content", isDark ? "#111412" : "#fafaf8");
+        writeSession("qidian_preview_theme", isDark ? "dark" : "light");
+      }
+
+      function clearErrors() {
+        [emailInput, passwordInput].forEach((input) => input.removeAttribute("aria-invalid"));
+        document.querySelector("#email-error").textContent = "";
+        document.querySelector("#password-error").textContent = "";
+        formStatus.textContent = "";
+        formStatus.classList.remove("is-error");
+      }
+
+      function setMode(nextMode) {
+        mode = nextMode;
+        clearErrors();
+        modeTabs.forEach((tab) => {
+          const selected = tab.dataset.mode === mode;
+          tab.setAttribute("aria-selected", String(selected));
+          tab.tabIndex = selected ? 0 : -1;
+        });
+
+        const isRegister = mode === "register";
+        nameField.hidden = !isRegister;
+        form.setAttribute("aria-labelledby", isRegister ? "register-tab" : "login-tab");
+        passwordInput.autocomplete = isRegister ? "new-password" : "current-password";
+        formTitle.textContent = isRegister ? "建立你的启点空间" : "欢迎回来";
+        formDescription.textContent = isRegister
+          ? "先创建账号，再从第一个问题开始。"
+          : "使用你的启点账号登录。";
+        buttonLabel.textContent = isRegister
+          ? "创建账号"
+          : continuation.hidden
+            ? "登录"
+            : "登录并继续";
+      }
+
+      function validateField(input) {
+        const fieldError = document.querySelector(`#${input.id}-error`);
+        let message = "";
+        if (input === emailInput) {
+          if (!input.value.trim()) message = "请输入邮箱。";
+          else if (!input.validity.valid) message = "请输入有效的邮箱，例如 name@example.com。";
+        }
+        if (input === passwordInput) {
+          if (!input.value) message = "请输入密码。";
+          else if (input.value.length < 12) message = "密码至少需要 12 个字符。";
+        }
+        input.setAttribute("aria-invalid", String(Boolean(message)));
+        fieldError.textContent = message;
+        return !message;
+      }
+
+      const savedTheme = readSession("qidian_preview_theme");
+      const preferredTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+      applyTheme(savedTheme || preferredTheme);
+
+      const draft = readSession("qidian_pending_prompt");
+      if (window.location.hash === "#continue" && draft) {
+        continuation.hidden = false;
+        pendingPrompt.textContent = draft;
+        buttonLabel.textContent = "登录并继续";
+      }
+
+      themeToggle.addEventListener("click", () => {
+        applyTheme(root.dataset.theme === "dark" ? "light" : "dark");
+      });
+
+      modeTabs.forEach((tab) => {
+        tab.addEventListener("click", () => setMode(tab.dataset.mode));
+        tab.addEventListener("keydown", (event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          const nextTab = modeTabs.find((candidate) => candidate !== tab);
+          setMode(nextTab.dataset.mode);
+          nextTab.focus();
+        });
+      });
+
+      [emailInput, passwordInput].forEach((input) => {
+        input.addEventListener("blur", () => validateField(input));
+        input.addEventListener("input", () => {
+          formStatus.textContent = "";
+          formStatus.classList.remove("is-error");
+          if (input.getAttribute("aria-invalid") === "true") validateField(input);
+        });
+      });
+
+      passwordToggle.addEventListener("click", () => {
+        const reveal = passwordInput.type === "password";
+        passwordInput.type = reveal ? "text" : "password";
+        passwordToggle.setAttribute("aria-pressed", String(reveal));
+        passwordToggle.setAttribute("aria-label", reveal ? "隐藏密码" : "显示密码");
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        clearErrors();
+        const emailValid = validateField(emailInput);
+        const passwordValid = validateField(passwordInput);
+        if (!emailValid || !passwordValid) {
+          formStatus.textContent = "请先修正上面的信息。";
+          formStatus.classList.add("is-error");
+          (!emailValid ? emailInput : passwordInput).focus();
+          return;
+        }
+
+        submitButton.disabled = true;
+        submitButton.classList.add("is-loading");
+        buttonLabel.textContent = mode === "register" ? "正在创建…" : "正在登录…";
+
+        window.setTimeout(() => {
+          submitButton.disabled = false;
+          submitButton.classList.remove("is-loading");
+          buttonLabel.textContent = mode === "register"
+            ? "创建账号"
+            : continuation.hidden
+              ? "登录"
+              : "登录并继续";
+          formStatus.textContent = "这是视觉概念稿，不会连接真实账号服务。";
+        }, 650);
+      });
+    </script>
+  </body>
+</html>
