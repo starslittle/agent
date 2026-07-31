@@ -19,3 +19,11 @@
 - summary：Create Run 与 Go Run Supervisor 已完成并验收；
 - validation：Go 测试、PostgreSQL integration、Create API E2E 和旧聊天回归通过；
 - risk：保留原 Review 中记录的后续门禁。
+
+### TASK-004
+
+- commit：`f73245f`；
+- result：completed；
+- summary：新增持久化 Run Event Attach/Re-attach SSE，支持游标重放、活动追随、唯一终态、序列缺口 fail-closed、断连不取消和用户隔离；
+- validation：`cd go-backend && go test ./...`；
+- risk：Attach 当前采用 PostgreSQL 短轮询；生产参数优化不在本 Task 范围。
