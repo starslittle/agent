@@ -44,3 +44,12 @@
 - summary：新增统一 P0 Runtime 验收入口、9 项 Product Run 风险映射，以及不持久化命令输出或敏感内容的 JSON/Markdown 摘要；
 - validation：隔离 PostgreSQL `full` profile，11 suites passed、9 risks passed；
 - risk：完整模式要求调用方提供专用测试数据库；报告目录被 Git 忽略，需由每次执行重新生成。
+
+### TASK-007
+
+- commit：`069ef2b`；
+- result：completed；
+- summary：Research Citation 以结构化事件进入 Run/Event/Message，Go 白名单校验并持久化，前端提供精确角标、来源列表、刷新恢复和带来源复制；
+- validation：Python 62 passed/2 skipped；Go 全包与隔离 PostgreSQL integration passed；前端 lint 0 errors、25 tests、build passed；
+- skills：沿用现有聊天视觉，以稳定编号、原生链接、44px 命中区、可见焦点和长内容换行满足信息层级与可访问性；
+- risk：lint 保留 8 条既有 Fast Refresh warning，构建保留既有 bundle 体积提示；产品场景进入 Round E2E。
