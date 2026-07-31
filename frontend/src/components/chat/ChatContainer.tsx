@@ -58,6 +58,7 @@ interface Message {
     confidence: number;
     prompt: string;
   };
+  runID?: string;
 }
 
 function uid() {
@@ -466,7 +467,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                     return { ...message, id: event.user_message_id };
                   }
                   if (message.id === optimisticAssistantID) {
-                    return { ...message, id: event.assistant_message_id };
+                    return { ...message, id: event.assistant_message_id, runID: event.run_id };
                   }
                   return message;
                 }),
@@ -590,6 +591,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                       ? activeRun.primary_skill
                       : null,
                   skillSource: activeRun.selection_source ?? null,
+                  runID: activeRun.id,
                   status: "streaming",
                   thinking: true,
                   thinkingFinished: false,
@@ -704,7 +706,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
               return { ...message, id: run.user_message_id };
             }
             if (message.id === assistantId) {
-              return { ...message, id: run.assistant_message_id };
+              return { ...message, id: run.assistant_message_id, runID: run.run_id };
             }
             return message;
           }),
@@ -876,6 +878,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                       skillID={message.skillID}
                       skillSource={message.skillSource}
                       confirmation={message.confirmation}
+                      runID={message.runID}
                       onConfirmSkill={(skillID, prompt) => {
                         const turn = explicitConfirmationTurn(prompt, skillID);
                         void handleSend(turn.text, turn.requestedSkill);

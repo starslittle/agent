@@ -1,6 +1,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
+import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -47,6 +48,7 @@ export interface ChatMessageProps {
     prompt: string;
   };
   onConfirmSkill?: (skillID: SkillID, prompt: string) => void;
+  runID?: string;
 }
 
 const ThinkingProcess: React.FC<{ thoughts: string[]; thinkingFinished?: boolean }> = ({ thoughts, thinkingFinished }) => {
@@ -206,6 +208,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   skillSource,
   confirmation,
   onConfirmSkill,
+  runID,
 }) => {
   const isUser = role === "user";
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null);
@@ -297,6 +300,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               <Sparkles className="h-3 w-3" aria-hidden="true" />
               {resolvedSkill?.label ?? "直接回答"} · {skillSourceLabel(skillSource)}
             </span>
+          )}
+          {runID && (
+            <Link to={`/agent-runs/${encodeURIComponent(runID)}`} className="inline-flex min-h-11 items-center rounded-lg px-2 text-[10px] font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              查看 Run
+            </Link>
           )}
         </div>
       )}

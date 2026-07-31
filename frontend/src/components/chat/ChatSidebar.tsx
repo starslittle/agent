@@ -1,7 +1,7 @@
 import React, { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Bot, MessageSquare, MoreHorizontal, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import type { Conversation } from "@/lib/chat-api";
 import { QidianWordmark } from "@/brand/QidianMark";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   loading = false,
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const runsActive = location.pathname.startsWith("/agent-runs");
 
   const rowVirtualizer = useVirtualizer({
     count: conversations.length,
@@ -73,14 +75,16 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         <nav className="space-y-1" aria-label="工作区导航">
           <Link
             to="/"
-            className="flex min-h-11 items-center gap-3 rounded-xl bg-sidebar-accent px-3 text-xs font-medium text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            aria-current={!runsActive ? "page" : undefined}
+            className={cn("flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring", !runsActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")}
           >
             <MessageSquare className="h-4 w-4" aria-hidden="true" />
             对话
           </Link>
           <Link
             to="/agent-runs"
-            className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            aria-current={runsActive ? "page" : undefined}
+            className={cn("flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring", runsActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")}
           >
             <Bot className="h-4 w-4" aria-hidden="true" />
             Agent Runs

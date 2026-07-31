@@ -9,6 +9,7 @@ import NotFound from "./pages/NotFound";
 import AuthPage from "./pages/AuthPage";
 import { AuthProvider } from "./auth/AuthProvider";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
+import AgentRunsPage from "./pages/AgentRunsPage";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,22 @@ const App = () => (
                 element={(
                   <ProtectedRoute>
                     <Index />
+                  </ProtectedRoute>
+                )}
+              />
+              <Route
+                path="/agent-runs"
+                element={(
+                  <ProtectedRoute>
+                    <AgentRunsPage />
+                  </ProtectedRoute>
+                )}
+              />
+              <Route
+                path="/agent-runs/:runId"
+                element={(
+                  <ProtectedRoute>
+                    <AgentRunsPage />
                   </ProtectedRoute>
                 )}
               />
