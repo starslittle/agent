@@ -81,3 +81,11 @@
 - summary：新增稳定 `model_id=auto` Catalog，封存受控 provider/profile/model/能力与限制快照，不接受请求侧 Provider 参数或 Secret；
 - validation：Model tests 15 passed、Python unit 82 passed、Ruff passed；
 - risk：Windows 不展开 pytest 文件 glob，已改用两个明确测试文件执行同一范围。
+
+### TASK-009
+
+- commit：`dd9acff`；
+- result：completed；
+- summary：建立 Go/Python/Browser 一致的 model/Skill Run 契约、兼容适配、稳定解析事件、不可变创建字段和 PostgreSQL CAS 投影，并以 expand-only Migration 保留旧数据；
+- validation：Python 88 passed/2 skipped、Ruff passed；Go 全包 passed；隔离 PostgreSQL Migration、幂等及冲突写入 integration passed；前端 lint 0 errors（8 条既有 warning）与 build passed；
+- risk：保留既有前端 bundle 体积与 browserslist 陈旧提示；临时 PostgreSQL 已删除，未连接现有开发库。
