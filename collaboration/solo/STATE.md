@@ -4,7 +4,7 @@
 mode: solo
 executor: codex
 active_round: ROUND-02
-round_status: blocked
+round_status: running
 round_base_commit: e8dd5ef89333f674106ad73ce2a566bc7e62d69b
 round_accepted_commit: pending
 round_branch: codex/round-02-solo
@@ -31,3 +31,6 @@ destructive_operations_authorized: false
 2026-08-01 TASK-012 的未登录 `/` 静态预览需要修改路由文件
 `frontend/src/App.tsx`，但该文件未列入 Task `allowed_paths`；等待用户明确授权扩展该
 单一文件后继续，不需要修改 `frontend/src/auth/**`。
+
+2026-08-01 用户明确授权 TASK-012 额外修改 `frontend/src/App.tsx`，仅用于解除 `/`
+的认证路由门禁并复用 `Index` 实现静态预览；`frontend/src/auth/**` 继续禁止修改。
