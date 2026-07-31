@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   attachAgentRun,
+  ChatAPIError,
   createAgentRun,
+  streamLegacyConversation,
   type ConversationStreamEvent,
 } from "./chat-api";
 
@@ -85,6 +87,62 @@ describe("Agent Run API", () => {
       "answer_delta",
       "done",
     ]);
+  });
+
+  it("preserves the create-run error code for a narrow legacy fallback", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ error: "run_create_not_enabled" }), {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    await expect(
+      createAgentRun(
+        "conversation-1",
+        {
+          content: "legacy",
+          client_message_id: "client-1",
+          idempotency_key: "client-1",
+        },
+        "csrf-1",
+      ),
+    ).rejects.toMatchObject<Partial<ChatAPIError>>({
+      code: "run_create_not_enabled",
+    });
+  });
+
+  it("streams the retained legacy conversation endpoint", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        [
+          'data: {"type":"meta","conversation_id":"conversation-1","user_message_id":"user-1","assistant_message_id":"assistant-1","run_id":"run-legacy","protocol_version":0,"title":"Legacy"}',
+          "",
+          'data: {"type":"delta","data":"Legacy 回答","isThinking":false}',
+          "",
+          'data: {"type":"done","message_id":"assistant-1","status":"completed"}',
+          "",
+        ].join("\n"),
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const events: ConversationStreamEvent[] = [];
+
+    await streamLegacyConversation(
+      "conversation-1",
+      { content: "legacy", client_message_id: "client-1" },
+      "csrf-1",
+      (event) => events.push(event),
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/conversations/conversation-1/messages/stream",
+    );
+    expect(events.map((event) => event.type)).toEqual(["meta", "delta", "done"]);
   });
 
   it("treats a sequence gap as a reconnectable attach failure", async () => {

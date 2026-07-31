@@ -328,6 +328,22 @@ function apiBase(): string {
   return value ? value.replace(/\/$/, "") : "";
 }
 
+export class ChatAPIError extends Error {
+  readonly code?: string;
+
+  constructor(code?: string, detail?: string) {
+    super(chatErrorMessage(code, detail));
+    this.name = "ChatAPIError";
+    this.code = code;
+  }
+}
+
+export function isRunCreateNotEnabled(error: unknown): boolean {
+  return (
+    error instanceof ChatAPIError && error.code === "run_create_not_enabled"
+  );
+}
+
 async function apiRequest<T>(
   path: string,
   init: RequestInit = {},
@@ -350,7 +366,7 @@ async function apiRequest<T>(
       error?: string;
       message?: string;
     };
-    throw new Error(chatErrorMessage(payload.error, payload.message));
+    throw new ChatAPIError(payload.error, payload.message);
   }
   if (response.status === 204) {
     return undefined as T;
@@ -481,6 +497,70 @@ export async function createAgentRun(
   );
 }
 
+export async function streamLegacyConversation(
+  conversationID: string,
+  input: {
+    content: string;
+    client_message_id: string;
+    agent_name?: string;
+  },
+  csrfToken: string,
+  onEvent: (event: ConversationStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(
+    `${apiBase()}/api/v1/conversations/${encodeURIComponent(conversationID)}/messages/stream`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "text/event-stream",
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify(input),
+      signal,
+      credentials: "include",
+    },
+  );
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+    };
+    throw new ChatAPIError(payload.error, payload.message);
+  }
+  if (!response.body) throw new Error("无法读取流式响应");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const raw = trimmed.slice(5).trim();
+        if (!raw || raw === "[DONE]") continue;
+        const event = parseConversationStreamEvent(raw);
+        if (!event) continue;
+        if (event.type === "error") {
+          throw new Error(event.message || "服务器流式处理失败");
+        }
+        onEvent(event);
+        if (event.type === "done") return;
+      }
+    }
+    throw new Error("运行连接提前结束，请重试");
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export async function listAgentRuns(
   limit = 100,
 ): Promise<AgentRunListResponse> {
@@ -510,7 +590,7 @@ export async function attachAgentRun(
       error?: string;
       message?: string;
     };
-    throw new Error(chatErrorMessage(payload.error, payload.message));
+    throw new ChatAPIError(payload.error, payload.message);
   }
   if (!response.body) {
     throw new Error("无法读取流式响应");

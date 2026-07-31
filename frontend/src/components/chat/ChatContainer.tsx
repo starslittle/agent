@@ -6,9 +6,12 @@ import {
   cancelAgentRun,
   createAgentRun,
   createConversation,
+  isRunCreateNotEnabled,
   listAgentRuns,
+  streamLegacyConversation,
   type Conversation,
   type ConversationStreamEvent,
+  type CreateAgentRunResponse,
   type RuntimeActivity,
   type RuntimeArtifact,
   type RuntimeCitation,
@@ -125,6 +128,13 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   const lastScrollTopRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
+  const onConversationChangedRef = useRef(onConversationChanged);
+  const recoverableAssistantIDRef = useRef(
+    initialMessages.find(
+      (message) =>
+        message.role === "assistant" && message.status === "streaming",
+    )?.id,
+  );
   const [runState, setRunState] = useState<RunLifecycleState>(idleRunLifecycle);
   const runStateRef = useRef<RunLifecycleState>(runState);
 
@@ -218,6 +228,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 
     lastScrollTopRef.current = currentScrollTop;
   }, [setFollowingLatest]);
+
+  useEffect(() => {
+    onConversationChangedRef.current = onConversationChanged;
+  }, [onConversationChanged]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -350,23 +364,115 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         }
       }
 
-      if (terminalReceived) onConversationChanged?.();
+      if (terminalReceived) onConversationChangedRef.current?.();
     },
-    [onConversationChanged, transitionRun],
+    [transitionRun],
   );
 
-  const recoverableAssistantID = initialMessages.find(
-    (message) => message.role === "assistant" && message.status === "streaming",
-  )?.id;
+  const followLegacyConversation = useCallback(
+    async (
+      conversationID: string,
+      content: string,
+      clientMessageID: string,
+      agentName: string | undefined,
+      optimisticAssistantID: string,
+      controller: AbortController,
+    ) => {
+      let assistantMessageID = optimisticAssistantID;
+      let runID = "";
+      let streamState = {
+        ...createConversationStreamState(),
+        isStreaming: true,
+      };
+
+      try {
+        await streamLegacyConversation(
+          conversationID,
+          {
+            content,
+            client_message_id: clientMessageID,
+            agent_name: agentName,
+          },
+          csrfToken,
+          (event) => {
+            if (event.type === "meta") {
+              runID = event.run_id;
+              assistantMessageID = event.assistant_message_id;
+              setMessages((current) =>
+                current.map((message) => {
+                  if (message.id === clientMessageID) {
+                    return { ...message, id: event.user_message_id };
+                  }
+                  if (message.id === optimisticAssistantID) {
+                    return { ...message, id: event.assistant_message_id };
+                  }
+                  return message;
+                }),
+              );
+              transitionRun({
+                type: "run_available",
+                runID,
+                assistantMessageID,
+                protocolVersion: event.protocol_version ?? 0,
+                status: "running",
+              });
+            }
+
+            streamState = conversationStreamReducer(streamState, event);
+            if (event.type === "done") {
+              setMessages((current) =>
+                current.map((message) =>
+                  message.id === assistantMessageID
+                    ? {
+                        ...message,
+                        content: streamState.answer || message.content,
+                        activities: streamState.activities,
+                        status: terminalMessageStatus(event.status),
+                        thinking: false,
+                        thinkingFinished: true,
+                      }
+                    : message,
+                ),
+              );
+              if (runID) transitionRun({ type: "done", runID });
+              return;
+            }
+
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === assistantMessageID
+                  ? {
+                      ...message,
+                      content: streamState.answer,
+                      activities: streamState.activities,
+                      status: "streaming",
+                      thinking: true,
+                      thinkingFinished: false,
+                    }
+                  : message,
+              ),
+            );
+          },
+          controller.signal,
+        );
+      } catch (error) {
+        if (runID) transitionRun({ type: "done", runID });
+        throw error;
+      }
+      onConversationChangedRef.current?.();
+    },
+    [csrfToken, transitionRun],
+  );
 
   useEffect(() => {
     if (
       !conversationId ||
-      !recoverableAssistantID ||
+      !recoverableAssistantIDRef.current ||
       runStateRef.current.phase !== "idle"
     )
       return;
 
+    const recoverableAssistantID = recoverableAssistantIDRef.current;
     const controller = new AbortController();
     let disposed = false;
     void listAgentRuns()
@@ -422,7 +528,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       disposed = true;
       controller.abort();
     };
-  }, [conversationId, followRun, recoverableAssistantID, transitionRun]);
+  }, [conversationId, followRun, transitionRun]);
 
   const handleSend = useCallback(
     async (text: string, deep: boolean) => {
@@ -467,16 +573,34 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           targetConversationID = createdConversation.id;
         }
 
-        const run = await createAgentRun(
-          targetConversationID,
-          {
-            content: text,
-            client_message_id: clientMessageID,
-            idempotency_key: clientMessageID,
-            agent_name: agentName,
-          },
-          csrfToken,
-        );
+        let run: CreateAgentRunResponse;
+        try {
+          run = await createAgentRun(
+            targetConversationID,
+            {
+              content: text,
+              client_message_id: clientMessageID,
+              idempotency_key: clientMessageID,
+              agent_name: agentName,
+            },
+            csrfToken,
+          );
+        } catch (error) {
+          if (!isRunCreateNotEnabled(error)) throw error;
+          await followLegacyConversation(
+            targetConversationID,
+            text,
+            clientMessageID,
+            agentName,
+            assistantId,
+            controller,
+          );
+          if (createdConversation) {
+            conversationCreatedNotified = true;
+            onConversationCreated?.(createdConversation);
+          }
+          return;
+        }
         runCreated = true;
         setMessages((current) =>
           current.map((message) => {
@@ -540,6 +664,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       csrfToken,
       onConversationCreated,
       followRun,
+      followLegacyConversation,
       scrollToLatest,
       transitionRun,
     ],
