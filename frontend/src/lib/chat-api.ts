@@ -93,12 +93,17 @@ export type ConversationStreamEvent =
     }
   | {
       type: "done";
+      sequence?: number;
       message_id?: string;
       status?: string;
+      error_code?: string;
     }
   | {
       type: "error";
+      code?: string;
       message?: string;
+      expected_sequence?: number;
+      received_sequence?: number;
     }
   | {
       type: "artifact";
@@ -223,14 +228,21 @@ export function parseConversationStreamEvent(
       return value as ConversationStreamEvent;
     case "done":
       if (
+        !hasOptionalNumber(value, "sequence") ||
         !hasOptionalString(value, "message_id") ||
-        !hasOptionalString(value, "status")
+        !hasOptionalString(value, "status") ||
+        !hasOptionalString(value, "error_code")
       ) {
         return null;
       }
       return value as ConversationStreamEvent;
     case "error":
-      if (!hasOptionalString(value, "message")) {
+      if (
+        !hasOptionalString(value, "code") ||
+        !hasOptionalString(value, "message") ||
+        !hasOptionalNumber(value, "expected_sequence") ||
+        !hasOptionalNumber(value, "received_sequence")
+      ) {
         return null;
       }
       return value as ConversationStreamEvent;
@@ -240,7 +252,8 @@ export function parseConversationStreamEvent(
 }
 
 function apiBase(): string {
-  const env = (import.meta as unknown as { env?: Record<string, unknown> }).env || {};
+  const env =
+    (import.meta as unknown as { env?: Record<string, unknown> }).env || {};
   const value = env.VITE_API_BASE as string | undefined;
   return value ? value.replace(/\/$/, "") : "";
 }
@@ -263,7 +276,7 @@ async function apiRequest<T>(
     credentials: "include",
   });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({})) as {
+    const payload = (await response.json().catch(() => ({}))) as {
       error?: string;
       message?: string;
     };
@@ -301,7 +314,9 @@ export async function createConversation(
 }
 
 export async function getConversation(id: string): Promise<Conversation> {
-  return apiRequest<Conversation>(`/api/v1/conversations/${encodeURIComponent(id)}`);
+  return apiRequest<Conversation>(
+    `/api/v1/conversations/${encodeURIComponent(id)}`,
+  );
 }
 
 export async function listMessages(
@@ -342,33 +357,86 @@ export async function deleteConversation(
   );
 }
 
-export async function postConversationStream(
+export interface CreateAgentRunResponse {
+  run_id: string;
+  execution_id: string;
+  conversation_id: string;
+  user_message_id: string;
+  assistant_message_id: string;
+  status: AgentRunStatus;
+  protocol_version: number;
+  events_url: string;
+}
+
+export type AgentRunStatus =
+  | "queued"
+  | "running"
+  | "cancel_requested"
+  | "completed"
+  | "cancelled"
+  | "failed"
+  | "timed_out";
+
+export interface AgentRunSummary {
+  id: string;
+  execution_id: string;
+  conversation_id: string;
+  status: AgentRunStatus;
+  protocol_version: number;
+  started_at: string;
+}
+
+interface AgentRunListResponse {
+  items: AgentRunSummary[];
+  next_before?: string | null;
+}
+
+export async function createAgentRun(
   conversationID: string,
   input: {
     content: string;
     client_message_id: string;
+    idempotency_key: string;
     agent_name?: string;
   },
   csrfToken: string,
+): Promise<CreateAgentRunResponse> {
+  return apiRequest<CreateAgentRunResponse>(
+    `/api/v1/conversations/${encodeURIComponent(conversationID)}/runs`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+    csrfToken,
+  );
+}
+
+export async function listAgentRuns(
+  limit = 100,
+): Promise<AgentRunListResponse> {
+  return apiRequest<AgentRunListResponse>(
+    `/api/v1/agent-runs?limit=${encodeURIComponent(String(limit))}`,
+  );
+}
+
+export async function attachAgentRun(
+  runID: string,
+  startingAfter: number,
   onEvent: (event: ConversationStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const response = await fetch(
-    `${apiBase()}/api/v1/conversations/${encodeURIComponent(conversationID)}/messages/stream`,
+    `${apiBase()}/api/v1/agent-runs/${encodeURIComponent(runID)}/events?starting_after=${encodeURIComponent(String(startingAfter))}`,
     {
-      method: "POST",
       headers: {
-        "Content-Type": "application/json",
         Accept: "text/event-stream",
-        "X-CSRF-Token": csrfToken,
       },
-      body: JSON.stringify(input),
       signal,
       credentials: "include",
     },
   );
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({})) as {
+    const payload = (await response.json().catch(() => ({}))) as {
       error?: string;
       message?: string;
     };
@@ -395,10 +463,10 @@ export async function postConversationStream(
         if (!raw || raw === "[DONE]") continue;
         const event = parseConversationStreamEvent(raw);
         if (!event) continue;
-        onEvent(event);
         if (event.type === "error") {
-          throw new Error(event.message || "生成失败");
+          throw new Error(attachErrorMessage(event.code, event.message));
         }
+        onEvent(event);
         if (event.type === "done") {
           return;
         }
@@ -407,6 +475,14 @@ export async function postConversationStream(
   } finally {
     reader.releaseLock();
   }
+}
+
+function attachErrorMessage(code?: string, detail?: string): string {
+  if (detail) return detail;
+  if (code === "agent_event_sequence_gap") {
+    return "运行事件暂时不连续，正在重新连接";
+  }
+  return "运行连接中断，正在重新连接";
 }
 
 export async function cancelAgentRun(
@@ -436,6 +512,10 @@ function chatErrorMessage(code?: string, detail?: string): string {
     case "csrf_validation_failed":
     case "invalid_csrf_token":
       return "页面凭据已失效，请刷新后重试";
+    case "invalid_cursor":
+      return "运行恢复位置无效，请刷新后重试";
+    case "run_create_not_enabled":
+      return "当前环境尚未启用运行服务";
     default:
       return "会话请求失败，请稍后重试";
   }

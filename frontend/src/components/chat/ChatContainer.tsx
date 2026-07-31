@@ -2,10 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import ChatMessage, { ChatRole } from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import {
+  attachAgentRun,
   cancelAgentRun,
+  createAgentRun,
   createConversation,
-  postConversationStream,
+  listAgentRuns,
   type Conversation,
+  type ConversationStreamEvent,
   type RuntimeActivity,
   type RuntimeArtifact,
   type StoredMessage,
@@ -14,6 +17,14 @@ import {
   conversationStreamReducer,
   createConversationStreamState,
 } from "@/lib/conversation-stream-reducer";
+import {
+  canCancelRun,
+  idleRunLifecycle,
+  isRunBusy,
+  runLifecycleReducer,
+  type RunLifecycleAction,
+  type RunLifecycleState,
+} from "@/lib/run-lifecycle";
 import { useAuth } from "@/auth/AuthProvider";
 import { ArrowDown, ArrowUpRight, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -33,11 +44,39 @@ function uid() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
-    const random = Math.floor(Math.random() * 16);
-    const value = character === "x" ? random : (random & 0x3) | 0x8;
-    return value.toString(16);
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+    /[xy]/g,
+    (character) => {
+      const random = Math.floor(Math.random() * 16);
+      const value = character === "x" ? random : (random & 0x3) | 0x8;
+      return value.toString(16);
+    },
+  );
+}
+
+function waitForRetry(delay: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.reject(
+      new DOMException("The operation was aborted", "AbortError"),
+    );
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      window.clearTimeout(timer);
+      reject(new DOMException("The operation was aborted", "AbortError"));
+    };
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, delay);
+    signal.addEventListener("abort", onAbort, { once: true });
   });
+}
+
+function terminalMessageStatus(status?: string): StoredMessage["status"] {
+  if (status === "cancelled" || status === "stopped") return "stopped";
+  if (status === "failed" || status === "timed_out") return "failed";
+  return "completed";
 }
 
 interface ChatContainerProps {
@@ -71,8 +110,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   onLoadEarlierMessages,
 }) => {
   const { csrfToken } = useAuth();
-  const [messages, setMessages] = useState<Message[]>(
-    () => initialMessages.map(toViewMessage),
+  const [messages, setMessages] = useState<Message[]>(() =>
+    initialMessages.map(toViewMessage),
   );
   const [isFollowingLatest, setIsFollowingLatest] = useState(true);
 
@@ -81,13 +120,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   const isFollowingLatestRef = useRef(true);
   const lastScrollTopRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const activeRunRef = useRef<{
-    id: string;
-    protocolVersion: number;
-  } | null>(null);
-  const stopRequestedRef = useRef(false);
-  const cancellationInFlightRef = useRef(false);
   const mountedRef = useRef(true);
+  const [runState, setRunState] = useState<RunLifecycleState>(idleRunLifecycle);
+  const runStateRef = useRef<RunLifecycleState>(runState);
+
+  const transitionRun = useCallback((action: RunLifecycleAction) => {
+    const next = runLifecycleReducer(runStateRef.current, action);
+    runStateRef.current = next;
+    if (mountedRef.current) setRunState(next);
+    return next;
+  }, []);
 
   useEffect(() => {
     setMessages((current) => {
@@ -109,7 +151,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       return earlier.length > 0 ? [...earlier, ...merged] : merged;
     });
   }, [initialMessages]);
-  
+
   // 移除：streamRef, streamingMessageId, streamingContent 相关的状态和 Effect
   // 这些中间状态是导致卡顿和逻辑复杂的元凶
 
@@ -118,16 +160,19 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     setIsFollowingLatest(following);
   }, []);
 
-  const scrollToLatest = useCallback((behavior: ScrollBehavior = "auto") => {
-    const el = listRef.current;
-    if (!el) return;
+  const scrollToLatest = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      const el = listRef.current;
+      if (!el) return;
 
-    setFollowingLatest(true);
-    requestAnimationFrame(() => {
-      el.scrollTo({ top: el.scrollHeight, behavior });
-      lastScrollTopRef.current = el.scrollTop;
-    });
-  }, [setFollowingLatest]);
+      setFollowingLatest(true);
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior });
+        lastScrollTopRef.current = el.scrollTop;
+      });
+    },
+    [setFollowingLatest],
+  );
 
   // 仅当用户仍在阅读最新内容时跟随流式回复。
   useEffect(() => {
@@ -156,7 +201,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     if (!el) return;
 
     const currentScrollTop = el.scrollTop;
-    const distanceToBottom = el.scrollHeight - currentScrollTop - el.clientHeight;
+    const distanceToBottom =
+      el.scrollHeight - currentScrollTop - el.clientHeight;
     const isNearBottom = distanceToBottom <= 80;
     const isScrollingUp = currentScrollTop < lastScrollTopRef.current - 2;
 
@@ -169,9 +215,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     lastScrollTopRef.current = currentScrollTop;
   }, [setFollowingLatest]);
 
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
-
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -181,211 +224,323 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     };
   }, []);
 
-  const requestRunCancellation = useCallback(async (
-    activeRun: { id: string; protocolVersion: number },
-  ) => {
-    if (cancellationInFlightRef.current) return;
-
-    cancellationInFlightRef.current = true;
-    try {
-      await cancelAgentRun(activeRun.id, csrfToken);
-      // Keep consuming the stream until Go emits its authoritative terminal
-      // event. Aborting here can make the UI say "stopped" while the Run is
-      // still active in PostgreSQL.
-    } catch (error) {
-      console.error("取消生成失败:", error);
-      stopRequestedRef.current = false;
-      if (mountedRef.current) {
-        setIsCancelling(false);
-        toast.error("取消失败，任务仍在运行，可再次点击停止");
+  const requestRunCancellation = useCallback(
+    async (runID: string) => {
+      transitionRun({ type: "cancel_requested", runID });
+      try {
+        await cancelAgentRun(runID, csrfToken);
+        // Keep consuming the stream until Go emits its authoritative terminal
+        // event. Aborting here can make the UI say "stopped" while the Run is
+        // still active in PostgreSQL.
+      } catch (error) {
+        console.error("取消生成失败:", error);
+        transitionRun({ type: "cancel_failed", runID });
+        if (mountedRef.current) {
+          toast.error("取消失败，任务仍在运行，可再次点击停止");
+        }
       }
-    } finally {
-      cancellationInFlightRef.current = false;
-    }
-  }, [csrfToken]);
+    },
+    [csrfToken, transitionRun],
+  );
 
   const handleStop = useCallback(() => {
-    if (!abortControllerRef.current || cancellationInFlightRef.current) return;
-    stopRequestedRef.current = true;
-    setIsCancelling(true);
-    const activeRun = activeRunRef.current;
-    if (activeRun) {
-      void requestRunCancellation(activeRun);
-    }
+    const activeRun = runStateRef.current;
+    if (activeRun.phase !== "active") return;
+    void requestRunCancellation(activeRun.runID);
   }, [requestRunCancellation]);
 
-  const handleSend = useCallback(async (text: string, deep: boolean) => {
-    scrollToLatest();
+  const followRun = useCallback(
+    async (
+      runID: string,
+      assistantMessageID: string,
+      controller: AbortController,
+    ) => {
+      let streamState = {
+        ...createConversationStreamState(),
+        isStreaming: true,
+      };
+      let terminalReceived = false;
+      let retryAttempt = 0;
+      let reconnectNoticeShown = false;
 
-    const clientMessageID = uid();
-    const userMsg: Message = {
-      id: clientMessageID,
-      role: "user",
-      content: text,
-      status: "completed",
-    };
-    setMessages((prev) => [...prev, userMsg]);
+      while (!controller.signal.aborted && !terminalReceived) {
+        try {
+          await attachAgentRun(
+            runID,
+            streamState.lastSequence,
+            (event: ConversationStreamEvent) => {
+              const sequence = "sequence" in event ? event.sequence : undefined;
+              if (
+                sequence !== undefined &&
+                sequence <= streamState.lastSequence
+              )
+                return;
 
-    const assistantId = uid();
-    // 初始状态：thinking 为 true，content 为空
-    setMessages((prev) => [...prev, {
-      id: assistantId,
-      role: "assistant",
-      content: "",
-      status: "streaming",
-      thinking: true,
-      thinkingFinished: false,
-    }]);
+              streamState = conversationStreamReducer(streamState, event);
+              transitionRun({
+                type: "event_confirmed",
+                runID,
+                sequence,
+              });
 
-    // 如果有之前的请求，取消它
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+              if (event.type === "done") {
+                terminalReceived = true;
+                const status = terminalMessageStatus(event.status);
+                setMessages((current) =>
+                  current.map((message) =>
+                    message.id === assistantMessageID
+                      ? {
+                          ...message,
+                          content: streamState.answer || message.content,
+                          activities: streamState.activities,
+                          artifacts: streamState.artifacts,
+                          status,
+                          thinking: false,
+                          thinkingFinished: true,
+                        }
+                      : message,
+                  ),
+                );
+                transitionRun({ type: "done", runID });
+                return;
+              }
+
+              setMessages((current) =>
+                current.map((message) =>
+                  message.id === assistantMessageID
+                    ? {
+                        ...message,
+                        content: streamState.answer,
+                        activities: streamState.activities,
+                        artifacts: streamState.artifacts,
+                        status: "streaming",
+                        thinking: true,
+                        thinkingFinished: false,
+                      }
+                    : message,
+                ),
+              );
+            },
+            controller.signal,
+          );
+          retryAttempt = 0;
+        } catch (error) {
+          if ((error as Error).name === "AbortError") throw error;
+          console.error("运行连接中断:", error);
+          if (!reconnectNoticeShown && mountedRef.current) {
+            reconnectNoticeShown = true;
+            toast.error(
+              (error as Error).message || "运行连接中断，正在重新连接",
+            );
+          }
+        }
+
+        if (!terminalReceived) {
+          retryAttempt += 1;
+          await waitForRetry(
+            Math.min(250 * 2 ** (retryAttempt - 1), 2000),
+            controller.signal,
+          );
+        }
+      }
+
+      if (terminalReceived) onConversationChanged?.();
+    },
+    [onConversationChanged, transitionRun],
+  );
+
+  const recoverableAssistantID = initialMessages.find(
+    (message) => message.role === "assistant" && message.status === "streaming",
+  )?.id;
+
+  useEffect(() => {
+    if (
+      !conversationId ||
+      !recoverableAssistantID ||
+      runStateRef.current.phase !== "idle"
+    )
+      return;
 
     const controller = new AbortController();
-    abortControllerRef.current = controller;
-    setIsGenerating(true);
-    let createdConversation: Conversation | null = null;
-    let streamState = createConversationStreamState();
-    let terminalStatus: string | undefined;
-    activeRunRef.current = null;
-    stopRequestedRef.current = false;
+    let disposed = false;
+    void listAgentRuns()
+      .then((response) => {
+        if (disposed) return;
+        const activeRun = response.items.find(
+          (run) =>
+            run.conversation_id === conversationId &&
+            ["queued", "running", "cancel_requested"].includes(run.status),
+        );
+        if (!activeRun) return;
 
-    try {
-      const agentName = deep ? "research_agent" : undefined;
-      let targetConversationID = conversationId || "";
-      if (!targetConversationID) {
-        createdConversation = await createConversation(csrfToken, agentName);
-        targetConversationID = createdConversation.id;
-      }
+        abortControllerRef.current?.abort();
+        abortControllerRef.current = controller;
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === recoverableAssistantID
+              ? {
+                  ...message,
+                  content: "",
+                  activities: [],
+                  artifacts: [],
+                  status: "streaming",
+                  thinking: true,
+                  thinkingFinished: false,
+                }
+              : message,
+          ),
+        );
+        transitionRun({
+          type: "run_available",
+          runID: activeRun.id,
+          assistantMessageID: recoverableAssistantID,
+          protocolVersion: activeRun.protocol_version,
+          status: activeRun.status,
+        });
+        return followRun(activeRun.id, recoverableAssistantID, controller);
+      })
+      .catch((error) => {
+        if ((error as Error).name !== "AbortError" && !disposed) {
+          console.error("恢复运行失败:", error);
+          toast.error("暂时无法恢复运行，正在保留服务端状态");
+        }
+      })
+      .finally(() => {
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
+      });
 
-      // 使用局部变量累积文本，直接更新 Messages
-      await postConversationStream(
-        targetConversationID,
+    return () => {
+      disposed = true;
+      controller.abort();
+    };
+  }, [conversationId, followRun, recoverableAssistantID, transitionRun]);
+
+  const handleSend = useCallback(
+    async (text: string, deep: boolean) => {
+      if (isRunBusy(runStateRef.current)) return;
+      scrollToLatest();
+
+      const clientMessageID = uid();
+      const userMsg: Message = {
+        id: clientMessageID,
+        role: "user",
+        content: text,
+        status: "completed",
+      };
+      setMessages((prev) => [...prev, userMsg]);
+
+      const assistantId = uid();
+      // 初始状态：thinking 为 true，content 为空
+      setMessages((prev) => [
+        ...prev,
         {
-          content: text,
-          client_message_id: clientMessageID,
-          agent_name: agentName,
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          status: "streaming",
+          thinking: true,
+          thinkingFinished: false,
         },
-        csrfToken,
-        (event) => {
-          streamState = conversationStreamReducer(streamState, event);
-          if (event.type === "meta") {
-            activeRunRef.current = {
-              id: event.run_id,
-              protocolVersion: event.protocol_version ?? 0,
-            };
-            if (stopRequestedRef.current) {
-              void requestRunCancellation(activeRunRef.current);
-            }
-            setMessages((prev) => prev.map((message) => {
-              if (message.id === clientMessageID) {
-                return { ...message, id: event.user_message_id };
-              }
-              if (message.id === assistantId) {
-                return { ...message, id: event.assistant_message_id };
-              }
-              return message;
-            }));
-            return;
-          }
-          if (event.type === "done") {
-            terminalStatus = streamState.terminalStatus;
-            return;
-          }
-          setMessages((prev) =>
-            prev.map((message) => {
-              const isActiveAssistant =
-                message.id === assistantId ||
-                (message.role === "assistant" &&
-                  message.status === "streaming");
-              if (!isActiveAssistant) return message;
-              return {
-                ...message,
-                content: streamState.answer,
-                activities: streamState.activities,
-                artifacts: streamState.artifacts,
-                status: event.type === "error" ? "failed" : "streaming",
-                thinking: streamState.isStreaming,
-                thinkingFinished: !streamState.isStreaming,
-              };
-            }),
-          );
-        },
-        controller.signal
-      );
+      ]);
 
-      if (terminalStatus === "stopped" || terminalStatus === "cancelled") {
-        setMessages((prev) => prev.map((message) =>
-          message.role === "assistant" && message.status === "streaming"
-            ? {
-                ...message,
-                status: "stopped",
-                thinking: false,
-                thinkingFinished: true,
-              }
-            : message,
-        ));
-        return;
-      }
-      
-      if (!streamState.answer) {
-        throw new Error("流式输出未收到任何内容");
-      }
-      setMessages((prev) => prev.map((message) =>
-        message.role === "assistant" && message.status === "streaming"
-          ? {
-              ...message,
-              status: "completed",
-              thinking: false,
-              thinkingFinished: true,
-            }
-          : message,
-      ));
-    } catch (err: unknown) {
-      // Abort only represents a local stream teardown (for example component
-      // unmount). A successful cancellation is reported by the server's done
-      // event and must not be inferred from AbortError.
-      if ((err as Error).name === "AbortError") {
-        return;
-      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      transitionRun({ type: "create_started" });
+      let createdConversation: Conversation | null = null;
+      let conversationCreatedNotified = false;
+      let runCreated = false;
 
-      console.error("对话失败:", err);
-      toast.error((err as Error)?.message || "生成失败，请重试");
-      setMessages((prev) => prev.map((m) => 
-        m.role === "assistant" && m.status === "streaming"
-          ? { 
-              ...m, 
-              content: streamState.answer,
-              activities: streamState.activities,
-              artifacts: streamState.artifacts,
-              status: "failed",
-              thinking: false,
-              thinkingFinished: true,
+      try {
+        const agentName = deep ? "research_agent" : undefined;
+        let targetConversationID = conversationId || "";
+        if (!targetConversationID) {
+          createdConversation = await createConversation(csrfToken, agentName);
+          targetConversationID = createdConversation.id;
+        }
+
+        const run = await createAgentRun(
+          targetConversationID,
+          {
+            content: text,
+            client_message_id: clientMessageID,
+            idempotency_key: clientMessageID,
+            agent_name: agentName,
+          },
+          csrfToken,
+        );
+        runCreated = true;
+        setMessages((current) =>
+          current.map((message) => {
+            if (message.id === clientMessageID) {
+              return { ...message, id: run.user_message_id };
             }
-          : m
-      ));
-    } finally {
-      abortControllerRef.current = null;
-      activeRunRef.current = null;
-      stopRequestedRef.current = false;
-      if (mountedRef.current) {
-        setIsGenerating(false);
-        setIsCancelling(false);
+            if (message.id === assistantId) {
+              return { ...message, id: run.assistant_message_id };
+            }
+            return message;
+          }),
+        );
+        transitionRun({
+          type: "run_available",
+          runID: run.run_id,
+          assistantMessageID: run.assistant_message_id,
+          protocolVersion: run.protocol_version,
+          status: run.status,
+        });
         if (createdConversation) {
+          conversationCreatedNotified = true;
           onConversationCreated?.(createdConversation);
         }
-        onConversationChanged?.();
+        await followRun(run.run_id, run.assistant_message_id, controller);
+      } catch (err: unknown) {
+        // Abort only represents a local stream teardown (for example component
+        // unmount). A successful cancellation is reported by the server's done
+        // event and must not be inferred from AbortError.
+        if ((err as Error).name === "AbortError") {
+          return;
+        }
+
+        console.error("对话失败:", err);
+        toast.error((err as Error)?.message || "生成失败，请重试");
+        if (!runCreated) transitionRun({ type: "create_failed" });
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId && m.status === "streaming"
+              ? {
+                  ...m,
+                  status: "failed",
+                  thinking: false,
+                  thinkingFinished: true,
+                }
+              : m,
+          ),
+        );
+      } finally {
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
+        if (mountedRef.current) {
+          if (createdConversation && !conversationCreatedNotified) {
+            onConversationCreated?.(createdConversation);
+          }
+        }
       }
-    }
-  }, [
-    conversationId,
-    csrfToken,
-    onConversationChanged,
-    onConversationCreated,
-    requestRunCancellation,
-    scrollToLatest,
-  ]);
+    },
+    [
+      conversationId,
+      csrfToken,
+      onConversationCreated,
+      followRun,
+      scrollToLatest,
+      transitionRun,
+    ],
+  );
+
+  const isGenerating = isRunBusy(runState);
+  const isCancelling = runState.phase === "cancelling";
+  const canStop = canCancelRun(runState);
 
   const suggestions = [
     {
@@ -441,14 +596,17 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                       key={suggestion.label}
                       type="button"
                       onClick={() => void handleSend(suggestion.prompt, false)}
-                      className="group flex min-h-24 flex-col justify-between rounded-2xl border border-white/80 bg-white/65 p-4 text-left shadow-[0_12px_40px_-28px_rgba(31,41,70,0.35)] backdrop-blur transition hover:-translate-y-1 hover:border-violet-300/60 hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 motion-reduce:transform-none dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:border-violet-400/25 dark:hover:bg-white/[0.06]"
+                      className="group flex min-h-24 flex-col justify-between rounded-2xl border border-white/80 bg-white/65 p-4 text-left shadow-[0_12px_40px_-28px_rgba(31,41,70,0.35)] backdrop-blur transition-[color,background-color,border-color,transform] hover:-translate-y-1 hover:border-violet-300/60 hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 motion-reduce:transform-none dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:border-violet-400/25 dark:hover:bg-white/[0.06]"
                     >
                       <span className="text-sm font-medium text-foreground">
                         {suggestion.label}
                       </span>
                       <span className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
                         开始对话
-                        <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                        <ArrowUpRight
+                          className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                          aria-hidden="true"
+                        />
                       </span>
                     </button>
                   ))}
@@ -462,9 +620,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                       type="button"
                       onClick={onLoadEarlierMessages}
                       disabled={loadingEarlierMessages}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-3 py-1.5 text-[11px] text-muted-foreground transition hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border/70 bg-background/75 px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
                     >
-                      {loadingEarlierMessages && <LoaderCircle className="h-3 w-3 animate-spin" />}
+                      {loadingEarlierMessages && (
+                        <LoaderCircle
+                          className="h-3 w-3 animate-spin motion-reduce:animate-none"
+                          aria-hidden="true"
+                        />
+                      )}
                       加载更早消息
                     </button>
                   </div>
@@ -495,10 +658,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           <button
             type="button"
             onClick={() => scrollToLatest("smooth")}
-            className="pointer-events-auto absolute left-1/2 top-1 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border/80 bg-background/95 px-3.5 py-2 text-xs font-medium text-foreground shadow-[0_10px_30px_-12px_rgba(31,41,70,0.45)] backdrop-blur transition hover:-translate-y-0.5 hover:bg-background focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 motion-reduce:transform-none"
+            className="pointer-events-auto absolute left-1/2 top-1 inline-flex min-h-11 -translate-x-1/2 items-center gap-1.5 rounded-full border border-border/80 bg-background/95 px-3.5 py-2 text-xs font-medium text-foreground shadow-[0_10px_30px_-12px_rgba(31,41,70,0.45)] backdrop-blur transition-[color,background-color,transform] hover:-translate-y-0.5 hover:bg-background focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 motion-reduce:transform-none"
             aria-label="回到最新消息"
           >
-            <ArrowDown className="h-3.5 w-3.5" />
+            <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
             回到最新
           </button>
         )}
@@ -507,6 +670,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             onSend={handleSend}
             loading={isGenerating}
             stopping={isCancelling}
+            canStop={canStop}
             onStop={handleStop}
           />
           <p className="mt-2.5 text-center text-[10px] text-muted-foreground">
