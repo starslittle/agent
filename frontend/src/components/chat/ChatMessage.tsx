@@ -8,17 +8,24 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Copy, Check, Brain, ChevronDown, ChevronRight, Download, Maximize2, Minimize2 } from "lucide-react";
+import { Copy, Check, ListTree, ChevronDown, ChevronRight, Download, Maximize2, Minimize2, Sparkles, ArrowRight, FileText } from "lucide-react";
 import { useStreamMarkdownBuffer } from "@/hooks/useStreamMarkdownBuffer";
 import { useSmoothTyping } from "@/hooks/useSmoothTyping";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { RuntimeActivity, RuntimeCitation } from "@/lib/chat-api";
+import type { RuntimeActivity, RuntimeArtifact, RuntimeCitation } from "@/lib/chat-api";
 import { RuntimeActivityList } from "./RuntimeActivityList";
 import { CitationList } from "@/features/citations/CitationList";
 import {
   formatCitedAnswerForCopy,
   remarkCitationMarkers,
 } from "@/features/citations/citations";
+import { QidianMark } from "@/brand/QidianMark";
+import {
+  getVisibleSkill,
+  skillSourceLabel,
+  type SkillID,
+  type SkillSelectionSource,
+} from "@/features/skills/skills";
 
 export type ChatRole = "user" | "assistant";
 
@@ -31,6 +38,15 @@ export interface ChatMessageProps {
   thinkingFinished?: boolean;
   activities?: RuntimeActivity[];
   citations?: RuntimeCitation[];
+  artifacts?: RuntimeArtifact[];
+  skillID?: SkillID | null;
+  skillSource?: SkillSelectionSource | null;
+  confirmation?: {
+    skillID: SkillID;
+    confidence: number;
+    prompt: string;
+  };
+  onConfirmSkill?: (skillID: SkillID, prompt: string) => void;
 }
 
 const ThinkingProcess: React.FC<{ thoughts: string[]; thinkingFinished?: boolean }> = ({ thoughts, thinkingFinished }) => {
@@ -47,10 +63,10 @@ const ThinkingProcess: React.FC<{ thoughts: string[]; thinkingFinished?: boolean
   return (
     <div className="mb-4">
       <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full">
-        <CollapsibleTrigger className="flex items-center gap-2 text-xs font-medium text-primary hover:text-primary/80 transition-colors group">
+        <CollapsibleTrigger className="group flex min-h-11 items-center gap-2 text-xs font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <div className="flex items-center gap-1.5 bg-primary/10 px-2 py-1 rounded-md border border-primary/20 group-hover:bg-primary/15 transition-colors">
-            <Brain size={14} className="text-primary" />
-            <span>深度思考</span>
+            <ListTree size={14} className="text-primary" />
+            <span>历史运行记录</span>
             {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </div>
         </CollapsibleTrigger>
@@ -185,6 +201,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   thinkingFinished,
   activities = [],
   citations = [],
+  artifacts = [],
+  skillID,
+  skillSource,
+  confirmation,
+  onConfirmSkill,
 }) => {
   const isUser = role === "user";
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null);
@@ -211,6 +232,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     [stableMarkdown, normalizedAnswer]
   );
   const tableRenderIndexRef = React.useRef(0);
+  const resolvedSkill = getVisibleSkill(skillID);
+  const suggestedSkill = getVisibleSkill(confirmation?.skillID);
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -267,17 +290,21 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     <article className={`group/message flex w-full flex-col ${isUser ? "items-end" : "items-start"}`}>
       {!isUser && (
         <div className="mb-2 flex items-center gap-2 px-1">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#121629] text-[10px] font-bold text-white shadow-sm dark:bg-white dark:text-[#121629]">
-            奇
-          </span>
-          <span className="text-xs font-medium text-muted-foreground">奇点AI</span>
+          <QidianMark className="h-7 w-7" />
+          <span className="text-xs font-medium text-muted-foreground">启点助手</span>
+          {(resolvedSkill || skillSource) && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">
+              <Sparkles className="h-3 w-3" aria-hidden="true" />
+              {resolvedSkill?.label ?? "直接回答"} · {skillSourceLabel(skillSource)}
+            </span>
+          )}
         </div>
       )}
       <div
         className={
           isUser
-            ? "max-w-[82%] rounded-[1.35rem] rounded-br-md bg-[#121629] px-4 py-3 text-white shadow-[0_12px_28px_-18px_rgba(18,22,41,0.8)] dark:bg-white dark:text-[#121629]"
-            : "max-w-full rounded-[1.5rem] rounded-tl-md border border-white/80 bg-white/75 px-5 py-4 text-foreground shadow-[0_14px_42px_-30px_rgba(31,41,70,0.35)] backdrop-blur dark:border-white/[0.08] dark:bg-white/[0.045]"
+            ? "max-w-[82%] rounded-[1.25rem] rounded-br-md bg-primary px-4 py-3 text-primary-foreground"
+            : "max-w-full rounded-[1.25rem] rounded-tl-md border border-border bg-card px-5 py-4 text-card-foreground"
         }
       >
         {!isUser && (
@@ -286,7 +313,47 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             messageStatus={status}
           />
         )}
-        {thinking && !displayedContent && activities.length === 0 ? (
+        {!isUser && artifacts.length > 0 && (
+          <section className="mb-4" aria-label="运行产物">
+            <p className="mb-2 text-[11px] font-medium text-muted-foreground">产物</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {artifacts.map((artifact) => (
+                <div key={artifact.artifact_id} className="flex min-h-14 items-center gap-3 rounded-xl border border-border bg-muted/45 px-3">
+                  <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-foreground">{artifact.artifact_type}</p>
+                    <p className="truncate font-mono text-[10px] text-muted-foreground">{artifact.artifact_id}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+        {!isUser && confirmation && suggestedSkill && (
+          <section className="mb-4 rounded-xl border border-primary/25 bg-primary/5 p-4" aria-label="需要确认 Skill">
+            <div className="flex items-start gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-semibold text-foreground">是否使用{suggestedSkill.label}？</h3>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  启点识别到这个方向，但不会自动启用。确认后会创建一条新的显式 Skill 消息。
+                </p>
+                <button
+                  type="button"
+                  disabled={!confirmation.prompt || !onConfirmSkill}
+                  onClick={() => onConfirmSkill?.(confirmation.skillID, confirmation.prompt)}
+                  className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-xs font-medium text-primary-foreground transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none"
+                >
+                  使用{suggestedSkill.label}继续
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+        {thinking && !displayedContent && activities.length === 0 && !confirmation ? (
           <div className="space-y-2">
             <div className="h-4 w-40 bg-muted rounded animate-pulse" />
             <div className="h-4 w-64 bg-muted rounded animate-pulse" />
@@ -316,8 +383,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                       <div className="flex items-center justify-between bg-neutral-800 text-neutral-200 px-4 py-2 rounded-t-lg text-xs font-mono">
                         <span>{language}</span>
                         <button
+                          type="button"
                           onClick={() => handleCopyCode(codeString)}
-                          className="flex items-center gap-1 hover:bg-neutral-700 px-2 py-1 rounded transition-colors"
+                          className="flex min-h-11 items-center gap-1 rounded px-3 transition-colors hover:bg-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                           title="复制代码"
                         >
                           {copiedCode === codeString ? (
@@ -436,7 +504,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                             <button
                               type="button"
                               onClick={() => handleCopyTable(tableIdx)}
-                              className="inline-flex items-center justify-center rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
+                              className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               title="复制该表格"
                               aria-label="复制该表格"
                             >
@@ -445,7 +513,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                             <button
                               type="button"
                               onClick={() => handleDownloadTable(tableIdx)}
-                              className="inline-flex items-center justify-center rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
+                              className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               title="下载 TSV"
                               aria-label="下载 TSV"
                             >
@@ -454,7 +522,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                             <button
                               type="button"
                               onClick={() => toggleTableExpanded(tableIdx)}
-                              className="inline-flex items-center justify-center rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
+                              className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               title={isExpanded ? "收起表格" : "展开表格"}
                               aria-label={isExpanded ? "收起表格" : "展开表格"}
                             >
@@ -518,7 +586,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             <button
               type="button"
               onClick={handleCopyMessage}
-              className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground opacity-100 transition-[opacity,color,background-color] hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 sm:opacity-0 sm:group-hover/message:opacity-100 sm:group-focus-within/message:opacity-100"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground opacity-100 transition-[opacity,color,background-color] hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:opacity-0 sm:group-hover/message:opacity-100 sm:group-focus-within/message:opacity-100"
               title={copiedMessage ? "已复制" : "复制消息"}
               aria-label={copiedMessage ? "消息已复制" : "复制消息"}
             >

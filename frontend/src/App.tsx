@@ -23,14 +23,7 @@ const App = () => (
             <Routes>
               <Route path="/login" element={<AuthPage />} />
               <Route path="/register" element={<AuthPage />} />
-              <Route
-                path="/"
-                element={(
-                  <ProtectedRoute>
-                    <Index />
-                  </ProtectedRoute>
-                )}
-              />
+              <Route path="/" element={<Index />} />
               <Route
                 path="/chat/:conversationId"
                 element={(

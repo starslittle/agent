@@ -1,10 +1,16 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Brain, LoaderCircle, Plus, Send, Square } from "lucide-react";
+import {
+  filterVisibleSkills,
+  getVisibleSkill,
+  selectComposerSkill,
+  type SkillID,
+} from "@/features/skills/skills";
+import { ChevronRight, LoaderCircle, Send, Sparkles, Square, X } from "lucide-react";
 
 interface ChatInputProps {
-  onSend: (text: string, deepThinking: boolean) => void;
+  onSend: (text: string, requestedSkill: SkillID | null) => void;
   loading?: boolean;
   stopping?: boolean;
   canStop?: boolean;
@@ -19,46 +25,79 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onStop,
 }) => {
   const [value, setValue] = useState("");
-  const [deep, setDeep] = useState(false);
+  const [selectedSkill, setSelectedSkill] = useState<SkillID | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [sending, setSending] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const slashQuery = value.startsWith("/") ? value.slice(1).split(/\s/, 1)[0] : "";
+  const filteredSkills = useMemo(
+    () => filterVisibleSkills(slashQuery),
+    [slashQuery],
+  );
+  const skill = getVisibleSkill(selectedSkill);
 
   const autosize = () => {
     const element = taRef.current;
     if (!element) return;
-    const base = 24;
-    const max = 160;
     element.style.height = "0px";
-    const next = Math.min(Math.max(element.scrollHeight, base), max);
-    element.style.height = `${next}px`;
+    element.style.height = `${Math.min(Math.max(element.scrollHeight, 24), 160)}px`;
   };
 
   useEffect(() => {
     autosize();
   }, [value]);
 
+  useEffect(() => {
+    setActiveIndex(0);
+    if (value.startsWith("/") && !selectedSkill) setMenuOpen(true);
+  }, [selectedSkill, slashQuery, value]);
+
+  const chooseSkill = (skillID: SkillID) => {
+    const next = selectComposerSkill({ selectedSkill, value }, skillID);
+    setSelectedSkill(next.selectedSkill);
+    setValue(next.value);
+    setMenuOpen(false);
+    requestAnimationFrame(() => taRef.current?.focus());
+  };
+
   const handleSend = () => {
     if (loading) return;
     const text = value.trim();
-    if (!text && !file) return;
+    if (!text) return;
     setSending(true);
-    onSend(text || (file ? "[已附加图片]" : ""), deep);
+    onSend(text, selectedSkill);
     setValue("");
-    setFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    setSelectedSkill(null);
+    setMenuOpen(false);
     window.setTimeout(() => setSending(false), 200);
   };
 
-  const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (
-    event,
-  ) => {
-    if (
-      event.key === "Enter" &&
-      !event.shiftKey &&
-      !event.nativeEvent.isComposing
-    ) {
+  const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
+    if (menuOpen && filteredSkills.length > 0) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        setActiveIndex((current) =>
+          (current + direction + filteredSkills.length) % filteredSkills.length,
+        );
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMenuOpen(false);
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        chooseSkill(filteredSkills[activeIndex].id);
+        return;
+      }
+    }
+
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       handleSend();
     }
@@ -73,25 +112,84 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         : "发送消息";
 
   return (
-    <div className="w-full">
-      <div className="rounded-[1.6rem] border border-white/90 bg-white/90 p-2.5 shadow-[0_20px_60px_-28px_rgba(31,41,70,0.4)] backdrop-blur-xl dark:border-white/10 dark:bg-[#111521]/90 dark:shadow-[0_20px_60px_-28px_rgba(0,0,0,0.9)]">
+    <div className="relative w-full">
+      {menuOpen && (
+        <div
+          ref={menuRef}
+          id="skill-menu"
+          className="absolute inset-x-0 bottom-[calc(100%+0.5rem)] z-40 overflow-hidden rounded-2xl border border-border bg-popover p-2 shadow-lg sm:left-0 sm:right-auto sm:w-[22rem]"
+          role="listbox"
+          aria-label="选择 Skill"
+        >
+          <div className="px-3 pb-2 pt-1">
+            <p className="text-xs font-medium text-foreground">选择 Skill</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              仅对这一条消息生效
+            </p>
+          </div>
+          {filteredSkills.length > 0 ? (
+            filteredSkills.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                role="option"
+                aria-selected={index === activeIndex}
+                onMouseEnter={() => setActiveIndex(index)}
+                onClick={() => chooseSkill(item.id)}
+                className={cn(
+                  "flex min-h-14 w-full items-center gap-3 rounded-xl px-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  index === activeIndex ? "bg-muted" : "hover:bg-muted/70",
+                )}
+              >
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-medium text-foreground">{item.label}</span>
+                    <code className="text-[11px] text-muted-foreground">{item.command}</code>
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                    {item.description}
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              </button>
+            ))
+          ) : (
+            <p className="px-3 py-4 text-xs text-muted-foreground">没有匹配的可用 Skill</p>
+          )}
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-border bg-background p-2 shadow-[0_12px_36px_-24px_rgba(29,36,33,0.34)]">
+        {skill && (
+          <div className="mb-1.5 flex items-center px-1">
+            <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-primary/10 pl-3 pr-1.5 text-xs font-medium text-primary">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              {skill.label}
+              <button
+                type="button"
+                onClick={() => setSelectedSkill(null)}
+                className="relative grid h-8 w-8 place-items-center rounded-full before:absolute before:-inset-1.5 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`移除${skill.label}`}
+              >
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </span>
+          </div>
+        )}
+
         <div className="flex items-end gap-2">
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-            aria-label="上传图片"
-            title="上传图片"
+            onClick={() => setMenuOpen((current) => !current)}
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="选择 Skill"
+            aria-expanded={menuOpen}
           >
-            <Plus size={19} aria-hidden="true" />
+            <span className="font-mono text-base" aria-hidden="true">/</span>
           </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(event) => setFile(event.target.files?.[0] || null)}
-          />
 
           <Textarea
             ref={taRef}
@@ -103,82 +201,37 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onInput={autosize}
             rows={1}
             placeholder="描述你想解决的问题…"
-            className="min-h-11 max-h-32 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-3 text-sm leading-5 text-foreground shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
-            aria-label="聊天输入"
+            className="min-h-11 max-h-40 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-3 text-sm leading-5 text-foreground shadow-none placeholder:text-muted-foreground focus-visible:ring-0"
+            aria-label="消息内容"
+            aria-controls={menuOpen ? "skill-menu" : undefined}
           />
 
           <button
             type="button"
-            disabled={
-              stopping ||
-              (loading && !canStop) ||
-              (!loading && (sending || (!value.trim() && !file)))
-            }
+            disabled={stopping || (loading && !canStop) || (!loading && (sending || !value.trim()))}
             onClick={loading && canStop ? onStop : handleSend}
-            className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-[#121629] text-white shadow-[0_10px_24px_-12px_rgba(18,22,41,0.8)] transition-[color,background-color,transform,opacity] hover:-translate-y-0.5 hover:bg-[#1d2340] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transform-none dark:bg-white dark:text-[#121629] dark:hover:bg-white/90"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-[background-color,transform,opacity] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transform-none"
             title={actionLabel}
             aria-label={actionLabel}
           >
             {stopping ? (
-              <LoaderCircle
-                size={16}
-                className="animate-spin motion-reduce:animate-none"
-                aria-hidden="true"
-              />
+              <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
             ) : loading && canStop ? (
-              <Square size={13} className="fill-current" aria-hidden="true" />
+              <Square className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
             ) : loading ? (
-              <LoaderCircle
-                size={16}
-                className="animate-spin motion-reduce:animate-none"
-                aria-hidden="true"
-              />
+              <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
             ) : (
-              <Send size={17} aria-hidden="true" />
+              <Send className="h-4 w-4" aria-hidden="true" />
             )}
           </button>
         </div>
 
-        <div className="mt-1 flex items-center justify-between px-1">
-          <button
-            type="button"
-            onClick={() => setDeep(!deep)}
-            aria-pressed={deep}
-            className={cn(
-              "inline-flex h-11 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-              deep
-                ? "bg-violet-500/10 text-violet-700 dark:text-violet-300"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-            title="切换深度思考"
-          >
-            <Brain size={13} aria-hidden="true" />
-            深度思考
-            <span
-              aria-hidden="true"
-              className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                deep ? "bg-violet-500" : "bg-muted-foreground/35",
-              )}
-            />
-          </button>
-          <span className="pr-1 text-[10px] text-muted-foreground/70">
-            Enter 发送 · Shift + Enter 换行
-          </span>
+        <div className="mt-1 flex items-center justify-between px-2 pb-0.5 text-[10px] text-muted-foreground">
+          <span>输入 / 选择 Skill</span>
+          <span className="hidden sm:inline">Enter 发送 · Shift + Enter 换行</span>
         </div>
       </div>
-
-      {file && (
-        <div
-          className="mt-2 truncate px-4 text-xs text-muted-foreground"
-          aria-live="polite"
-        >
-          已选择图片：{file.name}
-        </div>
-      )}
-      <span className="sr-only" aria-live="polite">
-        {loading ? actionLabel : ""}
-      </span>
+      <span className="sr-only" aria-live="polite">{loading ? actionLabel : ""}</span>
     </div>
   );
 };

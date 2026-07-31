@@ -407,13 +407,12 @@ export async function listConversations(
 
 export async function createConversation(
   csrfToken: string,
-  agentName?: string,
 ): Promise<Conversation> {
   return apiRequest<Conversation>(
     "/api/v1/conversations",
     {
       method: "POST",
-      body: JSON.stringify({ agent_name: agentName || "default_llm_agent" }),
+      body: JSON.stringify({}),
     },
     csrfToken,
   );
@@ -505,6 +504,13 @@ export interface AgentRunSummary {
   started_at: string;
 }
 
+export interface AgentRunDetail {
+  run: AgentRunSummary;
+  spans: Array<Record<string, unknown>>;
+  events: Array<Record<string, unknown>>;
+  prompts: Array<Record<string, unknown>>;
+}
+
 interface AgentRunListResponse {
   items: AgentRunSummary[];
   next_before?: string | null;
@@ -516,7 +522,6 @@ export async function createAgentRun(
     content: string;
     client_message_id: string;
     idempotency_key: string;
-    agent_name?: string;
     model_id?: string;
     requested_skill?: string | null;
   },
@@ -537,7 +542,6 @@ export async function streamLegacyConversation(
   input: {
     content: string;
     client_message_id: string;
-    agent_name?: string;
     model_id?: string;
     requested_skill?: string | null;
   },
@@ -603,6 +607,12 @@ export async function listAgentRuns(
 ): Promise<AgentRunListResponse> {
   return apiRequest<AgentRunListResponse>(
     `/api/v1/agent-runs?limit=${encodeURIComponent(String(limit))}`,
+  );
+}
+
+export async function getAgentRun(runID: string): Promise<AgentRunDetail> {
+  return apiRequest<AgentRunDetail>(
+    `/api/v1/agent-runs/${encodeURIComponent(runID)}`,
   );
 }
 
