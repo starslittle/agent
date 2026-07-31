@@ -73,3 +73,11 @@
 - summary：新增强类型 Skill Manifest、仅含 Research/Fortune 的配置与启动即失败的稳定 Registry，未接入现有请求链；
 - validation：Skill tests 12 passed、Python unit 74 passed、Ruff passed；
 - risk：无。
+
+### TASK-008
+
+- commit：`b32b286`；
+- result：completed；
+- summary：新增稳定 `model_id=auto` Catalog，封存受控 provider/profile/model/能力与限制快照，不接受请求侧 Provider 参数或 Secret；
+- validation：Model tests 15 passed、Python unit 82 passed、Ruff passed；
+- risk：Windows 不展开 pytest 文件 glob，已改用两个明确测试文件执行同一范围。
