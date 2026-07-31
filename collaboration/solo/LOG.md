@@ -36,3 +36,11 @@
 - validation：`npm run lint`、`npm run test -- --run`（19 tests）、`npm run build`；
 - skills：保留既有聊天视觉语言，强化 44px 触控目标、焦点、IME、状态播报和 reduced-motion；
 - risk：lint 保留 8 条仓库既有 Fast Refresh warning；产品级场景统一在 Round E2E 验证。
+
+### TASK-006
+
+- commit：`b4c7ecb`；
+- result：completed；
+- summary：新增统一 P0 Runtime 验收入口、9 项 Product Run 风险映射，以及不持久化命令输出或敏感内容的 JSON/Markdown 摘要；
+- validation：隔离 PostgreSQL `full` profile，11 suites passed、9 risks passed；
+- risk：完整模式要求调用方提供专用测试数据库；报告目录被 Git 忽略，需由每次执行重新生成。

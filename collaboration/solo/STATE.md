@@ -14,14 +14,15 @@ completed:
   - TASK-003
   - TASK-004
   - TASK-005
+  - TASK-006
 
-current_task: TASK-006
-next_task: TASK-006
+current_task: TASK-007
+next_task: TASK-007
 
 start_gate: explicit_user_instruction_to_start_or_continue_solo
 production_authorized: false
 destructive_operations_authorized: false
 ```
 
-2026-07-31 TASK-005 已完成，当前执行 TASK-006。本轮不包含生产操作或破坏性
+2026-07-31 TASK-006 已完成，当前执行 TASK-007。本轮不包含生产操作或破坏性
 数据操作。
