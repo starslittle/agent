@@ -8,13 +8,14 @@ from agent.capabilities import (
 )
 from agent.tools.registry import get_tool_registry
 from agent.graph import build_root_graph
-from agent.models import ModelGateway, default_model_profiles
+from agent.models import ModelGateway, default_model_profiles, get_model_catalog
 from agent.specs import get_agent_catalog
 
 
 def validate_target_runtime() -> dict:
     """Validate target references and compile the graph without provider I/O."""
     catalog = get_agent_catalog()
+    model_catalog = get_model_catalog()
     profiles = {item.name: item for item in default_model_profiles()}
     required_model_capabilities = {
         "chat_v1": ("streaming",),
@@ -66,6 +67,8 @@ def validate_target_runtime() -> dict:
         "agents": catalog.names(),
         "workflows": ["chat_v1", "research_v1", "fortune_v1"],
         "model_profiles": sorted(profiles),
+        "model_ids": model_catalog.ids(available_only=True),
+        "model_catalog_fingerprint": model_catalog.fingerprint(),
         "capabilities": sorted(TARGET_CAPABILITY_SPECS),
         "graph": "qidian_root_v1",
     }
