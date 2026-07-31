@@ -89,3 +89,11 @@
 - summary：建立 Go/Python/Browser 一致的 model/Skill Run 契约、兼容适配、稳定解析事件、不可变创建字段和 PostgreSQL CAS 投影，并以 expand-only Migration 保留旧数据；
 - validation：Python 88 passed/2 skipped、Ruff passed；Go 全包 passed；隔离 PostgreSQL Migration、幂等及冲突写入 integration passed；前端 lint 0 errors（8 条既有 warning）与 build passed；
 - risk：保留既有前端 bundle 体积与 browserslist 陈旧提示；临时 PostgreSQL 已删除，未连接现有开发库。
+
+### TASK-010
+
+- commit：`643be64`（跨服务冻结补充 `eb1c7f9`）；
+- result：completed；
+- summary：新增唯一 Root Skill Resolver，支持显式、结构化自动路由、稳定置信度边界、失败回退和 Fortune 强制确认，并在执行前冻结到 provenance/Run Event；
+- validation：Root tests 21 passed、Python unit 98 passed、Ruff passed；Go 全包 passed；前端 lint 0 errors（8 条既有 warning）与 build passed；
+- risk：路由模型使用默认模型目录和 Provider 超时策略；产品级真实模型效果与确认交互进入 Round E2E。
