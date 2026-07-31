@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from agent.skills.protocol import SelectionSource
 
 
 PROTOCOL_VERSION = 1
@@ -79,6 +81,18 @@ class AgentRunRequest(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=128)
     conversation_id: str = Field(min_length=1, max_length=128)
     agent_name: str = Field(default="default_llm_agent", max_length=128)
+    model_id: str = Field(
+        default="auto",
+        pattern=r"^[a-z][a-z0-9_-]{0,63}$",
+    )
+    requested_skill: str | None = Field(
+        default=None,
+        pattern=r"^[a-z][a-z0-9_]{0,63}$",
+    )
+    resolved_skills: list[str] = Field(default_factory=list, max_length=1)
+    primary_skill: str | None = Field(default=None, max_length=64)
+    selection_source: SelectionSource | None = None
+    context_package_id: str | None = Field(default=None, max_length=128)
     mode: str | None = Field(default=None, max_length=64)
     query: str = Field(min_length=1, max_length=200_000)
     messages: list[ChatMessage] = Field(default_factory=list, max_length=200)
@@ -93,6 +107,7 @@ class AgentRunRequest(BaseModel):
         "idempotency_key",
         "conversation_id",
         "agent_name",
+        "model_id",
     )
     @classmethod
     def strip_identifiers(cls, value: str) -> str:
@@ -108,6 +123,36 @@ class AgentRunRequest(BaseModel):
         if not stripped:
             raise ValueError("query cannot be blank")
         return stripped
+
+    @field_validator("requested_skill", "primary_skill", "context_package_id")
+    @classmethod
+    def strip_optional_identifiers(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("optional identifier cannot be blank")
+        return stripped
+
+    @field_validator("resolved_skills")
+    @classmethod
+    def validate_resolved_skills(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip() for value in values]
+        if any(not value or len(value) > 64 for value in normalized):
+            raise ValueError("resolved skill ids must be non-empty and bounded")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("resolved skill ids must be unique")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_skill_projection(self) -> "AgentRunRequest":
+        expected_primary = self.resolved_skills[0] if self.resolved_skills else None
+        if self.primary_skill != expected_primary:
+            raise ValueError("primary_skill must match resolved_skills")
+        if self.selection_source is not None and not self.resolved_skills:
+            if self.selection_source not in {"direct", "fallback"}:
+                raise ValueError("empty skill resolution requires direct or fallback")
+        return self
 
 
 class AgentEvent(BaseModel):

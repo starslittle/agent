@@ -1,4 +1,10 @@
 from .registry import SkillRegistry, get_skill_registry, load_skill_registry
+from .protocol import (
+    ConflictingSkillRequestError,
+    SkillSelection,
+    UnknownRequestedSkillError,
+    resolve_compatible_selection,
+)
 from .types import (
     SkillBudgets,
     SkillManifest,
@@ -16,8 +22,12 @@ __all__ = [
     "SkillMemoryPolicy",
     "SkillModelRequirements",
     "SkillRegistry",
+    "SkillSelection",
     "SkillRiskPolicy",
     "SkillUI",
+    "ConflictingSkillRequestError",
+    "UnknownRequestedSkillError",
     "get_skill_registry",
     "load_skill_registry",
+    "resolve_compatible_selection",
 ]

@@ -298,7 +298,7 @@ async def test_two_registries_share_outbox_without_duplicate_execution():
 
     assert runtime.calls == 1
     assert attached.disposition == StartDisposition.ATTACHED
-    assert [event.sequence for event in events] == [1, 2, 3]
+    assert [event.sequence for event in events] == [1, 2, 3, 4]
     assert events[-1].type == "run.completed"
 
 
@@ -344,6 +344,7 @@ async def test_remote_registry_cancel_reaches_current_lease_owner():
     events = [event async for event in remote.events(attached)]
 
     assert [event.type for event in events] == [
+        "run.resolved",
         "run.started",
         "run.cancel_requested",
         "run.cancelled",
@@ -440,11 +441,12 @@ async def test_takeover_resumes_only_when_runtime_confirms_checkpoint():
 
     assert runtime.resume_values == [True]
     assert [event.type for event in events] == [
+        "run.resolved",
         "run.resumed",
         "answer.delta",
         "run.completed",
     ]
-    assert events[0].data["lease_epoch"] == 2
+    assert events[1].data["lease_epoch"] == 2
     assert (await registry.snapshot(request.execution_id)).status == (
         RunStatus.COMPLETED
     )

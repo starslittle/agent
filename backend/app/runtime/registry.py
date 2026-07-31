@@ -253,6 +253,21 @@ class ExecutionRegistry:
             ):
                 raise asyncio.CancelledError
             await self._transition(execution, RunStatus.RUNNING)
+            resolution = {
+                "model_id": execution.provenance.get("model_id", request.model_id),
+                "requested_skill": execution.provenance.get("requested_skill"),
+                "resolved_skills": execution.provenance.get("resolved_skills", []),
+                "primary_skill": execution.provenance.get("primary_skill"),
+                "selection_source": execution.provenance.get(
+                    "selection_source", "direct"
+                ),
+                "skill_snapshot": execution.provenance.get("skill_snapshot"),
+                "model_snapshot": execution.provenance.get("model_snapshot", {}),
+                "context_package_id": execution.provenance.get(
+                    "context_package_id"
+                ),
+            }
+            await self._publish(execution, "run.resolved", resolution)
             await self._publish(
                 execution,
                 "run.resumed" if resume else "run.started",
@@ -285,6 +300,7 @@ class ExecutionRegistry:
                         "workflow_name",
                         "",
                     ),
+                    **resolution,
                     **(
                         {"lease_epoch": execution.lease.lease_epoch}
                         if resume
@@ -633,6 +649,12 @@ class ExecutionRegistry:
             idempotency_key=record.idempotency_key,
             conversation_id="runtime-replay",
             agent_name=record.agent_name,
+            model_id=record.provenance.get("model_id", "auto"),
+            requested_skill=record.provenance.get("requested_skill"),
+            resolved_skills=record.provenance.get("resolved_skills", []),
+            primary_skill=record.provenance.get("primary_skill"),
+            selection_source=record.provenance.get("selection_source"),
+            context_package_id=record.provenance.get("context_package_id"),
             query="runtime replay",
             deadline_ms=max(
                 1000,

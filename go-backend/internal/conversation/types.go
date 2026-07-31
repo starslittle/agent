@@ -101,39 +101,51 @@ type Run struct {
 	AssistantMessageID string
 	RequestID          string
 	AgentName          string
+	ModelID            string
+	RequestedSkill     *string
+	ResolvedSkills     json.RawMessage
+	PrimarySkill       *string
+	SelectionSource    *string
+	ContextPackageID   *string
 	Status             string
 	ProtocolVersion    int
 	LastSequence       int64
 }
 
 type RunSummary struct {
-	ID               string     `json:"id"`
-	ExecutionID      string     `json:"execution_id"`
-	TraceID          string     `json:"trace_id"`
-	ConversationID   string     `json:"conversation_id"`
-	AgentName        string     `json:"agent_name"`
-	ActualRoute      *string    `json:"actual_route,omitempty"`
-	ModelName        *string    `json:"model_name,omitempty"`
-	Status           string     `json:"status"`
-	ProtocolVersion  int        `json:"protocol_version"`
-	ServiceVersion   *string    `json:"service_version,omitempty"`
-	AgentVersion     *string    `json:"agent_version,omitempty"`
-	GraphVersion     *string    `json:"graph_version,omitempty"`
-	PromptBundleHash *string    `json:"prompt_bundle_hash,omitempty"`
-	InputTokens      int64      `json:"input_tokens"`
-	OutputTokens     int64      `json:"output_tokens"`
-	CachedTokens     int64      `json:"cached_tokens"`
-	TotalTokens      int64      `json:"total_tokens"`
-	ModelCallCount   int        `json:"model_call_count"`
-	ToolCallCount    int        `json:"tool_call_count"`
-	RetrievalCount   int        `json:"retrieval_count"`
-	TotalDurationMS  *int64     `json:"total_duration_ms,omitempty"`
-	ErrorCode        *string    `json:"error_code,omitempty"`
-	ErrorDetail      *string    `json:"error_detail,omitempty"`
-	FirstTokenAt     *time.Time `json:"first_token_at,omitempty"`
-	StartedAt        time.Time  `json:"started_at"`
-	CompletedAt      *time.Time `json:"completed_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
+	ID               string          `json:"id"`
+	ExecutionID      string          `json:"execution_id"`
+	TraceID          string          `json:"trace_id"`
+	ConversationID   string          `json:"conversation_id"`
+	AgentName        string          `json:"agent_name"`
+	ModelID          string          `json:"model_id"`
+	RequestedSkill   *string         `json:"requested_skill,omitempty"`
+	ResolvedSkills   json.RawMessage `json:"resolved_skills"`
+	PrimarySkill     *string         `json:"primary_skill,omitempty"`
+	SelectionSource  *string         `json:"selection_source,omitempty"`
+	ContextPackageID *string         `json:"context_package_id,omitempty"`
+	ActualRoute      *string         `json:"actual_route,omitempty"`
+	ModelName        *string         `json:"model_name,omitempty"`
+	Status           string          `json:"status"`
+	ProtocolVersion  int             `json:"protocol_version"`
+	ServiceVersion   *string         `json:"service_version,omitempty"`
+	AgentVersion     *string         `json:"agent_version,omitempty"`
+	GraphVersion     *string         `json:"graph_version,omitempty"`
+	PromptBundleHash *string         `json:"prompt_bundle_hash,omitempty"`
+	InputTokens      int64           `json:"input_tokens"`
+	OutputTokens     int64           `json:"output_tokens"`
+	CachedTokens     int64           `json:"cached_tokens"`
+	TotalTokens      int64           `json:"total_tokens"`
+	ModelCallCount   int             `json:"model_call_count"`
+	ToolCallCount    int             `json:"tool_call_count"`
+	RetrievalCount   int             `json:"retrieval_count"`
+	TotalDurationMS  *int64          `json:"total_duration_ms,omitempty"`
+	ErrorCode        *string         `json:"error_code,omitempty"`
+	ErrorDetail      *string         `json:"error_detail,omitempty"`
+	FirstTokenAt     *time.Time      `json:"first_token_at,omitempty"`
+	StartedAt        time.Time       `json:"started_at"`
+	CompletedAt      *time.Time      `json:"completed_at,omitempty"`
+	CreatedAt        time.Time       `json:"created_at"`
 }
 
 type RunEvent struct {
@@ -233,6 +245,8 @@ type StartGenerationParams struct {
 	IdempotencyKey    string
 	Content           string
 	AgentName         string
+	ModelID           string
+	RequestedSkill    *string
 	ProtocolVersion   int
 	Idempotent        bool
 	SupervisorManaged bool

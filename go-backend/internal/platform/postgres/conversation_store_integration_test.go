@@ -467,3 +467,125 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 		t.Fatalf("Get() after delete error = %v, want not found", err)
 	}
 }
+
+func TestSkillResolutionIsPersistedOnceIntegration(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	store, err := Open(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	userID := auth.NewID()
+	if _, err := store.CreateUser(ctx, auth.CreateUserParams{
+		ID:           userID,
+		Email:        userID + "@example.com",
+		DisplayName:  "skill-resolution-test",
+		PasswordHash: "integration-test-hash",
+	}); err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_, _ = store.pool.Exec(cleanupCtx, "DELETE FROM app_core.users WHERE id=$1", userID)
+	})
+
+	service := conversation.NewService(store)
+	item, err := service.Create(ctx, userID, conversation.DefaultAgent)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	requestedSkill := "research"
+	generation, err := service.Start(ctx, conversation.StartGenerationParams{
+		UserID:          userID,
+		ConversationID:  item.ID,
+		ClientMessageID: auth.NewID(),
+		RequestID:       auth.NewID(),
+		Content:         "验证技能解析投影",
+		AgentName:       conversation.DefaultAgent,
+		ModelID:         "auto",
+		RequestedSkill:  &requestedSkill,
+		ProtocolVersion: agent.ProtocolVersion,
+	})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	resolutionData := json.RawMessage(`{
+		"model_id":"auto",
+		"requested_skill":"research",
+		"resolved_skills":["research"],
+		"primary_skill":"research",
+		"selection_source":"user",
+		"skill_snapshot":{"manifest_version":"1"},
+		"model_snapshot":{"provider":"test","profile":"default_reasoning"},
+		"context_package_id":null
+	}`)
+	resolutionEvent := agent.Event{
+		ProtocolVersion: agent.ProtocolVersion,
+		ExecutionID:     generation.Run.ExecutionID,
+		RunID:           generation.Run.ID,
+		Sequence:        1,
+		Type:            "run.resolved",
+		OccurredAt:      time.Now().UTC(),
+		Data:            resolutionData,
+	}
+	inserted, err := service.RecordEvent(ctx, userID, generation.Run.ID, resolutionEvent)
+	if err != nil || !inserted {
+		t.Fatalf("first run.resolved inserted=%v error=%v", inserted, err)
+	}
+	inserted, err = service.RecordEvent(ctx, userID, generation.Run.ID, resolutionEvent)
+	if err != nil || inserted {
+		t.Fatalf("duplicate run.resolved inserted=%v error=%v", inserted, err)
+	}
+
+	equalResolution := resolutionEvent
+	equalResolution.Sequence = 2
+	inserted, err = service.RecordEvent(ctx, userID, generation.Run.ID, equalResolution)
+	if err != nil || !inserted {
+		t.Fatalf("equal run.resolved inserted=%v error=%v", inserted, err)
+	}
+
+	conflictingResolution := resolutionEvent
+	conflictingResolution.Sequence = 3
+	conflictingResolution.Data = json.RawMessage(`{
+		"model_id":"auto",
+		"requested_skill":"research",
+		"resolved_skills":["research"],
+		"primary_skill":"research",
+		"selection_source":"compatibility",
+		"skill_snapshot":{"manifest_version":"1"},
+		"model_snapshot":{"provider":"test","profile":"default_reasoning"},
+		"context_package_id":null
+	}`)
+	if inserted, err = service.RecordEvent(
+		ctx,
+		userID,
+		generation.Run.ID,
+		conflictingResolution,
+	); !errors.Is(err, conversation.ErrSkillResolutionConflict) || inserted {
+		t.Fatalf("conflicting run.resolved inserted=%v error=%v", inserted, err)
+	}
+
+	detail, err := service.RunDetail(ctx, userID, generation.Run.ID)
+	if err != nil {
+		t.Fatalf("RunDetail() error = %v", err)
+	}
+	if detail.Run.ModelID != "auto" ||
+		detail.Run.RequestedSkill == nil || *detail.Run.RequestedSkill != requestedSkill ||
+		string(detail.Run.ResolvedSkills) != `["research"]` ||
+		detail.Run.PrimarySkill == nil || *detail.Run.PrimarySkill != requestedSkill ||
+		detail.Run.SelectionSource == nil || *detail.Run.SelectionSource != "user" {
+		t.Fatalf("unexpected persisted resolution: %#v", detail.Run)
+	}
+}

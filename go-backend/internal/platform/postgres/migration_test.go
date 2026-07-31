@@ -59,3 +59,33 @@ func TestAgentRuntimeMigrationSeparatesRuntimeSchemaAndFencingColumns(
 		t.Fatal("Python runtime tables must not be created in app_core")
 	}
 }
+
+func TestSkillRunProtocolMigrationIsExpandOnlyAndBackfillsLegacyRuns(t *testing.T) {
+	t.Parallel()
+	content, err := migrationFiles.ReadFile("migrations/006_skill_run_protocol.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(content)
+	required := []string{
+		"model_id TEXT",
+		"requested_skill TEXT",
+		"resolved_skills JSONB",
+		"primary_skill TEXT",
+		"selection_source TEXT",
+		"skill_snapshot JSONB",
+		"model_snapshot JSONB",
+		"context_package_id UUID",
+		"WHEN 'research_agent' THEN 'research'",
+		"WHEN 'fortune_agent' THEN 'fortune'",
+	}
+	for _, fragment := range required {
+		if !strings.Contains(sql, fragment) {
+			t.Fatalf("skill protocol migration is missing %q", fragment)
+		}
+	}
+	if strings.Contains(strings.ToUpper(sql), "DROP COLUMN") ||
+		strings.Contains(strings.ToUpper(sql), "DROP TABLE") {
+		t.Fatal("skill protocol migration must be expand-only")
+	}
+}

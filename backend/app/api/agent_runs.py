@@ -15,6 +15,8 @@ from app.runtime.registry import (
     ExecutionNotFoundError,
     IdempotencyConflictError,
 )
+from agent.models import UnknownModelIDError
+from agent.skills import ConflictingSkillRequestError, UnknownRequestedSkillError
 
 
 router = APIRouter()
@@ -148,6 +150,10 @@ async def stream_agent_run(
     _verify(request, body, run_request.execution_id)
     try:
         execution = await registry.start(run_request)
+    except (UnknownModelIDError, UnknownRequestedSkillError) as exc:
+        raise HTTPException(status_code=422, detail=exc.code) from exc
+    except ConflictingSkillRequestError as exc:
+        raise HTTPException(status_code=422, detail=exc.code) from exc
     except IdempotencyConflictError as exc:
         raise HTTPException(status_code=409, detail="idempotency conflict") from exc
 

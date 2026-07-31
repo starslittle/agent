@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from agent.application import LangGraphAgentApplication, RunCommand
 from agent.capabilities import RegistryCapabilityExecutor
 from agent.models import get_model_gateway
+from agent.skills import resolve_compatible_selection
 
 from .models import AgentRunRequest
 from .store import LeaseToken
@@ -46,11 +47,18 @@ class LangGraphV1Runtime:
         task = asyncio.current_task()
         if task is not None:
             self._active_tasks[request.execution_id] = task
+        selection = resolve_compatible_selection(
+            requested_skill=request.requested_skill,
+            agent_name=request.agent_name,
+        )
         command = RunCommand(
             execution_id=request.execution_id,
             query=request.query,
             messages=[item.model_dump() for item in request.messages],
-            requested_workflow=request.mode or request.agent_name,
+            requested_workflow=request.mode or selection.agent_name,
+            model_id=request.model_id,
+            selection=selection,
+            context_package_id=request.context_package_id,
             shadow=request.shadow,
             deadline_ms=request.deadline_ms,
             cancel_event=cancel_event,
@@ -72,8 +80,15 @@ class LangGraphV1Runtime:
         self,
         request: AgentRunRequest,
     ) -> dict:
+        selection = resolve_compatible_selection(
+            requested_skill=request.requested_skill,
+            agent_name=request.agent_name,
+        )
         return self._application.describe_provenance(
-            request.mode or request.agent_name
+            request.mode or selection.agent_name,
+            model_id=request.model_id,
+            selection=selection,
+            context_package_id=request.context_package_id,
         )
 
     async def cancel(self, execution_id: str) -> None:

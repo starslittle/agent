@@ -24,6 +24,8 @@ from agent.graph import build_root_graph
 from agent.models import (
     ModelGateway,
     ObservedModelGateway,
+    ModelCatalog,
+    get_model_catalog,
     get_model_gateway,
 )
 from agent.prompts import prompt_sha256
@@ -33,6 +35,7 @@ from agent.specs import (
     get_agent_catalog,
 )
 from agent.state import create_root_state
+from agent.skills import SkillRegistry, SkillSelection, get_skill_registry
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,9 @@ class RunCommand:
     query: str
     messages: list[dict[str, str]]
     requested_workflow: str
+    model_id: str = "auto"
+    selection: SkillSelection | None = None
+    context_package_id: str | None = None
     shadow: bool = False
     deadline_ms: int = 120_000
     cancel_event: asyncio.Event | None = None
@@ -63,6 +69,8 @@ class LangGraphAgentApplication:
         gateway: ModelGateway | None = None,
         capability_executor: CapabilityExecutor | None = None,
         catalog: AgentCatalog | None = None,
+        skill_registry: SkillRegistry | None = None,
+        model_catalog: ModelCatalog | None = None,
         checkpointer=None,
         lease_guard=None,
         artifact_stager=None,
@@ -75,6 +83,8 @@ class LangGraphAgentApplication:
             capability_executor or RegistryCapabilityExecutor()
         )
         self._catalog = catalog or get_agent_catalog()
+        self._skill_registry = skill_registry or get_skill_registry()
+        self._model_catalog = model_catalog or get_model_catalog()
         self._checkpointer = checkpointer
         self._lease_guard = lease_guard
         self._artifact_stager = artifact_stager
@@ -101,9 +111,14 @@ class LangGraphAgentApplication:
     def describe_provenance(
         self,
         requested_workflow: str,
+        *,
+        model_id: str = "auto",
+        selection: SkillSelection | None = None,
+        context_package_id: str | None = None,
     ) -> dict[str, Any]:
         spec = self._catalog.resolve(requested_workflow)
         profile = self._gateway.profile(spec.model_profile)
+        resolved_model = self._model_catalog.resolve(model_id)
         prompt_versions = {
             stage: {
                 "path": path,
@@ -132,6 +147,16 @@ class LangGraphAgentApplication:
                 for name in sorted(spec.allowed_capabilities)
             )
         ]
+        skill_snapshot = None
+        if selection is not None and selection.primary_skill is not None:
+            skill = self._skill_registry.resolve(selection.primary_skill)
+            skill_snapshot = {
+                "id": skill.id,
+                "version": skill.version,
+                "workflow": skill.workflow,
+                "allowed_capabilities": sorted(skill.allowed_capabilities),
+                "fingerprint": self._skill_registry.fingerprint(),
+            }
         return {
             "workflow_name": spec.workflow,
             "workflow_version": spec.workflow.rsplit("_v", 1)[-1],
@@ -144,6 +169,23 @@ class LangGraphAgentApplication:
             "prompt_bundle_hash": prompt_bundle_hash,
             "prompt_versions": prompt_versions,
             "capabilities": capabilities,
+            "model_id": resolved_model.model_id,
+            "model_catalog_fingerprint": self._model_catalog.fingerprint(),
+            "model_snapshot": resolved_model.model_dump(mode="json"),
+            "requested_skill": (
+                selection.requested_skill if selection is not None else None
+            ),
+            "resolved_skills": (
+                selection.resolved_skills if selection is not None else []
+            ),
+            "primary_skill": (
+                selection.primary_skill if selection is not None else None
+            ),
+            "selection_source": (
+                selection.selection_source if selection is not None else "direct"
+            ),
+            "skill_snapshot": skill_snapshot,
+            "context_package_id": context_package_id,
         }
 
     async def stream(

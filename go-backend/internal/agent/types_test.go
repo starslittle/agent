@@ -41,3 +41,127 @@ func TestProtocolFixture(t *testing.T) {
 		t.Fatalf("SSEID() = %q", got)
 	}
 }
+
+func TestNormalizeRunSelectionSupportsNewAndLegacyContracts(t *testing.T) {
+	research := "research"
+	selection, err := NormalizeRunSelection("auto", &research, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selection.AgentName != "research" ||
+		selection.RequestedSkill == nil ||
+		*selection.RequestedSkill != "research" {
+		t.Fatalf("explicit selection = %#v", selection)
+	}
+
+	legacy, err := NormalizeRunSelection("", nil, "fortune_agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.ModelID != "auto" || legacy.RequestedSkill == nil ||
+		*legacy.RequestedSkill != "fortune" {
+		t.Fatalf("legacy selection = %#v", legacy)
+	}
+
+	if _, err := NormalizeRunSelection("provider/model", nil, ""); err == nil {
+		t.Fatal("arbitrary model_id must be rejected")
+	}
+	unknown := "decision"
+	if _, err := NormalizeRunSelection("auto", &unknown, ""); err == nil {
+		t.Fatal("unknown requested_skill must be rejected")
+	}
+}
+
+func TestRunRequestMarshalPreservesSelectionSourceMarker(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		agentName string
+		wantAgent string
+	}{
+		{name: "explicit skill marker", agentName: "research", wantAgent: "research"},
+		{name: "legacy agent marker", agentName: "research_agent", wantAgent: "research_agent"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			content, err := json.Marshal(RunRequest{
+				ProtocolVersion: ProtocolVersion,
+				ExecutionID:     "exec-source",
+				RunID:           "run-source",
+				RequestID:       "request-source",
+				IdempotencyKey:  "idempotency-source",
+				ConversationID:  "conversation-source",
+				AgentName:       test.agentName,
+				Query:           "research this",
+				DeadlineMS:      1000,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(content, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload["agent_name"] != test.wantAgent ||
+				payload["requested_skill"] != "research" {
+				t.Fatalf("payload = %#v", payload)
+			}
+		})
+	}
+}
+
+func TestRunRequestMarshalProjectsNormalizedCompatibilityFields(t *testing.T) {
+	content, err := json.Marshal(RunRequest{
+		ProtocolVersion: ProtocolVersion,
+		ExecutionID:     "exec-contract",
+		RunID:           "run-contract",
+		RequestID:       "request-contract",
+		IdempotencyKey:  "idempotency-contract",
+		ConversationID:  "conversation-contract",
+		AgentName:       "research_agent",
+		Query:           "research this",
+		DeadlineMS:      1000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(content, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["model_id"] != "auto" || payload["requested_skill"] != "research" {
+		t.Fatalf("payload = %#v", payload)
+	}
+	resolved, ok := payload["resolved_skills"].([]any)
+	if !ok || len(resolved) != 0 {
+		t.Fatalf("resolved_skills = %#v", payload["resolved_skills"])
+	}
+}
+
+func TestParseSkillResolutionRejectsInconsistentProjection(t *testing.T) {
+	valid := json.RawMessage(`{
+		"model_id":"auto",
+		"requested_skill":"research",
+		"resolved_skills":["research"],
+		"primary_skill":"research",
+		"selection_source":"user",
+		"skill_snapshot":{"id":"research","version":1},
+		"model_snapshot":{"model_id":"auto"},
+		"context_package_id":null
+	}`)
+	resolution, err := ParseSkillResolution(valid)
+	if err != nil || resolution.PrimarySkill == nil ||
+		*resolution.PrimarySkill != "research" {
+		t.Fatalf("resolution = %#v, error = %v", resolution, err)
+	}
+
+	invalid := json.RawMessage(`{
+		"model_id":"auto",
+		"requested_skill":"research",
+		"resolved_skills":[],
+		"primary_skill":"research",
+		"selection_source":"user",
+		"model_snapshot":{"model_id":"auto"}
+	}`)
+	if _, err := ParseSkillResolution(invalid); err == nil {
+		t.Fatal("inconsistent projection must fail")
+	}
+}

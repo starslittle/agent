@@ -102,6 +102,7 @@ async def test_notifier_accelerates_remote_cancel_but_store_is_authoritative():
     )
 
     assert [event.type for event in events] == [
+        "run.resolved",
         "run.started",
         "run.cancel_requested",
         "run.cancelled",

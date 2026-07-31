@@ -451,6 +451,8 @@ export interface CreateAgentRunResponse {
   assistant_message_id: string;
   status: AgentRunStatus;
   protocol_version: number;
+  model_id: string;
+  requested_skill?: string | null;
   events_url: string;
 }
 
@@ -469,6 +471,17 @@ export interface AgentRunSummary {
   conversation_id: string;
   status: AgentRunStatus;
   protocol_version: number;
+  model_id: string;
+  requested_skill?: string | null;
+  resolved_skills: string[] | null;
+  primary_skill?: string | null;
+  selection_source?:
+    | "direct"
+    | "user"
+    | "compatibility"
+    | "automatic"
+    | "fallback"
+    | null;
   started_at: string;
 }
 
@@ -484,6 +497,8 @@ export async function createAgentRun(
     client_message_id: string;
     idempotency_key: string;
     agent_name?: string;
+    model_id?: string;
+    requested_skill?: string | null;
   },
   csrfToken: string,
 ): Promise<CreateAgentRunResponse> {
@@ -503,6 +518,8 @@ export async function streamLegacyConversation(
     content: string;
     client_message_id: string;
     agent_name?: string;
+    model_id?: string;
+    requested_skill?: string | null;
   },
   csrfToken: string,
   onEvent: (event: ConversationStreamEvent) => void,

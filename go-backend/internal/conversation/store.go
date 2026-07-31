@@ -9,12 +9,13 @@ import (
 )
 
 var (
-	ErrNotFound            = errors.New("conversation not found")
-	ErrInvalidInput        = errors.New("invalid conversation input")
-	ErrGenerationActive    = errors.New("conversation already has an active generation")
-	ErrDuplicateMessage    = errors.New("message already exists")
-	ErrIdempotencyConflict = errors.New("idempotency key conflicts with an existing run")
-	ErrRunLeaseLost        = errors.New("run supervisor lease lost")
+	ErrNotFound                = errors.New("conversation not found")
+	ErrInvalidInput            = errors.New("invalid conversation input")
+	ErrGenerationActive        = errors.New("conversation already has an active generation")
+	ErrDuplicateMessage        = errors.New("message already exists")
+	ErrIdempotencyConflict     = errors.New("idempotency key conflicts with an existing run")
+	ErrRunLeaseLost            = errors.New("run supervisor lease lost")
+	ErrSkillResolutionConflict = errors.New("skill resolution conflicts with sealed run")
 )
 
 type Store interface {
