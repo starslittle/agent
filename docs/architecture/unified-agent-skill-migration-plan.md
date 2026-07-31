@@ -430,12 +430,23 @@ fortune_agent     -> requested_skill = fortune
 
 ### M8：统一助手前端与 Agent Runs
 
+进入门禁：
+
+- ROUND-01 已完成 TASK-004～007、全量 E2E 和回滚演练并标记为 `accepted`；
+- ROUND-02 已获得用户明确授权；
+- Skill Run 协议、Root Resolver 与 Research/Fortune Skill 接入已经形成稳定前端契约；
+- 奇点 AI 已按 ADR-012 形成远程设计归档 Tag。
+
 交付：
 
+- 将正式产品从奇点 AI 迁移为启点，统一品牌、favicon、metadata、Design Token、
+  登录页、应用外壳、侧栏、对话空白页和消息视觉；
 - 删除“深度思考”Agent 模式开关；
 - 新前端不提交 `agent_name`；
-- 支持 `/decision`、`/fortune` 和可移除 Skill Chip；
-- 展示实际 Skill、选择来源和使用的上下文数量；
+- `/` 菜单只展示当前真实 available 的 Skill；ROUND-02 支持 `/fortune`，Decision
+  只有在 ROUND-04 标记 available 后才自动出现；
+- 展示实际 Skill 和选择来源；只有存在服务端公开的真实上下文摘要时才展示上下文
+  数量，ROUND-02 不伪造个人信息；
 - Activity、Citation、Artifact 与回答正文分层；
 - Agent Runs 页面展示真实状态、步骤、模型、Skill、Capability、Token、耗时和错误。
 
@@ -446,6 +457,12 @@ Agent Runs 同时作为内部观测能力的唯一产品投影：普通用户只
 观测服务。
 
 不展示模型隐藏思维过程，不为 Research/Fortune 建立独立助手身份。
+
+实施顺序固定为：先完成统一 Agent 与现有 Skill 的服务端协议，再由 TASK-012 一次完成
+启点视觉基础和真实 Skill 交互，随后由 TASK-013/028 完成用户 Runs 与内部观测。
+ROUND-01 不夹带品牌迁移，ROUND-03～04 只在已经验收的启点外壳上增加 Wiki、
+Proposal 和 Decision。完整决策见
+[`ADR-013`](../decisions/ADR-013-qidian-frontend-migration-sequence.md)。
 
 ### M9：Wiki Item 与 Context Package
 

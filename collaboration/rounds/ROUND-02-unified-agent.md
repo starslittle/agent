@@ -28,6 +28,21 @@ user_gate: required
 Answer，也可以自动或显式使用 Research/Fortune；用户能查看自己的 Run，内部人员
 可以通过同一脱敏投影进行只读诊断。
 
+## 进入门禁与实施顺序
+
+- ROUND-01 必须先完成全部 Task、唯一一次 Round 产品 E2E、回滚演练并达到
+  `accepted`；
+- 用户必须单独授权 ROUND-02；
+- 不在 ROUND-01 夹带奇点 AI → 启点的品牌与页面外壳迁移；
+- 先完成 Skill 契约、Model Catalog、Skill Run 协议、Root Resolver 和现有 Skill
+  接入；
+- TASK-012 在真实协议稳定后，一次完成启点品牌/页面外壳和统一 Skill 交互；
+- TASK-013、TASK-028 随后完成用户 Agent Runs 和内部观测；
+- Wiki、Context、Proposal 和 Decision 继续等待各自业务 Round，不在前端伪造。
+
+详细决策见
+[`ADR-013`](../../docs/decisions/ADR-013-qidian-frontend-migration-sequence.md)。
+
 ## 主验收旅程
 
 1. 普通问题进入 Direct Answer，默认不联网、不调用工具；
@@ -40,6 +55,9 @@ Answer，也可以自动或显式使用 Research/Fortune；用户能查看自己
 8. 普通用户在 Agent Runs 中只能查看自己的历史；
 9. `observability_admin` 可以筛选脱敏 Run，普通用户访问内部 API 被拒绝；
 10. 页面和事件不展示隐藏思维链、完整 Prompt 或敏感载荷。
+11. 登录、应用外壳和对话页统一使用启点品牌，不再出现奇点 AI、轨道图形或 Lovable
+    遗留 metadata；
+12. 页面不出现尚不可用的 Wiki、Proposal 或 Decision 入口，移动端和深浅色可用。
 
 ## 必须回归
 
@@ -47,6 +65,7 @@ Answer，也可以自动或显式使用 Research/Fortune；用户能查看自己
 - 旧 `agent_name` 在兼容窗口内仍能通过 Adapter 读取/请求；
 - Research/Fortune Workflow 本身没有被重写；
 - 用户 Run 所有权和管理员只读边界。
+- ROUND-01 对话、Activity、Citation、取消和恢复在启点外壳中保持原语义。
 
 ## 能力控制与回滚
 

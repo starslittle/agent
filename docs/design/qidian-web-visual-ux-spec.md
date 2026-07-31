@@ -593,10 +593,13 @@ ROUND-04 才出现。页面结构围绕真实决策，而不是围绕模型回�
 - 不把品牌改版夹带进 ROUND-01 Runtime 任务；
 - 不启动前端、不建立新后端接口；
 - 不提前显示不可用能力。
+- ROUND-01 必须先完成 TASK-004～007、唯一一次 Round E2E 和回滚演练并达到
+  `accepted`。
 
 ### ROUND-02 / TASK-012：统一助手前端
 
-适合一次完成：
+TASK-012 等 Skill Run 协议、Root Resolver 和 Research/Fortune Skill 接入稳定后
+执行，并一次完成：
 
 - 奇点 AI → 启点品牌迁移；
 - 全局颜色、字体、favicon、metadata；
@@ -607,6 +610,11 @@ ROUND-04 才出现。页面结构围绕真实决策，而不是围绕模型回�
 - 根据真实 available Skills 生成菜单；
 - 增加 Agent Runs 导航；
 - 修复本文列出的基础 Web 可访问性问题。
+
+TASK-012 只迁移当时真实可用的业务能力，不实现概念稿中展示的个人上下文、
+Wiki Proposal 或 Decision。TASK-013 随后完成 Agent Runs 页面；ROUND-02 全量
+验收后，启点才成为 ROUND-03～04 的稳定前端基线。实施顺序见
+[`ADR-013`](../decisions/ADR-013-qidian-frontend-migration-sequence.md)。
 
 ### ROUND-03
 

@@ -150,7 +150,7 @@ TASK-026 仍是 P1，TASK-027 仍是发布准备而不是产品功能或生产�
 | [TASK-009](TASK-009-skill-run-protocol.md) | requested/resolved Skill 跨服务协议 | M6 | high | required | draft |
 | [TASK-010](TASK-010-root-skill-resolver.md) | Root Skill Resolver | M7 | high | required | draft |
 | [TASK-011](TASK-011-existing-skill-integration.md) | Research/Fortune Skill 化 | M7 | high | required | draft |
-| [TASK-012](TASK-012-unified-assistant-frontend.md) | 移除永久 Agent 模式并增加 Skill 交互 | M8 | high | required | draft |
+| [TASK-012](TASK-012-unified-assistant-frontend.md) | 迁移启点前端并建立统一 Skill 交互 | M8 | high | required | draft |
 | [TASK-013](TASK-013-agent-runs-page.md) | 用户侧 Agent Runs 最小页面 | M8 | medium | required | draft |
 | [TASK-028](TASK-028-agent-observability-console.md) | Agent Runs 内部只读观测模式 | M8 | high | required | draft |
 | [TASK-014](TASK-014-wiki-storage.md) | Wiki Item、Revision、Source 存储 | M9 | high | N/A | draft |
@@ -189,7 +189,8 @@ TASK-001、TASK-008 ～ TASK-013、TASK-028
 ```
 
 把普通/Research/Fortune 收敛到一个 Root Assistant，并完成统一前端、用户 Runs
-页面和内部只读观测模式。
+页面和内部只读观测模式。奇点 AI → 启点的正式前端迁移在 TASK-012 一次完成；
+ROUND-01 不夹带品牌改造，ROUND-03～04 只在验收后的启点外壳上继续扩展。
 
 ### ROUND-03：个人 Wiki、Markdown 与确认写入
 
