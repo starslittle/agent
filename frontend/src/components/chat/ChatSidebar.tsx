@@ -130,7 +130,7 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
                         <button
                           type="button"
                           onClick={() => onSelect(item)}
-                          className="relative flex h-full min-w-0 flex-1 flex-col justify-center rounded-lg px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                          className="relative flex h-full min-w-0 flex-1 flex-col justify-center rounded-lg px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
                         >
                           {active && (
                             <span
@@ -138,11 +138,11 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
                               aria-hidden="true"
                             />
                           )}
-                          <span className="w-full truncate text-sm font-medium leading-4">
+                          <span className="w-full truncate text-sm font-semibold leading-4 text-sidebar-foreground">
                             {item.title}
                           </span>
                           {dateLabel && (
-                            <span className="mt-0.5 w-full truncate text-[11px] leading-3 text-muted-foreground">
+                            <span className="mt-1 w-full truncate text-[11px] font-normal leading-3 text-muted-foreground/75">
                               {dateLabel}
                             </span>
                           )}
