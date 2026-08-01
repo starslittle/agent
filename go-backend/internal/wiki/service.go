@@ -2,6 +2,7 @@ package wiki
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -44,7 +45,14 @@ func (s *Service) Create(ctx context.Context, params CreateItemParams) (ItemDeta
 	if err := validateCreate(params); err != nil {
 		return ItemDetail{}, err
 	}
-	return s.store.CreateWikiItem(ctx, params)
+	detail, err := s.store.CreateWikiItem(ctx, params)
+	if errors.Is(err, ErrAlreadyExists) {
+		existing, findErr := s.store.FindWikiItem(ctx, params.UserID, params.ID)
+		if findErr == nil && existing.Item.Type == params.Type && existing.Item.Domain == params.Domain && existing.Item.Status == params.Status && existing.Item.Content == params.Content {
+			return existing, nil
+		}
+	}
+	return detail, err
 }
 
 func (s *Service) List(ctx context.Context, params ListParams) ([]Item, error) {

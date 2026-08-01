@@ -13,8 +13,10 @@ import (
 	"github.com/starslittle/agent/go-backend/internal/auth"
 	"github.com/starslittle/agent/go-backend/internal/config"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
+	"github.com/starslittle/agent/go-backend/internal/documents"
 	"github.com/starslittle/agent/go-backend/internal/httpapi"
 	"github.com/starslittle/agent/go-backend/internal/platform/postgres"
+	"github.com/starslittle/agent/go-backend/internal/wiki"
 )
 
 func main() {
@@ -41,11 +43,22 @@ func main() {
 
 	authService := auth.NewService(store, cfg.SessionTTL)
 	conversationService := conversation.NewService(store)
+	documentService := documents.NewService(store, documents.DefaultLimits())
+	wikiService := wiki.NewService(store)
 	if err := conversationService.ReconcileStartup(startupCtx); err != nil {
 		logger.Error("reconcile_unmanaged_runs", "error", err)
 		os.Exit(1)
 	}
-	api, err := httpapi.New(cfg, logger, authService, conversationService)
+	api, err := httpapi.NewWithProductServices(
+		cfg,
+		logger,
+		authService,
+		httpapi.ProductServices{
+			Documents: documentService,
+			Wiki:      wikiService,
+		},
+		conversationService,
+	)
 	if err != nil {
 		logger.Error("initialize_server", "error", err)
 		os.Exit(1)

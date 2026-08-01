@@ -390,6 +390,8 @@ func mapWikiError(err error) error {
 	var pgError *pgconn.PgError
 	if errors.As(err, &pgError) {
 		switch pgError.Code {
+		case "23505":
+			return wiki.ErrAlreadyExists
 		case "23514", "22P02":
 			return wiki.ErrInvalidInput
 		case "23503":

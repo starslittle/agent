@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Bot,
   ChevronUp,
+  FolderClosed,
   LogIn,
   LogOut,
   LoaderCircle,
@@ -72,6 +73,7 @@ function WorkspaceNav() {
   const location = useLocation();
   const chatActive = location.pathname === "/" || location.pathname.startsWith("/chat/");
   const runsActive = location.pathname.startsWith("/agent-runs");
+  const spaceActive = location.pathname.startsWith("/space");
   const internalActive = location.pathname.startsWith("/internal/agent-runs");
 
   return (
@@ -101,6 +103,19 @@ function WorkspaceNav() {
       >
         <Bot className="h-4 w-4" aria-hidden="true" />
         Agent Runs
+      </Link>
+      <Link
+        to="/space"
+        aria-current={spaceActive ? "page" : undefined}
+        className={cn(
+          navigationLinkClass,
+          spaceActive
+            ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+            : "text-muted-foreground",
+        )}
+      >
+        <FolderClosed className="h-4 w-4" aria-hidden="true" />
+        我的空间
       </Link>
       {user?.role === "observability_admin" && (
         <Link

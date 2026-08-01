@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"path"
 	"strings"
 	"time"
@@ -41,8 +42,12 @@ func NewService(store Store, limits Limits) *Service {
 }
 
 func (s *Service) CreateFolder(ctx context.Context, userID string, parentID *string, name string) (Folder, error) {
+	return s.CreateFolderWithID(ctx, userID, parentID, name, auth.NewID())
+}
+
+func (s *Service) CreateFolderWithID(ctx context.Context, userID string, parentID *string, name, entryID string) (Folder, error) {
 	name, key, err := s.validateName(name)
-	if err != nil || strings.TrimSpace(userID) == "" {
+	if err != nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(entryID) == "" {
 		return Folder{}, ErrInvalidInput
 	}
 	if err := s.ensureCapacity(ctx, userID); err != nil {
@@ -56,7 +61,15 @@ func (s *Service) CreateFolder(ctx context.Context, userID string, parentID *str
 		return Folder{}, ErrLimitExceeded
 	}
 	now := s.now().UTC()
-	return s.store.CreateFolder(ctx, CreateEntryParams{ID: auth.NewID(), UserID: userID, ParentID: cleanID(parentID), Name: name, NameKey: key, CreatedAt: now})
+	cleanParent := cleanID(parentID)
+	created, err := s.store.CreateFolder(ctx, CreateEntryParams{ID: entryID, UserID: userID, ParentID: cleanParent, Name: name, NameKey: key, CreatedAt: now})
+	if errors.Is(err, ErrNameConflict) {
+		existing, findErr := s.store.FindFolder(ctx, userID, entryID)
+		if findErr == nil && existing.Name == name && sameID(existing.ParentID, cleanParent) {
+			return existing, nil
+		}
+	}
+	return created, err
 }
 
 func (s *Service) List(ctx context.Context, userID string, parentID *string, sortBy string, limit, offset int) ([]Entry, error) {
@@ -111,8 +124,12 @@ func (s *Service) DeleteFolder(ctx context.Context, userID, folderID string, exp
 }
 
 func (s *Service) CreateDocument(ctx context.Context, userID, folderID, name, content, source string, originalPath *string) (Document, error) {
+	return s.CreateDocumentWithID(ctx, userID, folderID, name, content, source, originalPath, auth.NewID())
+}
+
+func (s *Service) CreateDocumentWithID(ctx context.Context, userID, folderID, name, content, source string, originalPath *string, documentID string) (Document, error) {
 	name, key, err := s.validateName(name)
-	if err != nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(folderID) == "" {
+	if err != nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(folderID) == "" || strings.TrimSpace(documentID) == "" {
 		return Document{}, ErrInvalidInput
 	}
 	if err := s.validateContent(content, source, originalPath); err != nil {
@@ -131,11 +148,18 @@ func (s *Service) CreateDocument(ctx context.Context, userID, folderID, name, co
 	}
 	now := s.now().UTC()
 	hash := contentHash(content)
-	return s.store.CreateDocument(ctx, CreateDocumentParams{
-		Entry:      CreateEntryParams{ID: auth.NewID(), UserID: userID, ParentID: &parent, Name: name, NameKey: key, CreatedAt: now},
+	created, err := s.store.CreateDocument(ctx, CreateDocumentParams{
+		Entry:      CreateEntryParams{ID: documentID, UserID: userID, ParentID: &parent, Name: name, NameKey: key, CreatedAt: now},
 		RevisionID: auth.NewID(), Content: content, ContentHash: hash, SizeBytes: int64(len([]byte(content))), Source: source,
 		OriginalRelativePath: cleanPath(originalPath), MediaType: "text/markdown", CreatedBy: CreatedByUser,
 	})
+	if errors.Is(err, ErrNameConflict) {
+		existing, findErr := s.store.FindDocument(ctx, userID, documentID)
+		if findErr == nil && existing.Name == name && existing.ContentHash == hash && sameID(existing.ParentID, &parent) {
+			return existing, nil
+		}
+	}
+	return created, err
 }
 
 func (s *Service) Document(ctx context.Context, userID, documentID string) (Document, error) {
@@ -266,4 +290,11 @@ func cleanPath(value *string) *string {
 func contentHash(content string) string {
 	sum := sha256.Sum256([]byte(content))
 	return hex.EncodeToString(sum[:])
+}
+
+func sameID(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }

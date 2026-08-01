@@ -12,6 +12,9 @@ import { ProtectedRoute } from "./auth/ProtectedRoute";
 import AgentRunsPage from "./pages/AgentRunsPage";
 import AgentObservabilityPage from "./pages/AgentObservabilityPage";
 import { ObservabilityRoute } from "./auth/ObservabilityRoute";
+import SpacePage from "./pages/SpacePage";
+import DocumentPage from "./pages/DocumentPage";
+import ContextItemPage from "./pages/ContextItemPage";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +53,22 @@ const App = () => (
                     <AgentRunsPage />
                   </ProtectedRoute>
                 )}
+              />
+              <Route
+                path="/space"
+                element={<ProtectedRoute><SpacePage /></ProtectedRoute>}
+              />
+              <Route
+                path="/space/folders/:folderId"
+                element={<ProtectedRoute><SpacePage /></ProtectedRoute>}
+              />
+              <Route
+                path="/space/documents/:documentId"
+                element={<ProtectedRoute><DocumentPage /></ProtectedRoute>}
+              />
+              <Route
+                path="/space/context/:itemId"
+                element={<ProtectedRoute><ContextItemPage /></ProtectedRoute>}
               />
               <Route
                 path="/internal/agent-runs"

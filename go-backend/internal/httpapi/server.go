@@ -15,7 +15,9 @@ import (
 	"github.com/starslittle/agent/go-backend/internal/auth"
 	"github.com/starslittle/agent/go-backend/internal/config"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
+	"github.com/starslittle/agent/go-backend/internal/documents"
 	runsupervisor "github.com/starslittle/agent/go-backend/internal/runs"
+	"github.com/starslittle/agent/go-backend/internal/wiki"
 )
 
 type Server struct {
@@ -23,10 +25,35 @@ type Server struct {
 	runSupervisor *runsupervisor.Supervisor
 }
 
+type ProductServices struct {
+	Documents *documents.Service
+	Wiki      *wiki.Service
+}
+
 func New(
 	cfg config.Config,
 	logger *slog.Logger,
 	authService *auth.Service,
+	conversationServices ...*conversation.Service,
+) (*Server, error) {
+	return newServer(cfg, logger, authService, ProductServices{}, conversationServices...)
+}
+
+func NewWithProductServices(
+	cfg config.Config,
+	logger *slog.Logger,
+	authService *auth.Service,
+	productServices ProductServices,
+	conversationServices ...*conversation.Service,
+) (*Server, error) {
+	return newServer(cfg, logger, authService, productServices, conversationServices...)
+}
+
+func newServer(
+	cfg config.Config,
+	logger *slog.Logger,
+	authService *auth.Service,
+	productServices ProductServices,
 	conversationServices ...*conversation.Service,
 ) (*Server, error) {
 	if authService == nil {
@@ -50,6 +77,8 @@ func New(
 	if err != nil {
 		return nil, err
 	}
+	mux := http.NewServeMux()
+	authAPI := newAuthHTTP(cfg, authService)
 	var runSupervisor *runsupervisor.Supervisor
 	if len(conversationServices) > 0 && conversationServices[0] != nil {
 		runSupervisor = runsupervisor.New(
@@ -59,9 +88,32 @@ func New(
 			runsupervisor.Options{RunDeadline: cfg.AgentRunDeadline},
 		)
 	}
+	if productServices.Documents != nil {
+		spaceAPI := newSpaceHTTP(productServices.Documents, cfg.MaxRequestBytes)
+		mux.Handle("GET /api/v1/space/entries", authAPI.requireSession(http.HandlerFunc(spaceAPI.list)))
+		mux.Handle("GET /api/v1/space/folders/{folderID}", authAPI.requireSession(http.HandlerFunc(spaceAPI.folder)))
+		mux.Handle("GET /api/v1/space/folders/{folderID}/breadcrumbs", authAPI.requireSession(http.HandlerFunc(spaceAPI.breadcrumbs)))
+		mux.Handle("POST /api/v1/space/folders", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(spaceAPI.createFolder)))))
+		mux.Handle("PATCH /api/v1/space/folders/{folderID}", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(spaceAPI.moveFolder)))))
+		mux.Handle("DELETE /api/v1/space/folders/{folderID}", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(spaceAPI.deleteFolder)))))
+		mux.Handle("POST /api/v1/space/documents", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(spaceAPI.createDocument)))))
+		mux.Handle("GET /api/v1/space/documents/{documentID}", authAPI.requireSession(http.HandlerFunc(spaceAPI.document)))
+		mux.Handle("PATCH /api/v1/space/documents/{documentID}", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(spaceAPI.updateDocument)))))
+		mux.Handle("PATCH /api/v1/space/documents/{documentID}/location", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(spaceAPI.moveDocument)))))
+		mux.Handle("DELETE /api/v1/space/documents/{documentID}", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(spaceAPI.deleteDocument)))))
+		mux.Handle("GET /api/v1/space/documents/{documentID}/revisions", authAPI.requireSession(http.HandlerFunc(spaceAPI.revisions)))
+	}
+	if productServices.Wiki != nil {
+		wikiAPI := newWikiHTTP(productServices.Wiki, cfg.MaxRequestBytes)
+		mux.Handle("GET /api/v1/wiki-items", authAPI.requireSession(http.HandlerFunc(wikiAPI.list)))
+		mux.Handle("POST /api/v1/wiki-items", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(wikiAPI.create)))))
+		mux.Handle("GET /api/v1/wiki-items/{itemID}", authAPI.requireSession(http.HandlerFunc(wikiAPI.detail)))
+		mux.Handle("PATCH /api/v1/wiki-items/{itemID}", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(wikiAPI.update)))))
+		mux.Handle("POST /api/v1/wiki-items/{itemID}/{action}", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(wikiAPI.changeStatus)))))
+		mux.Handle("DELETE /api/v1/wiki-items/{itemID}", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(wikiAPI.deletePermanently)))))
+		mux.Handle("GET /api/v1/wiki-items/{itemID}/revisions", authAPI.requireSession(http.HandlerFunc(wikiAPI.revisions)))
+	}
 
-	mux := http.NewServeMux()
-	authAPI := newAuthHTTP(cfg, authService)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":  "ok",

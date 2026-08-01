@@ -10,6 +10,7 @@ var (
 	ErrInvalidInput    = errors.New("invalid wiki input")
 	ErrVersionConflict = errors.New("wiki item version conflict")
 	ErrInvalidState    = errors.New("invalid wiki item state transition")
+	ErrAlreadyExists   = errors.New("wiki item already exists")
 	ErrDeleted         = errors.New("wiki item was permanently deleted")
 )
 
