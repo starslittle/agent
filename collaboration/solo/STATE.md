@@ -4,7 +4,7 @@
 mode: solo
 executor: codex
 active_round: ROUND-02
-round_status: running
+round_status: blocked
 round_base_commit: e8dd5ef89333f674106ad73ce2a566bc7e62d69b
 round_accepted_commit: pending
 round_branch: codex/round-02-solo
@@ -20,8 +20,8 @@ completed:
   - TASK-013
   - TASK-028
 
-current_task: ROUND-02-E2E
-next_task: ROUND-02-ACCEPTANCE
+current_task: ROUND-02-CAPABILITY-CONTROL-BLOCKER
+next_task: pending_user_authorization
 
 start_gate: explicit_user_instruction_to_start_or_continue_solo
 production_authorized: false
@@ -37,3 +37,9 @@ destructive_operations_authorized: false
 
 2026-08-01 用户明确授权 TASK-012 额外修改 `frontend/src/App.tsx`，仅用于解除 `/`
 的认证路由门禁并复用 `Index` 实现静态预览；`frontend/src/auth/**` 继续禁止修改。
+
+2026-08-01 ROUND-02 全量验收发现 `unified_agent_enabled` 与
+`agent_observability_enabled` 仅在 Round 文档中定义，既有 Task 未实现且没有足够的
+跨服务 `allowed_paths`；无法执行文档要求的两个独立关闭/重新启用演练。按 Solo
+Protocol 暂停，等待用户授权新增纠偏 Task 并冻结统一 Agent 关闭后的 ROUND-01
+回退语义。

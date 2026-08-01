@@ -132,3 +132,10 @@
 - validation：Go 全包 passed；隔离 PostgreSQL Migration、跨用户筛选/详情及审计 integration passed；前端 46 tests passed、lint 0 errors（8 条既有 warning）、production build passed；Browser 覆盖普通用户拒绝、管理员组合/时间筛选、空状态、完成/取消/失败详情、审计、375/1440 响应式、无写操作和敏感字段不出现；
 - skills：`frontend-design` 与 `ui-ux-pro-max` 延续启点文档式信息层级，`web-design-guidelines` 推动显式标签、44px 控件、空/错/加载状态、移动端详情隐藏筛选区和管理员移动端入口；
 - risk：权限仅支持 `user`/`observability_admin` 两级且无产品内提权入口；生产授权与账号授予不在本轮范围；保留既有 bundle、browserslist 与 React Router warning。
+
+### ROUND-02 Acceptance Blocker
+
+- result：blocked；
+- summary：Round 文档要求的 `unified_agent_enabled` 与 `agent_observability_enabled` 尚无代码实现，既有 Task 也未授权实现所需的跨服务路径，无法执行独立关闭、回滚与重新启用演练；
+- validation：仓库全文检索确认两个逻辑能力名仅存在于 `collaboration/rounds/README.md` 与 `ROUND-02-unified-agent.md`；TASK-028 产品场景及代码验证已通过；
+- risk：在新增纠偏 Task 并冻结统一 Agent 关闭后的 ROUND-01 回退语义前，ROUND-02 不能标记为 accepted。
