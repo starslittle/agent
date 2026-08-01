@@ -104,3 +104,69 @@ def test_v1_stream_and_status_api(monkeypatch):
     assert status.status_code == 200
     assert status.json()["status"] == "completed"
     assert status.json()["last_sequence"] == 5
+
+
+def test_route_resolve_api_uses_minimal_request_and_returns_requirements(monkeypatch):
+    captured = {}
+
+    class FakeRegistry:
+        async def resolve_route(self, request):
+            captured["request"] = request
+            return {
+                "resolution": {
+                    "model_id": "auto",
+                    "requested_skill": None,
+                    "resolved_skills": [],
+                    "primary_skill": None,
+                    "suggested_skill": None,
+                    "confidence": 0.9,
+                    "selection_source": "direct",
+                    "requires_confirmation": False,
+                    "reason_code": "general_conversation",
+                    "agent_name": "default_llm_agent",
+                    "workflow": "chat_v1",
+                    "skill_version": None,
+                    "skill_snapshot": None,
+                    "model_snapshot": {"model_id": "auto"},
+                    "context_package_id": None,
+                },
+                "context_requirements": {
+                    "execution_mode": "direct",
+                    "primary_skill": None,
+                    "purpose": "conversation",
+                    "needs_personal_context": True,
+                    "allowed_types": ["confirmed_fact"],
+                    "allowed_domains": [],
+                    "item_budget": 6,
+                    "character_budget": 2400,
+                },
+                "route_usage": {"model_calls": 1},
+            }
+
+    monkeypatch.setattr(agent_runs.settings, "INTERNAL_AGENT_SECRET", SECRET)
+    monkeypatch.setattr(agent_runs, "registry", FakeRegistry())
+    app = FastAPI()
+    app.include_router(agent_runs.router)
+    client = TestClient(app)
+    payload = {
+        "protocol_version": 1,
+        "execution_id": "exec-route-1",
+        "run_id": "run-route-1",
+        "request_id": "req-route-1",
+        "agent_name": "default_llm_agent",
+        "model_id": "auto",
+        "requested_skill": None,
+        "query": "请结合我的情况给建议",
+        "messages": [],
+    }
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    path = "/internal/v1/agent-routes:resolve"
+    response = client.post(
+        path,
+        content=body,
+        headers=_headers("POST", path, payload["execution_id"], body),
+    )
+    assert response.status_code == 200
+    assert response.json()["context_requirements"]["item_budget"] == 6
+    assert not hasattr(captured["request"], "context_package")
+    assert "wiki" not in body.decode().lower()

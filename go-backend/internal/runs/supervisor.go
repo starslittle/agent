@@ -15,6 +15,7 @@ import (
 
 	"github.com/starslittle/agent/go-backend/internal/agent"
 	"github.com/starslittle/agent/go-backend/internal/agenttrace"
+	contextpackage "github.com/starslittle/agent/go-backend/internal/context"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
 )
 
@@ -50,6 +51,8 @@ type Store interface {
 		conversation.RunLease,
 	) (bool, error)
 	Finish(context.Context, conversation.FinishGenerationParams) (string, error)
+	PrepareContextPackage(context.Context, string, string, string, agent.SkillResolution, contextpackage.Requirements) (contextpackage.Package, error)
+	FindContextPackageByRun(context.Context, string, string) (contextpackage.Package, error)
 }
 
 type Options struct {
@@ -345,7 +348,9 @@ func (s *Supervisor) consume(
 	}
 	messages := make([]agent.Message, 0, len(history))
 	for _, message := range history {
-		if message.ID == claim.UserMessage.ID {
+		if message.ID == claim.UserMessage.ID ||
+			message.ID == claim.Assistant.ID ||
+			strings.TrimSpace(message.Content) == "" {
 			continue
 		}
 		messages = append(messages, agent.Message{
@@ -353,18 +358,34 @@ func (s *Supervisor) consume(
 			Content: message.Content,
 		})
 	}
+
+	resolution, contextPackage, err := s.resolveAndPrepare(ctx, claim, messages)
+	if err != nil {
+		return fmt.Errorf("prepare frozen route context: %w", err)
+	}
 	request := agent.RunRequest{
-		ProtocolVersion: agent.ProtocolVersion,
-		ExecutionID:     claim.Run.ExecutionID,
-		RunID:           claim.Run.ID,
-		RequestID:       claim.Run.RequestID,
-		IdempotencyKey:  claim.Run.IdempotencyKey,
-		ConversationID:  claim.Conversation.ID,
-		AgentName:       claim.Run.AgentName,
-		Query:           claim.UserMessage.Content,
-		Messages:        messages,
-		DeadlineMS:      s.options.RunDeadline.Milliseconds(),
-		UserID:          claim.UserID,
+		ProtocolVersion:      agent.ProtocolVersion,
+		ExecutionID:          claim.Run.ExecutionID,
+		RunID:                claim.Run.ID,
+		RequestID:            claim.Run.RequestID,
+		IdempotencyKey:       claim.Run.IdempotencyKey,
+		ConversationID:       claim.Conversation.ID,
+		AgentName:            resolutionAgentName(resolution),
+		ModelID:              resolution.ModelID,
+		RequestedSkill:       resolution.RequestedSkill,
+		ResolvedSkills:       resolution.ResolvedSkills,
+		PrimarySkill:         resolution.PrimarySkill,
+		SelectionSource:      &resolution.SelectionSource,
+		ContextPackageID:     resolution.ContextPackageID,
+		ContextPackage:       &contextPackage,
+		SuggestedSkill:       resolution.SuggestedSkill,
+		RouteConfidence:      resolution.Confidence,
+		RouteRequiresConfirm: resolution.RequiresConfirm,
+		RouteReasonCode:      resolution.ReasonCode,
+		Query:                claim.UserMessage.Content,
+		Messages:             messages,
+		DeadlineMS:           s.options.RunDeadline.Milliseconds(),
+		UserID:               claim.UserID,
 	}
 
 	if claim.PreviousStatus == string(agent.StatusCancelRequested) {
@@ -530,6 +551,52 @@ func (s *Supervisor) consume(
 	}
 }
 
+func (s *Supervisor) resolveAndPrepare(ctx context.Context, claim conversation.ClaimedRun, messages []agent.Message) (agent.SkillResolution, contextpackage.Package, error) {
+	if claim.Run.ContextPackageID != nil {
+		pkg, err := s.store.FindContextPackageByRun(ctx, claim.UserID, claim.Run.ID)
+		if err != nil {
+			return agent.SkillResolution{}, contextpackage.Package{}, err
+		}
+		return resolutionFromRun(claim.Run), pkg, nil
+	}
+	routeCtx, cancelRoute := context.WithTimeout(ctx, 15*time.Second)
+	defer cancelRoute()
+	result, err := s.client.Resolve(routeCtx, agent.RouteRequest{
+		ProtocolVersion: agent.ProtocolVersion, ExecutionID: claim.Run.ExecutionID,
+		RunID: claim.Run.ID, RequestID: claim.Run.RequestID, AgentName: claim.Run.AgentName,
+		ModelID: claim.Run.ModelID, RequestedSkill: claim.Run.RequestedSkill,
+		Query: claim.UserMessage.Content, Messages: messages, UserID: claim.UserID,
+	})
+	if err != nil {
+		return agent.SkillResolution{}, contextpackage.Package{}, err
+	}
+	result.Resolution.RouteUsage = result.RouteUsage
+	pkg, err := s.store.PrepareContextPackage(ctx, claim.UserID, claim.Run.ID, newPackageID(), result.Resolution, result.Requirements)
+	if err != nil {
+		return agent.SkillResolution{}, contextpackage.Package{}, err
+	}
+	result.Resolution.ContextPackageID = &pkg.PackageID
+	return result.Resolution, pkg, nil
+}
+
+func resolutionFromRun(run conversation.Run) agent.SkillResolution {
+	resolved := []string{}
+	_ = json.Unmarshal(run.ResolvedSkills, &resolved)
+	source := "direct"
+	if run.SelectionSource != nil {
+		source = *run.SelectionSource
+	}
+	confidence := 1.0
+	return agent.SkillResolution{ModelID: run.ModelID, RequestedSkill: run.RequestedSkill, ResolvedSkills: resolved, PrimarySkill: run.PrimarySkill, SelectionSource: source, ContextPackageID: run.ContextPackageID, Confidence: &confidence, ReasonCode: "pre_resolved", ModelSnapshot: json.RawMessage(`{"model_id":"auto"}`)}
+}
+
+func resolutionAgentName(resolution agent.SkillResolution) string {
+	if resolution.PrimarySkill == nil {
+		return conversation.DefaultAgent
+	}
+	return *resolution.PrimarySkill + "_agent"
+}
+
 func shouldPersistAttachEvent(eventType string) bool {
 	return agenttrace.ShouldPersist(eventType) ||
 		eventType == "answer.delta" || eventType == "progress"
@@ -643,4 +710,14 @@ func newOwnerID() string {
 		panic("crypto/rand unavailable")
 	}
 	return "go_" + hex.EncodeToString(value)
+}
+
+func newPackageID() string {
+	value := make([]byte, 16)
+	if _, err := io.ReadFull(rand.Reader, value); err != nil {
+		panic("crypto/rand unavailable")
+	}
+	value[6] = (value[6] & 0x0f) | 0x40
+	value[8] = (value[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", value[0:4], value[4:6], value[6:8], value[8:10], value[10:16])
 }

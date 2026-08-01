@@ -12,6 +12,7 @@ import (
 	"github.com/starslittle/agent/go-backend/internal/agent"
 	"github.com/starslittle/agent/go-backend/internal/agenttrace"
 	"github.com/starslittle/agent/go-backend/internal/auth"
+	contextpackage "github.com/starslittle/agent/go-backend/internal/context"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
 )
 
@@ -1413,6 +1414,18 @@ func (s *Store) FindAgentRunDetail(
 	if err := promptRows.Err(); err != nil {
 		return detail, err
 	}
+	if detail.Run.ContextPackageID != nil {
+		pkg, packageErr := s.FindContextPackageByRun(ctx, userID, runID)
+		if packageErr != nil {
+			return detail, packageErr
+		}
+		items := make([]contextpackage.UsageItem, 0, len(pkg.Items))
+		for _, item := range pkg.Items {
+			itemID, revisionID := item.ItemID, item.RevisionID
+			items = append(items, contextpackage.UsageItem{ItemID: &itemID, RevisionID: &revisionID, Type: item.Type, Domain: item.Domain, Source: item.Source, UpdatedAt: item.UpdatedAt})
+		}
+		detail.ContextUsage = &contextpackage.Usage{PackageID: pkg.PackageID, RunID: runID, Purpose: pkg.Purpose, Items: items}
+	}
 	return detail, nil
 }
 
@@ -1506,6 +1519,22 @@ func projectAgentEvent(
 	event agent.Event,
 ) error {
 	switch event.Type {
+	case "context.used":
+		var usage struct {
+			PackageID string `json:"package_id"`
+			Purpose   string `json:"purpose"`
+			Items     []struct {
+				ItemID     string `json:"item_id"`
+				RevisionID string `json:"revision_id"`
+				Type       string `json:"type"`
+				Domain     string `json:"domain"`
+			} `json:"items"`
+		}
+		if json.Unmarshal(event.Data, &usage) != nil || usage.PackageID == "" || len(usage.Items) > 50 {
+			return nil
+		}
+		_, err := transaction.Exec(ctx, `UPDATE app_core.messages m SET metadata=jsonb_set(COALESCE(m.metadata,'{}'::jsonb),'{context_usage}',($2::jsonb || jsonb_build_object('run_id',$1::text)),true) FROM app_core.agent_runs r WHERE r.id=$1 AND m.id=r.assistant_message_id`, runID, event.Data)
+		return err
 	case "confirmation.required":
 		confirmation, valid := conversation.ParseSkillConfirmation(event.Data)
 		if !valid {

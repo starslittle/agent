@@ -75,11 +75,29 @@ export interface RunSpan {
   attributes: Record<string, unknown>;
 }
 
+export interface ContextUsageItem {
+  item_id?: string | null;
+  revision_id?: string | null;
+  type: string;
+  domain: string;
+  source: { type: string; reference?: string | null; detail?: string | null };
+  updated_at: string;
+  redacted_at?: string | null;
+}
+
+export interface ContextUsage {
+  package_id: string;
+  run_id: string;
+  purpose: string;
+  items: ContextUsageItem[];
+}
+
 export interface RunDetail {
   run: RunSummary;
   spans: RunSpan[];
   events: RunEvent[];
   prompts: unknown[];
+  context_usage?: ContextUsage | null;
 }
 
 export interface RunListResponse {

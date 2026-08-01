@@ -49,6 +49,7 @@ export interface ChatMessageProps {
   };
   onConfirmSkill?: (skillID: SkillID, prompt: string) => void;
   runID?: string;
+  contextUsage?: { runID: string; purpose: string; items: Array<{ itemID: string; type: string; domain: string }> };
 }
 
 const ThinkingProcess: React.FC<{ thoughts: string[]; thinkingFinished?: boolean }> = ({ thoughts, thinkingFinished }) => {
@@ -209,6 +210,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   confirmation,
   onConfirmSkill,
   runID,
+  contextUsage,
 }) => {
   const isUser = role === "user";
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null);
@@ -579,6 +581,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             {!isUser && (
               <CitationList citations={citations} scope={messageId} />
             )}
+			{!isUser && contextUsage && (
+			  <div className="mt-3 rounded-xl border border-primary/15 bg-primary/[0.04] px-3 py-2 text-xs text-muted-foreground">
+				<p>本次使用了 {contextUsage.items.length} 条已确认的个人上下文。</p>
+				<div className="mt-2 flex flex-wrap gap-2">
+				  {contextUsage.items.slice(0, 3).map((item) => <Link key={item.itemID} to={`/space/context/${encodeURIComponent(item.itemID)}`} className="rounded-full bg-background px-2.5 py-1 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{item.domain}</Link>)}
+				  <Link to={`/agent-runs/${encodeURIComponent(contextUsage.runID)}`} className="px-1 py-1 font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">查看依据</Link>
+				</div>
+			  </div>
+			)}
           </div>
         )}
       </div>

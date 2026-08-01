@@ -14,6 +14,7 @@ class RootState(TypedDict, total=False):
 
     query: str
     messages: list[dict[str, str]]
+    context_package: dict[str, Any]
     requested_workflow: str
     selected_workflow: WorkflowName
     route_target: Literal[
@@ -56,6 +57,7 @@ def create_root_state(
     *,
     query: str,
     messages: list[dict[str, str]] | None,
+    context_package: dict[str, Any] | None,
     requested_workflow: str,
     resolution: SkillRouteResolution,
     execution_id: str,
@@ -64,6 +66,7 @@ def create_root_state(
     return {
         "query": query,
         "messages": list(messages or []),
+        "context_package": dict(context_package or {}),
         "requested_workflow": requested_workflow,
         "skill_resolution": resolution.model_dump(mode="json"),
         "execution_id": execution_id,

@@ -62,9 +62,7 @@ def build_root_graph(
             else spec.budgets.max_tool_calls
         )
         route_target = (
-            "confirmation_required"
-            if resolution["requires_confirmation"]
-            else selected
+            "confirmation_required" if resolution["requires_confirmation"] else selected
         )
         emit_runtime_event(
             "route.selected",
@@ -81,6 +79,22 @@ def build_root_graph(
             agent_name=spec.name,
             model_profile=spec.model_profile,
         )
+        context_package = state.get("context_package") or {}
+        if context_package:
+            emit_runtime_event(
+                "context.used",
+                package_id=context_package.get("package_id"),
+                purpose=context_package.get("purpose"),
+                items=[
+                    {
+                        "item_id": item.get("item_id"),
+                        "revision_id": item.get("revision_id"),
+                        "type": item.get("type"),
+                        "domain": item.get("domain"),
+                    }
+                    for item in context_package.get("items", [])
+                ],
+            )
         return {
             "selected_workflow": selected,
             "route_target": route_target,

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	contextpackage "github.com/starslittle/agent/go-backend/internal/context"
 )
 
 const ProtocolVersion = 1
@@ -55,26 +57,59 @@ type Message struct {
 }
 
 type RunRequest struct {
-	ProtocolVersion  int            `json:"protocol_version"`
-	ExecutionID      string         `json:"execution_id"`
-	RunID            string         `json:"run_id"`
-	RequestID        string         `json:"request_id"`
-	IdempotencyKey   string         `json:"idempotency_key"`
-	ConversationID   string         `json:"conversation_id"`
-	AgentName        string         `json:"agent_name"`
-	ModelID          string         `json:"model_id"`
-	RequestedSkill   *string        `json:"requested_skill"`
-	ResolvedSkills   []string       `json:"resolved_skills"`
-	PrimarySkill     *string        `json:"primary_skill"`
-	SelectionSource  *string        `json:"selection_source"`
-	ContextPackageID *string        `json:"context_package_id"`
-	Mode             string         `json:"mode,omitempty"`
-	Query            string         `json:"query"`
-	Messages         []Message      `json:"messages"`
-	DeadlineMS       int64          `json:"deadline_ms"`
-	Shadow           bool           `json:"shadow"`
-	Metadata         map[string]any `json:"metadata,omitempty"`
-	UserID           string         `json:"-"`
+	ProtocolVersion      int                     `json:"protocol_version"`
+	ExecutionID          string                  `json:"execution_id"`
+	RunID                string                  `json:"run_id"`
+	RequestID            string                  `json:"request_id"`
+	IdempotencyKey       string                  `json:"idempotency_key"`
+	ConversationID       string                  `json:"conversation_id"`
+	AgentName            string                  `json:"agent_name"`
+	ModelID              string                  `json:"model_id"`
+	RequestedSkill       *string                 `json:"requested_skill"`
+	ResolvedSkills       []string                `json:"resolved_skills"`
+	PrimarySkill         *string                 `json:"primary_skill"`
+	SelectionSource      *string                 `json:"selection_source"`
+	ContextPackageID     *string                 `json:"context_package_id"`
+	ContextPackage       *contextpackage.Package `json:"context_package,omitempty"`
+	SuggestedSkill       *string                 `json:"suggested_skill,omitempty"`
+	RouteConfidence      *float64                `json:"route_confidence,omitempty"`
+	RouteRequiresConfirm bool                    `json:"route_requires_confirmation"`
+	RouteReasonCode      string                  `json:"route_reason_code"`
+	Mode                 string                  `json:"mode,omitempty"`
+	Query                string                  `json:"query"`
+	Messages             []Message               `json:"messages"`
+	DeadlineMS           int64                   `json:"deadline_ms"`
+	Shadow               bool                    `json:"shadow"`
+	Metadata             map[string]any          `json:"metadata,omitempty"`
+	UserID               string                  `json:"-"`
+}
+
+type RouteRequest struct {
+	ProtocolVersion int       `json:"protocol_version"`
+	ExecutionID     string    `json:"execution_id"`
+	RunID           string    `json:"run_id"`
+	RequestID       string    `json:"request_id"`
+	AgentName       string    `json:"agent_name"`
+	ModelID         string    `json:"model_id"`
+	RequestedSkill  *string   `json:"requested_skill"`
+	Query           string    `json:"query"`
+	Messages        []Message `json:"messages"`
+	UserID          string    `json:"-"`
+}
+
+func (r RouteRequest) Validate() error {
+	if r.ProtocolVersion != ProtocolVersion || r.ExecutionID == "" || r.RunID == "" ||
+		r.RequestID == "" || strings.TrimSpace(r.Query) == "" {
+		return errors.New("invalid route request")
+	}
+	_, err := NormalizeRunSelection(r.ModelID, r.RequestedSkill, r.AgentName)
+	return err
+}
+
+type RouteResult struct {
+	Resolution   SkillResolution             `json:"resolution"`
+	Requirements contextpackage.Requirements `json:"context_requirements"`
+	RouteUsage   map[string]int64            `json:"route_usage"`
 }
 
 type NormalizedRunSelection struct {
@@ -160,6 +195,21 @@ func NormalizeRunSelection(
 }
 
 func (r RunRequest) normalized() (RunRequest, error) {
+	if r.SelectionSource != nil {
+		if r.ModelID == "" {
+			r.ModelID = "auto"
+		}
+		if r.ModelID != "auto" {
+			return RunRequest{}, errors.New("unknown model_id")
+		}
+		if len(r.ResolvedSkills) > 1 || (len(r.ResolvedSkills) == 0 && r.PrimarySkill != nil) || (len(r.ResolvedSkills) == 1 && (r.PrimarySkill == nil || *r.PrimarySkill != r.ResolvedSkills[0])) {
+			return RunRequest{}, errors.New("invalid frozen skill projection")
+		}
+		if r.ResolvedSkills == nil {
+			r.ResolvedSkills = []string{}
+		}
+		return r, nil
+	}
 	selection, err := NormalizeRunSelection(r.ModelID, r.RequestedSkill, r.AgentName)
 	if err != nil {
 		return RunRequest{}, err
@@ -201,22 +251,28 @@ func (r RunRequest) Validate() error {
 			return fmt.Errorf("%s is required", name)
 		}
 	}
+	if r.ContextPackage != nil {
+		if r.ContextPackageID == nil || *r.ContextPackageID != r.ContextPackage.PackageID || r.ContextPackage.RunID != "" && r.ContextPackage.RunID != r.RunID || r.RouteReasonCode == "" || r.SelectionSource == nil {
+			return errors.New("context package requires matching frozen resolution")
+		}
+	}
 	return nil
 }
 
 type SkillResolution struct {
-	ModelID          string          `json:"model_id"`
-	RequestedSkill   *string         `json:"requested_skill"`
-	ResolvedSkills   []string        `json:"resolved_skills"`
-	PrimarySkill     *string         `json:"primary_skill"`
-	SelectionSource  string          `json:"selection_source"`
-	SkillSnapshot    json.RawMessage `json:"skill_snapshot"`
-	ModelSnapshot    json.RawMessage `json:"model_snapshot"`
-	ContextPackageID *string         `json:"context_package_id"`
-	SuggestedSkill   *string         `json:"suggested_skill"`
-	Confidence       *float64        `json:"confidence"`
-	RequiresConfirm  bool            `json:"requires_confirmation"`
-	ReasonCode       string          `json:"reason_code"`
+	ModelID          string           `json:"model_id"`
+	RequestedSkill   *string          `json:"requested_skill"`
+	ResolvedSkills   []string         `json:"resolved_skills"`
+	PrimarySkill     *string          `json:"primary_skill"`
+	SelectionSource  string           `json:"selection_source"`
+	SkillSnapshot    json.RawMessage  `json:"skill_snapshot"`
+	ModelSnapshot    json.RawMessage  `json:"model_snapshot"`
+	ContextPackageID *string          `json:"context_package_id"`
+	SuggestedSkill   *string          `json:"suggested_skill"`
+	Confidence       *float64         `json:"confidence"`
+	RequiresConfirm  bool             `json:"requires_confirmation"`
+	ReasonCode       string           `json:"reason_code"`
+	RouteUsage       map[string]int64 `json:"route_usage,omitempty"`
 }
 
 func ParseSkillResolution(raw json.RawMessage) (SkillResolution, error) {

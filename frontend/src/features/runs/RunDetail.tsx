@@ -179,6 +179,14 @@ export function RunDetail({
           </div>
         </section>
 
+		{detail.context_usage && (
+		  <section className="mt-8" aria-labelledby="run-context-title">
+			<h2 id="run-context-title" className="text-sm font-semibold">本次使用的个人上下文</h2>
+			<p className="mt-2 text-xs leading-5 text-muted-foreground">只展示实际冻结到本次 Run 的条目和版本；之后修改不会改变这次运行依据。</p>
+			{detail.context_usage.items.length === 0 ? <p className="mt-3 rounded-2xl border border-border bg-card p-5 text-xs text-muted-foreground">这次运行没有读取个人上下文。</p> : <div className="mt-3 grid gap-2 sm:grid-cols-2">{detail.context_usage.items.map((item, index) => item.item_id ? <Link key={`${item.item_id}:${item.revision_id ?? index}`} to={`/space/context/${encodeURIComponent(item.item_id)}`} className="rounded-xl border border-border bg-card p-4 hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><p className="text-xs font-medium">{item.domain} · {item.type}</p><p className="mt-1 break-all font-mono text-[10px] text-muted-foreground">版本 {item.revision_id ?? "已删除"}</p></Link> : <div key={index} className="rounded-xl border border-border bg-muted/40 p-4 text-xs text-muted-foreground">该上下文已被永久删除</div>)}</div>}
+		  </section>
+		)}
+
         <section className="mt-8" aria-labelledby="run-timeline-title">
           <h2 id="run-timeline-title" className="text-sm font-semibold">Activity 时间线</h2>
           {events.length === 0 ? (

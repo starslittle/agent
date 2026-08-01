@@ -29,7 +29,7 @@ from agent.models import (
     get_model_gateway,
 )
 from agent.prompts import prompt_sha256
-from agent.root import RootSkillResolver, SkillRouteResolution
+from agent.root import RootSkillResolver, SkillRouteResolution, context_requirements_for
 from agent.specs import (
     PROMPT_BUNDLES,
     AgentCatalog,
@@ -54,6 +54,7 @@ class RunCommand:
     selection: SkillSelection | None = None
     resolution: SkillRouteResolution | None = None
     context_package_id: str | None = None
+    context_package: dict[str, Any] | None = None
     shadow: bool = False
     deadline_ms: int = 120_000
     cancel_event: asyncio.Event | None = None
@@ -88,9 +89,7 @@ class LangGraphAgentApplication:
             raw_gateway,
             emit_model_event,
         )
-        self._capabilities = (
-            capability_executor or RegistryCapabilityExecutor()
-        )
+        self._capabilities = capability_executor or RegistryCapabilityExecutor()
         self._catalog = catalog or get_agent_catalog()
         self._skill_registry = skill_registry or get_skill_registry()
         self._model_catalog = model_catalog or get_model_catalog()
@@ -148,9 +147,7 @@ class LangGraphAgentApplication:
                 "path": path,
                 "sha256": prompt_sha256(path),
             }
-            for stage, path in sorted(
-                PROMPT_BUNDLES[spec.prompt_bundle].items()
-            )
+            for stage, path in sorted(PROMPT_BUNDLES[spec.prompt_bundle].items())
         }
         prompt_bundle_hash = hashlib.sha256(
             json.dumps(
@@ -172,17 +169,14 @@ class LangGraphAgentApplication:
                 "idempotent": capability.idempotent,
             }
             for capability in (
-                TARGET_CAPABILITY_SPECS[name]
-                for name in sorted(allowed_capabilities)
+                TARGET_CAPABILITY_SPECS[name] for name in sorted(allowed_capabilities)
             )
         ]
         skill_snapshot = None
         if selected_skill is not None:
             skill_snapshot = {
                 **selected_skill.model_dump(mode="json"),
-                "allowed_capabilities": sorted(
-                    selected_skill.allowed_capabilities
-                ),
+                "allowed_capabilities": sorted(selected_skill.allowed_capabilities),
                 "fingerprint": self._skill_registry.fingerprint(),
             }
         model_snapshot = {
@@ -190,9 +184,7 @@ class LangGraphAgentApplication:
             "execution_profile": spec.model_profile,
             "execution_provider": profile.provider,
             "execution_model": profile.model,
-            "execution_capabilities": profile.capabilities.model_dump(
-                mode="json"
-            ),
+            "execution_capabilities": profile.capabilities.model_dump(mode="json"),
         }
         return {
             "workflow_name": spec.workflow,
@@ -227,14 +219,10 @@ class LangGraphAgentApplication:
                 resolution.confidence if resolution is not None else 1.0
             ),
             "route_requires_confirmation": (
-                resolution.requires_confirmation
-                if resolution is not None
-                else False
+                resolution.requires_confirmation if resolution is not None else False
             ),
             "route_reason_code": (
-                resolution.reason_code
-                if resolution is not None
-                else "pre_resolved"
+                resolution.reason_code if resolution is not None else "pre_resolved"
             ),
             "suggested_skill": (
                 resolution.suggested_skill if resolution is not None else None
@@ -265,17 +253,37 @@ class LangGraphAgentApplication:
             resolution=resolution,
         )
 
+    async def resolve_route(
+        self, command: RunCommand
+    ) -> tuple[RunCommand, dict[str, Any], dict[str, Any]]:
+        resolved = await self.resolve_command(command)
+        provenance = self.describe_provenance(
+            resolved.requested_workflow,
+            model_id=resolved.model_id,
+            selection=resolved.selection,
+            resolution=resolved.resolution,
+        )
+        requirements = context_requirements_for(resolved.resolution)
+        return resolved, provenance, requirements.model_dump(mode="json")
+
     async def stream(
         self,
         command: RunCommand,
     ) -> AsyncIterator[RuntimeEvent]:
         command = await self.resolve_command(command)
+        messages = list(command.messages)
+        if command.context_package is not None and command.context_package.get("items"):
+            lines = ["以下是用户已确认、仅供本次请求使用的个人上下文："]
+            for item in command.context_package["items"]:
+                lines.append(f"- [{item['type']}/{item['domain']}] {item['content']}")
+            messages.append({"role": "user", "content": "\n".join(lines)})
         state = (
             None
             if command.resume
             else create_root_state(
                 query=command.query,
-                messages=command.messages,
+                messages=messages,
+                context_package=command.context_package,
                 requested_workflow=command.requested_workflow,
                 resolution=command.resolution,
                 execution_id=command.execution_id,

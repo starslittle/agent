@@ -9,7 +9,12 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.api.internal_auth import verify_internal_request
 from app.core.settings import settings
-from app.runtime import AgentRunRequest, ExecutionRegistry, build_agent_runtime
+from app.runtime import (
+    AgentRouteRequest,
+    AgentRunRequest,
+    ExecutionRegistry,
+    build_agent_runtime,
+)
 from app.runtime.store import InMemoryRuntimeStore, RuntimeStore
 from app.runtime.registry import (
     ExecutionNotFoundError,
@@ -176,6 +181,24 @@ async def stream_agent_run(
             "X-Agent-Protocol-Version": "1",
         },
     )
+
+
+@router.post("/internal/v1/agent-routes:resolve")
+async def resolve_agent_route(request: Request):
+    body = await request.body()
+    if len(body) > settings.AGENT_MAX_REQUEST_BYTES:
+        raise HTTPException(status_code=413, detail="request too large")
+    try:
+        route_request = AgentRouteRequest.model_validate_json(body)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+    _verify(request, body, route_request.execution_id)
+    try:
+        return await registry.resolve_route(route_request)
+    except (UnknownModelIDError, UnknownRequestedSkillError) as exc:
+        raise HTTPException(status_code=422, detail=exc.code) from exc
+    except ConflictingSkillRequestError as exc:
+        raise HTTPException(status_code=422, detail=exc.code) from exc
 
 
 @router.get("/internal/v1/agent-runs/{execution_id}")

@@ -10,9 +10,7 @@ from agent.skills.protocol import SelectionSource
 
 
 PROTOCOL_VERSION = 1
-TERMINAL_STATUSES = frozenset(
-    {"completed", "cancelled", "failed", "timed_out"}
-)
+TERMINAL_STATUSES = frozenset({"completed", "cancelled", "failed", "timed_out"})
 
 
 class RunStatus(StrEnum):
@@ -71,6 +69,65 @@ class ChatMessage(BaseModel):
     content: str = Field(min_length=1, max_length=200_000)
 
 
+class ContextSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: str = Field(min_length=1, max_length=64)
+    reference: str | None = Field(default=None, max_length=500)
+    detail: str | None = Field(default=None, max_length=500)
+
+
+class ContextItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    item_id: str = Field(min_length=1, max_length=128)
+    revision_id: str = Field(min_length=1, max_length=128)
+    type: str = Field(min_length=1, max_length=64)
+    domain: str = Field(min_length=1, max_length=80)
+    content: str = Field(min_length=1, max_length=20_000)
+    source: ContextSource
+    updated_at: datetime
+
+
+class ContextPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    allow_memory_proposals: bool = False
+
+
+class ContextRequirementsPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    execution_mode: Literal["direct", "skill"]
+    primary_skill: str | None = None
+    purpose: str
+    needs_personal_context: bool
+    allowed_types: list[str]
+    allowed_domains: list[str]
+    item_budget: int = Field(ge=0, le=50)
+    character_budget: int = Field(ge=0, le=50_000)
+
+
+class ContextPackage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    package_id: str = Field(min_length=1, max_length=128)
+    run_id: str | None = Field(default=None, max_length=128)
+    purpose: str = Field(min_length=1, max_length=80)
+    items: list[ContextItem] = Field(default_factory=list, max_length=50)
+    policy: ContextPolicy
+    requirements: ContextRequirementsPayload
+    created_at: datetime | None = None
+
+
+class AgentRouteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    protocol_version: Literal[1] = PROTOCOL_VERSION
+    execution_id: str = Field(min_length=1, max_length=128)
+    run_id: str = Field(min_length=1, max_length=128)
+    request_id: str = Field(min_length=1, max_length=128)
+    agent_name: str = Field(default="default_llm_agent", max_length=128)
+    model_id: str = Field(default="auto", max_length=64)
+    requested_skill: str | None = Field(default=None, max_length=64)
+    query: str = Field(min_length=1, max_length=200_000)
+    messages: list[ChatMessage] = Field(default_factory=list, max_length=200)
+
+
 class AgentRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -100,6 +157,7 @@ class AgentRunRequest(BaseModel):
         pattern=r"^[a-z][a-z0-9_]{0,63}$",
     )
     context_package_id: str | None = Field(default=None, max_length=128)
+    context_package: ContextPackage | None = None
     mode: str | None = Field(default=None, max_length=64)
     query: str = Field(min_length=1, max_length=200_000)
     messages: list[ChatMessage] = Field(default_factory=list, max_length=200)
@@ -171,6 +229,13 @@ class AgentRunRequest(BaseModel):
                 or self.suggested_skill is None
             ):
                 raise ValueError("invalid confirmation-only skill resolution")
+        if self.context_package is not None:
+            if self.context_package_id != self.context_package.package_id:
+                raise ValueError("context package id mismatch")
+            if self.context_package.run_id not in {None, self.run_id}:
+                raise ValueError("context package run mismatch")
+            if self.route_reason_code is None or self.selection_source is None:
+                raise ValueError("frozen context requires frozen resolution")
         return self
 
 

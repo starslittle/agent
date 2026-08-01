@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/starslittle/agent/go-backend/internal/agent"
+	contextpackage "github.com/starslittle/agent/go-backend/internal/context"
 	"github.com/starslittle/agent/go-backend/internal/conversation"
 )
 
@@ -169,6 +170,24 @@ type supervisorStore struct {
 	finishedStatus  string
 	finishedContent string
 	recorded        []agent.Event
+}
+
+func (s *supervisorStore) PrepareContextPackage(_ context.Context, _ string, _ string, packageID string, resolution agent.SkillResolution, requirements contextpackage.Requirements) (contextpackage.Package, error) {
+	pkg, err := contextpackage.Assemble(packageID, s.run.Run.ID, requirements, nil)
+	if err != nil {
+		return contextpackage.Package{}, err
+	}
+	s.run.Run.ContextPackageID = &pkg.PackageID
+	s.run.Run.ModelID = resolution.ModelID
+	s.run.Run.RequestedSkill = resolution.RequestedSkill
+	encoded, _ := json.Marshal(resolution.ResolvedSkills)
+	s.run.Run.ResolvedSkills = encoded
+	s.run.Run.PrimarySkill = resolution.PrimarySkill
+	s.run.Run.SelectionSource = &resolution.SelectionSource
+	return pkg, nil
+}
+func (s *supervisorStore) FindContextPackageByRun(_ context.Context, _ string, _ string) (contextpackage.Package, error) {
+	return contextpackage.Package{PackageID: *s.run.Run.ContextPackageID, Purpose: "conversation", Items: []contextpackage.Item{}}, nil
 }
 
 func newSupervisorStore(
@@ -386,6 +405,12 @@ type supervisorClient struct {
 	startingAfter int64
 	snapshot      agent.Snapshot
 	getErr        error
+}
+
+func (c *supervisorClient) Resolve(_ context.Context, request agent.RouteRequest) (agent.RouteResult, error) {
+	confidence := 1.0
+	resolution := agent.SkillResolution{ModelID: "auto", RequestedSkill: request.RequestedSkill, ResolvedSkills: []string{}, SelectionSource: "direct", Confidence: &confidence, ReasonCode: "general_conversation", ModelSnapshot: json.RawMessage(`{"model_id":"auto"}`)}
+	return agent.RouteResult{Resolution: resolution, Requirements: contextpackage.Requirements{ExecutionMode: "direct", Purpose: "conversation", NeedsPersonalContext: false}}, nil
 }
 
 func (c *supervisorClient) Start(

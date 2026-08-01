@@ -845,6 +845,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                       skillSource={message.skillSource}
                       confirmation={message.confirmation}
                       runID={message.runID}
+					  contextUsage={message.contextUsage}
                       onConfirmSkill={(skillID, prompt) => {
                         const turn = explicitConfirmationTurn(prompt, skillID);
                         void handleSend(turn.text, turn.requestedSkill);

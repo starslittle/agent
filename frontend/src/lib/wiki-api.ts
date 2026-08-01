@@ -32,6 +32,12 @@ export interface WikiDetail {
   item: WikiItem;
   revision: { id: string; item_id: string; revision_number: number; content: string; created_by: string; replaces_revision_id?: string | null; created_at: string };
   sources: WikiSource[];
+  usage: Array<{
+    package_id: string;
+    run_id: string;
+    purpose: string;
+    items: Array<{ revision_id?: string | null; updated_at: string; redacted_at?: string | null }>;
+  }>;
 }
 
 function baseURL(): string {

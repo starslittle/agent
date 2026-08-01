@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/starslittle/agent/go-backend/internal/agent"
+	contextpackage "github.com/starslittle/agent/go-backend/internal/context"
 )
 
 const (
@@ -217,10 +218,11 @@ type RunPrompt struct {
 }
 
 type RunDetail struct {
-	Run     RunSummary  `json:"run"`
-	Spans   []RunSpan   `json:"spans"`
-	Events  []RunEvent  `json:"events"`
-	Prompts []RunPrompt `json:"prompts"`
+	Run          RunSummary            `json:"run"`
+	Spans        []RunSpan             `json:"spans"`
+	Events       []RunEvent            `json:"events"`
+	Prompts      []RunPrompt           `json:"prompts"`
+	ContextUsage *contextpackage.Usage `json:"context_usage,omitempty"`
 }
 
 type RunEventPage struct {

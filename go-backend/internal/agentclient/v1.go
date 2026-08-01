@@ -50,6 +50,51 @@ func (c *V1Client) Start(
 	return c.start(ctx, run, 0)
 }
 
+func (c *V1Client) Resolve(ctx context.Context, route agent.RouteRequest) (agent.RouteResult, error) {
+	if err := route.Validate(); err != nil {
+		return agent.RouteResult{}, err
+	}
+	body, err := json.Marshal(route)
+	if err != nil {
+		return agent.RouteResult{}, err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.resolve("/internal/v1/agent-routes:resolve"), bytes.NewReader(body))
+	if err != nil {
+		return agent.RouteResult{}, err
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Content-Type", "application/json")
+	c.sign(request, route.UserID, route.RequestID, route.ExecutionID, body)
+	response, err := c.client.Do(request)
+	if err != nil {
+		return agent.RouteResult{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		detail, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		return agent.RouteResult{}, fmt.Errorf("Python Agent resolve failed (%d): %s", response.StatusCode, strings.TrimSpace(string(detail)))
+	}
+	var result agent.RouteResult
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&result); err != nil {
+		return agent.RouteResult{}, err
+	}
+	if _, err := agent.ParseSkillResolution(mustJSON(result.Resolution)); err != nil {
+		return agent.RouteResult{}, err
+	}
+	if err := result.Requirements.Validate(); err != nil {
+		return agent.RouteResult{}, err
+	}
+	return result, nil
+}
+
+func mustJSON(value any) json.RawMessage {
+	data, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
 func (c *V1Client) Resume(
 	ctx context.Context,
 	run agent.RunRequest,

@@ -114,6 +114,11 @@ func (s *Store) FindWikiItem(ctx context.Context, userID, itemID string) (wiki.I
 		return wiki.ItemDetail{}, err
 	}
 	detail.Sources = sources
+	usage, err := s.ListContextUsageForItem(ctx, userID, itemID)
+	if err != nil {
+		return wiki.ItemDetail{}, err
+	}
+	detail.Usage = usage
 	return detail, nil
 }
 
@@ -261,6 +266,9 @@ func (s *Store) DeleteWikiItemPermanently(ctx context.Context, userID, itemID st
 	}
 	if version != expectedVersion {
 		return wiki.ErrVersionConflict
+	}
+	if err := redactContextForWikiItem(ctx, tx, userID, itemID); err != nil {
+		return err
 	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO app_core.wiki_item_tombstones (item_id, user_id, deleted_by_user)

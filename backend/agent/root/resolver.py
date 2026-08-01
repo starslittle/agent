@@ -60,6 +60,65 @@ class SkillRouteResolution(BaseModel):
         )
 
 
+class ContextRequirements(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    execution_mode: Literal["direct", "skill"]
+    primary_skill: str | None
+    purpose: str
+    needs_personal_context: bool
+    allowed_types: list[str]
+    allowed_domains: list[str]
+    item_budget: int = Field(ge=0, le=50)
+    character_budget: int = Field(ge=0, le=50_000)
+
+
+def context_requirements_for(resolution: SkillRouteResolution) -> ContextRequirements:
+    if resolution.requires_confirmation:
+        return ContextRequirements(
+            execution_mode="direct",
+            primary_skill=None,
+            purpose="skill_confirmation",
+            needs_personal_context=False,
+            allowed_types=[],
+            allowed_domains=[],
+            item_budget=0,
+            character_budget=0,
+        )
+    if resolution.primary_skill == "fortune":
+        return ContextRequirements(
+            execution_mode="skill",
+            primary_skill="fortune",
+            purpose="fortune",
+            needs_personal_context=True,
+            allowed_types=["confirmed_fact", "current_state", "personal_rule"],
+            allowed_domains=["fortune", "profile"],
+            item_budget=6,
+            character_budget=2400,
+        )
+    if resolution.primary_skill == "research":
+        return ContextRequirements(
+            execution_mode="skill",
+            primary_skill="research",
+            purpose="research",
+            needs_personal_context=True,
+            allowed_types=["confirmed_fact", "current_state", "personal_rule"],
+            allowed_domains=[],
+            item_budget=8,
+            character_budget=4000,
+        )
+    return ContextRequirements(
+        execution_mode="direct",
+        primary_skill=None,
+        purpose="conversation",
+        needs_personal_context=True,
+        allowed_types=["confirmed_fact", "current_state", "personal_rule"],
+        allowed_domains=[],
+        item_budget=6,
+        character_budget=2400,
+    )
+
+
 class SkillPolicyError(PermissionError):
     def __init__(self, code: str) -> None:
         super().__init__(code)

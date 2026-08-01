@@ -85,6 +85,11 @@ class ExecutionRegistry:
         )
         return report
 
+    async def resolve_route(self, request):
+        if not hasattr(self._runtime, "resolve_route"):
+            raise RuntimeError("runtime route resolver unavailable")
+        return await self._runtime.resolve_route(request)
+
     async def purge_expired(self) -> int:
         return await self._store.purge_expired()
 

@@ -1,6 +1,9 @@
 package wiki
 
-import "time"
+import (
+	contextpackage "github.com/starslittle/agent/go-backend/internal/context"
+	"time"
+)
 
 const (
 	TypeConfirmedFact = "confirmed_fact"
@@ -66,9 +69,10 @@ type Source struct {
 }
 
 type ItemDetail struct {
-	Item     Item     `json:"item"`
-	Revision Revision `json:"revision"`
-	Sources  []Source `json:"sources"`
+	Item     Item                   `json:"item"`
+	Revision Revision               `json:"revision"`
+	Sources  []Source               `json:"sources"`
+	Usage    []contextpackage.Usage `json:"usage"`
 }
 
 type ListParams struct {

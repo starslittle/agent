@@ -14,6 +14,7 @@ type EventStream interface {
 }
 
 type Client interface {
+	Resolve(context.Context, RouteRequest) (RouteResult, error)
 	Start(context.Context, RunRequest) (EventStream, error)
 	Resume(context.Context, RunRequest, int64) (EventStream, error)
 	Get(context.Context, string, string, string) (Snapshot, error)

@@ -29,6 +29,22 @@ export interface ChatViewMessage {
     prompt: string;
   };
   runID?: string;
+  contextUsage?: { runID: string; purpose: string; items: Array<{ itemID: string; type: string; domain: string }> };
+}
+
+function parseStoredContextUsage(metadata?: Record<string, unknown>) {
+  const value = metadata?.context_usage;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const usage = value as Record<string, unknown>;
+  if (typeof usage.run_id !== "string" || typeof usage.purpose !== "string" || !Array.isArray(usage.items)) return undefined;
+  const items = usage.items.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const row = item as Record<string, unknown>;
+    return typeof row.item_id === "string" && typeof row.type === "string" && typeof row.domain === "string"
+      ? [{ itemID: row.item_id, type: row.type, domain: row.domain }]
+      : [];
+  }).slice(0, 50);
+  return { runID: usage.run_id, purpose: usage.purpose, items };
 }
 
 function parseStoredConfirmation(metadata?: Record<string, unknown>) {
@@ -64,6 +80,7 @@ function toViewMessage(
     thinking: message.status === "streaming",
     thinkingFinished: message.status !== "streaming",
     citations: parseStoredCitations(message.metadata),
+    contextUsage: message.role === "assistant" ? parseStoredContextUsage(message.metadata) : undefined,
     confirmation:
       message.role === "assistant" &&
       storedConfirmation &&
@@ -101,5 +118,6 @@ export function mergeStoredMessage(
     skillSource: current.skillSource,
     confirmation: stored.confirmation ?? current.confirmation,
     runID: current.runID,
+    contextUsage: stored.contextUsage ?? current.contextUsage,
   };
 }

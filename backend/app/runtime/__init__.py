@@ -2,6 +2,7 @@
 
 from .models import (
     AgentEvent,
+    AgentRouteRequest,
     AgentRunRequest,
     ChatMessage,
     RunSnapshot,
@@ -12,6 +13,7 @@ from .factory import build_agent_runtime
 
 __all__ = [
     "AgentEvent",
+    "AgentRouteRequest",
     "AgentRunRequest",
     "ChatMessage",
     "ExecutionRegistry",

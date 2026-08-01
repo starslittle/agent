@@ -7,9 +7,13 @@ from agent.application import LangGraphAgentApplication, RunCommand
 from agent.capabilities import RegistryCapabilityExecutor
 from agent.models import get_model_gateway
 from agent.root import SkillRouteResolution
-from agent.skills import SkillSelection, get_skill_registry, resolve_compatible_selection
+from agent.skills import (
+    SkillSelection,
+    get_skill_registry,
+    resolve_compatible_selection,
+)
 
-from .models import AgentRunRequest
+from .models import AgentRouteRequest, AgentRunRequest
 from .store import LeaseToken
 
 
@@ -59,6 +63,11 @@ class LangGraphV1Runtime:
             selection=selection,
             resolution=resolution,
             context_package_id=request.context_package_id,
+            context_package=(
+                request.context_package.model_dump(mode="json")
+                if request.context_package is not None
+                else None
+            ),
             shadow=request.shadow,
             deadline_ms=request.deadline_ms,
             cancel_event=cancel_event,
@@ -81,6 +90,7 @@ class LangGraphV1Runtime:
         request: AgentRunRequest,
     ) -> dict:
         selection = self._selection(request)
+        resolution = self._resolution(request, selection)
         command = await self._application.resolve_command(
             RunCommand(
                 execution_id=request.execution_id,
@@ -89,6 +99,7 @@ class LangGraphV1Runtime:
                 requested_workflow=request.mode or selection.agent_name,
                 model_id=request.model_id,
                 selection=selection,
+                resolution=resolution,
                 context_package_id=request.context_package_id,
                 shadow=request.shadow,
                 deadline_ms=request.deadline_ms,
@@ -101,6 +112,40 @@ class LangGraphV1Runtime:
             resolution=command.resolution,
             context_package_id=request.context_package_id,
         )
+
+    async def resolve_route(self, request: AgentRouteRequest) -> dict:
+        selection = resolve_compatible_selection(
+            requested_skill=request.requested_skill,
+            agent_name=request.agent_name,
+        )
+        command, provenance, requirements = await self._application.resolve_route(
+            RunCommand(
+                execution_id=request.execution_id,
+                query=request.query,
+                messages=[item.model_dump() for item in request.messages],
+                requested_workflow=selection.agent_name,
+                model_id=request.model_id,
+                selection=selection,
+            )
+        )
+        resolution = command.resolution.model_dump(mode="json")
+        resolution.update(
+            {
+                "model_id": provenance["model_id"],
+                "skill_snapshot": provenance["skill_snapshot"],
+                "model_snapshot": provenance["model_snapshot"],
+                "context_package_id": None,
+            }
+        )
+        route_model_used = (
+            command.resolution.selection_source in {"automatic", "direct", "fallback"}
+            and request.requested_skill is None
+        )
+        return {
+            "resolution": resolution,
+            "context_requirements": requirements,
+            "route_usage": {"model_calls": 1 if route_model_used else 0},
+        }
 
     @staticmethod
     def _selection(request: AgentRunRequest) -> SkillSelection:
@@ -157,9 +202,5 @@ class LangGraphV1Runtime:
 
         await get_tool_registry().cancel_execution(execution_id)
         task = self._active_tasks.get(execution_id)
-        if (
-            task is not None
-            and not task.done()
-            and task is not asyncio.current_task()
-        ):
+        if task is not None and not task.done() and task is not asyncio.current_task():
             task.cancel()

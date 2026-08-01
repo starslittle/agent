@@ -3,17 +3,40 @@ package conversation
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/starslittle/agent/go-backend/internal/agent"
+	contextpackage "github.com/starslittle/agent/go-backend/internal/context"
 )
 
 type Service struct {
 	store Store
 	now   func() time.Time
+}
+
+type contextStore interface {
+	PrepareContextPackage(context.Context, string, string, string, agent.SkillResolution, contextpackage.Requirements) (contextpackage.Package, error)
+	FindContextPackageByRun(context.Context, string, string) (contextpackage.Package, error)
+}
+
+func (s *Service) PrepareContextPackage(ctx context.Context, userID, runID, packageID string, resolution agent.SkillResolution, requirements contextpackage.Requirements) (contextpackage.Package, error) {
+	store, ok := s.store.(contextStore)
+	if !ok {
+		return contextpackage.Package{}, errors.New("context package store unavailable")
+	}
+	return store.PrepareContextPackage(ctx, userID, runID, packageID, resolution, requirements)
+}
+
+func (s *Service) FindContextPackageByRun(ctx context.Context, userID, runID string) (contextpackage.Package, error) {
+	store, ok := s.store.(contextStore)
+	if !ok {
+		return contextpackage.Package{}, errors.New("context package store unavailable")
+	}
+	return store.FindContextPackageByRun(ctx, userID, runID)
 }
 
 func NewService(store Store) *Service {
