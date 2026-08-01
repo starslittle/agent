@@ -115,4 +115,121 @@
   .skip-link {
     @apply fixed left-3 top-3 z-[100] -translate-y-20 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-transform focus:translate-y-0 focus:outline-none focus:ring-4 focus:ring-ring/25 motion-reduce:transition-none;
   }
+
+  .markdown-document {
+    @apply min-w-0 break-words text-base leading-7 text-foreground;
+  }
+
+  .markdown-document > :first-child {
+    margin-top: 0;
+  }
+
+  .markdown-document h1,
+  .markdown-document h2,
+  .markdown-document h3,
+  .markdown-document h4 {
+    @apply scroll-mt-24 text-balance font-semibold tracking-tight text-foreground;
+  }
+
+  .markdown-document h1 {
+    @apply mb-5 mt-10 text-3xl leading-tight;
+  }
+
+  .markdown-document h2 {
+    @apply mb-4 mt-10 border-b pb-3 text-2xl leading-tight;
+  }
+
+  .markdown-document h3 {
+    @apply mb-3 mt-8 text-xl leading-snug;
+  }
+
+  .markdown-document h4 {
+    @apply mb-2 mt-6 text-lg leading-snug;
+  }
+
+  .markdown-document p {
+    @apply my-4;
+  }
+
+  .markdown-document strong {
+    @apply font-semibold text-foreground;
+  }
+
+  .markdown-document a {
+    @apply rounded-sm font-medium text-primary underline decoration-primary/35 underline-offset-4 transition-colors hover:decoration-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+    overflow-wrap: anywhere;
+  }
+
+  .markdown-document ul,
+  .markdown-document ol {
+    @apply my-5 space-y-2 pl-7;
+  }
+
+  .markdown-document ul {
+    @apply list-disc;
+  }
+
+  .markdown-document ol {
+    @apply list-decimal;
+  }
+
+  .markdown-document li {
+    @apply pl-1 marker:text-muted-foreground;
+  }
+
+  .markdown-document li > p,
+  .markdown-document li > ul,
+  .markdown-document li > ol {
+    @apply my-2;
+  }
+
+  .markdown-document blockquote {
+    @apply my-6 border-l-4 border-[hsl(var(--brand-coral))] bg-muted/50 px-5 py-3 text-muted-foreground;
+  }
+
+  .markdown-document blockquote > :first-child {
+    @apply mt-0;
+  }
+
+  .markdown-document blockquote > :last-child {
+    @apply mb-0;
+  }
+
+  .markdown-document hr {
+    @apply my-10 border-border;
+  }
+
+  .markdown-document pre {
+    @apply my-6 max-w-full overflow-x-auto overscroll-x-contain rounded-xl border bg-muted/55 p-4 font-mono text-sm leading-6 text-foreground;
+    tab-size: 2;
+  }
+
+  .markdown-document pre code {
+    @apply border-0 bg-transparent p-0 text-inherit;
+  }
+
+  .markdown-document :not(pre) > code {
+    @apply rounded-md border bg-muted px-1.5 py-0.5 font-mono text-[0.875em] text-foreground;
+    overflow-wrap: anywhere;
+  }
+
+  .markdown-document table {
+    @apply my-6 block w-full max-w-full overflow-x-auto border-collapse text-left text-sm;
+  }
+
+  .markdown-document th {
+    @apply border bg-muted/70 px-3 py-2 font-semibold text-foreground;
+  }
+
+  .markdown-document td {
+    @apply border px-3 py-2 align-top;
+  }
+
+  .markdown-document img {
+    @apply my-6 h-auto max-w-full rounded-xl border;
+  }
+
+  .markdown-document input[type="checkbox"] {
+    @apply mr-2 h-4 w-4 align-middle accent-primary;
+  }
 }

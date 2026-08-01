@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Clock3, Edit3, FileClock, Menu, MoreHorizontal, Move, Pencil, Save, Trash2, X } from "lucide-react";
+import { ArrowLeft, BrainCircuit, Clock3, Edit3, FileClock, FolderTree, MoreHorizontal, Move, Pencil, Save, Trash2, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
@@ -15,8 +15,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DocumentDirectoryPanel } from "@/features/space/DocumentDirectoryPanel";
 import { FolderPickerDialog } from "@/features/space/FolderPickerDialog";
-import { safeMarkdownURL } from "@/features/space/markdown";
+import { presentMarkdownDocument, safeMarkdownURL } from "@/features/space/markdown";
 import { DocumentContextPanel } from "@/features/wiki/DocumentContextPanel";
 import { deleteDocument, getDocument, getFolderBreadcrumbs, listDocumentRevisions, moveDocument, updateDocument, type DocumentRevision, type MarkdownDocument, type SpaceFolder } from "@/lib/space-api";
 
@@ -38,6 +39,7 @@ export default function DocumentPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [nextName, setNextName] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [directoryOpen, setDirectoryOpen] = useState(false);
 
   const load = useCallback((signal?: AbortSignal) => {
     setLoading(true); setError("");
@@ -100,20 +102,38 @@ export default function DocumentPage() {
     catch (reason) { toast.error(reason instanceof Error ? reason.message : "删除没有完成"); }
   };
 
-  const rendered = useMemo(() => document?.content ?? "", [document?.content]);
+  const presentation = useMemo(
+    () => presentMarkdownDocument(document?.content ?? "", document?.name.replace(/\.md$/i, "") || "文档"),
+    [document?.content, document?.name],
+  );
+  const parentFolder = breadcrumbs[breadcrumbs.length - 1] ?? null;
+  const parentHref = parentFolder ? `/space/folders/${parentFolder.id}` : "/space";
+  const parentLabel = parentFolder?.name ?? "我的空间";
   return (
-    <WorkspaceShell title={document?.name ?? "文档"} subtitle="阅读、编辑并管理关联上下文" mainId="document-main" headerActions={<Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="h-11 w-11 xl:hidden" aria-label="打开关联上下文"><Menu className="h-4 w-4" aria-hidden="true" /></Button></SheetTrigger><SheetContent className="w-[min(92vw,24rem)] p-0"><SheetHeader className="sr-only"><SheetTitle>关联上下文</SheetTitle></SheetHeader>{document && <DocumentContextPanel documentID={document.id} documentRevisionID={document.current_revision_id} />}</SheetContent></Sheet>}>
-      <div className="grid h-full min-h-0 xl:grid-cols-[minmax(0,1fr)_22rem]">
+    <WorkspaceShell title={document?.name ?? "文档"} subtitle="阅读、编辑并管理关联上下文" mainId="document-main" headerActions={<>
+      <Sheet open={directoryOpen} onOpenChange={setDirectoryOpen}>
+        <SheetTrigger asChild><Button variant="outline" size="icon" className="h-11 w-11 xl:hidden" aria-label="打开当前文件夹"><FolderTree className="h-4 w-4" aria-hidden="true" /></Button></SheetTrigger>
+        <SheetContent side="left" className="w-[min(92vw,20rem)] p-0"><SheetHeader className="sr-only"><SheetTitle>当前文件夹</SheetTitle></SheetHeader>{document && parentFolder && <DocumentDirectoryPanel folderID={parentFolder.id} folderName={parentFolder.name} currentDocumentID={document.id} currentDocumentName={document.name} onNavigate={() => setDirectoryOpen(false)} />}</SheetContent>
+      </Sheet>
+      <Sheet>
+        <SheetTrigger asChild><Button variant="outline" size="icon" className="h-11 w-11" aria-label="打开关联上下文"><BrainCircuit className="h-4 w-4" aria-hidden="true" /></Button></SheetTrigger>
+        <SheetContent className="w-[min(92vw,24rem)] p-0"><SheetHeader className="sr-only"><SheetTitle>关联上下文</SheetTitle></SheetHeader>{document && <DocumentContextPanel documentID={document.id} documentRevisionID={document.current_revision_id} />}</SheetContent>
+      </Sheet>
+    </>}>
+      <div className="grid h-full min-h-0 xl:grid-cols-[18rem_minmax(0,1fr)]">
+        {document && parentFolder && <DocumentDirectoryPanel className="hidden border-r xl:flex" folderID={parentFolder.id} folderName={parentFolder.name} currentDocumentID={document.id} currentDocumentName={document.name} />}
         <section className="min-h-0 overflow-y-auto">
           {loading && <div role="status" className="grid min-h-full place-items-center text-sm text-muted-foreground">正在打开文档…</div>}
           {!loading && error && <div role="alert" className="grid min-h-full place-items-center px-5 text-center"><div><p className="text-sm text-destructive">{error}</p><Button variant="outline" className="mt-4" onClick={() => setRetry((value) => value + 1)}>重新加载</Button></div></div>}
           {!loading && document && <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
-            <nav aria-label="文档位置" className="mb-8 flex items-center gap-2 overflow-x-auto pb-1 text-xs text-muted-foreground"><Link to="/space" className="shrink-0 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">我的空间</Link>{breadcrumbs.map((item) => <span key={item.id} className="flex shrink-0 items-center gap-2"><span aria-hidden="true">/</span><Link to={`/space/folders/${item.id}`} className="max-w-40 truncate rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{item.name}</Link></span>)}<span aria-hidden="true">/</span><span className="max-w-52 truncate text-foreground" aria-current="page">{document.name}</span></nav>
-            <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-start"><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Markdown · 第 {document.revision_number} 版</p><h2 className="mt-3 break-words text-3xl font-semibold tracking-tight sm:text-4xl">{document.name.replace(/\.md$/i, "")}</h2><p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" />{new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(document.updated_at))} 更新</p></div><div className="flex shrink-0 items-center gap-2">{editing ? <><Button variant="outline" onClick={() => { setDraft(document.content); setEditing(false); }}><X className="mr-2 h-4 w-4" aria-hidden="true" />取消</Button><Button onClick={() => void save()} disabled={!dirty || saving}><Save className="mr-2 h-4 w-4" aria-hidden="true" />{saving ? "正在保存…" : "保存新版本"}</Button></> : <Button onClick={() => setEditing(true)}><Edit3 className="mr-2 h-4 w-4" aria-hidden="true" />编辑</Button>}<DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="h-11 w-11" aria-label="管理文档"><MoreHorizontal className="h-4 w-4" aria-hidden="true" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => { setNextName(document.name); setRenameOpen(true); }}><Pencil className="mr-2 h-4 w-4" aria-hidden="true" />重命名</DropdownMenuItem><DropdownMenuItem onSelect={() => setRevisionOpen(true)}><FileClock className="mr-2 h-4 w-4" aria-hidden="true" />版本历史</DropdownMenuItem><DropdownMenuItem onSelect={() => setMoveOpen(true)}><Move className="mr-2 h-4 w-4" aria-hidden="true" />移动到…</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setDeleteOpen(true)}><Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />永久删除</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div></div>
-            {editing ? <div><label htmlFor="markdown-editor" className="sr-only">Markdown 内容</label><Textarea id="markdown-editor" name="markdown-editor" value={draft} onChange={(event) => setDraft(event.target.value)} spellCheck className="min-h-[60vh] resize-y font-mono text-sm leading-7" /><p aria-live="polite" className="mt-2 text-xs text-muted-foreground">{dirty ? "有未保存的修改" : "内容已保存"}</p></div> : <article className="prose prose-neutral max-w-none break-words dark:prose-invert prose-headings:scroll-mt-24 prose-a:text-primary prose-a:underline-offset-4 prose-pre:overflow-x-auto"><ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={safeMarkdownURL}>{rendered}</ReactMarkdown></article>}
+            <Button asChild variant="ghost" className="-ml-3 mb-5 h-11 max-w-full justify-start px-3 xl:hidden">
+              <Link to={parentHref}><ArrowLeft className="mr-2 h-4 w-4 shrink-0" aria-hidden="true" /><span className="truncate">返回“{parentLabel}”</span></Link>
+            </Button>
+            <nav aria-label="文档位置" className="mb-7 flex items-center gap-2 overflow-x-auto pb-1 text-xs text-muted-foreground"><Link to="/space" className="shrink-0 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">我的空间</Link>{breadcrumbs.map((item) => <span key={item.id} className="flex shrink-0 items-center gap-2"><span aria-hidden="true">/</span><Link to={`/space/folders/${item.id}`} className="max-w-40 truncate rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{item.name}</Link></span>)}<span aria-hidden="true">/</span><span className="max-w-52 truncate text-foreground" aria-current="page">{document.name}</span></nav>
+            <div className="mb-9 flex flex-col justify-between gap-5 border-b pb-8 sm:flex-row sm:items-start"><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Markdown · 第 {document.revision_number} 版</p><h2 className="mt-3 text-balance break-words text-3xl font-semibold tracking-tight sm:text-4xl">{presentation.title}</h2><p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" />{new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(document.updated_at))} 更新 · <span className="truncate" title={document.name}>{document.name}</span></p></div><div className="flex shrink-0 items-center gap-2">{editing ? <><Button variant="outline" onClick={() => { setDraft(document.content); setEditing(false); }}><X className="mr-2 h-4 w-4" aria-hidden="true" />取消</Button><Button onClick={() => void save()} disabled={!dirty || saving}><Save className="mr-2 h-4 w-4" aria-hidden="true" />{saving ? "正在保存…" : "保存新版本"}</Button></> : <Button onClick={() => setEditing(true)}><Edit3 className="mr-2 h-4 w-4" aria-hidden="true" />编辑</Button>}<DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="h-11 w-11" aria-label="管理文档"><MoreHorizontal className="h-4 w-4" aria-hidden="true" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => { setNextName(document.name); setRenameOpen(true); }}><Pencil className="mr-2 h-4 w-4" aria-hidden="true" />重命名</DropdownMenuItem><DropdownMenuItem onSelect={() => setRevisionOpen(true)}><FileClock className="mr-2 h-4 w-4" aria-hidden="true" />版本历史</DropdownMenuItem><DropdownMenuItem onSelect={() => setMoveOpen(true)}><Move className="mr-2 h-4 w-4" aria-hidden="true" />移动到…</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setDeleteOpen(true)}><Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />永久删除</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div></div>
+            {editing ? <div><label htmlFor="markdown-editor" className="sr-only">Markdown 内容</label><Textarea id="markdown-editor" name="markdown-editor" value={draft} onChange={(event) => setDraft(event.target.value)} spellCheck className="min-h-[60vh] resize-y font-mono text-sm leading-7" /><p aria-live="polite" className="mt-2 text-xs text-muted-foreground">{dirty ? "有未保存的修改" : "内容已保存"}</p></div> : <article className="markdown-document"><ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={safeMarkdownURL}>{presentation.body}</ReactMarkdown></article>}
           </div>}
         </section>
-        {document && <DocumentContextPanel className="hidden border-l xl:flex" documentID={document.id} documentRevisionID={document.current_revision_id} />}
       </div>
 
       <Sheet open={revisionOpen} onOpenChange={setRevisionOpen}><SheetContent className="w-[min(92vw,28rem)] overflow-y-auto overscroll-contain"><SheetHeader><SheetTitle>版本历史</SheetTitle></SheetHeader><div className="mt-6 space-y-3">{revisions.map((revision) => <article key={revision.id} className="rounded-xl border p-4"><p className="text-sm font-medium">第 {revision.revision_number} 版</p><p className="mt-1 text-xs text-muted-foreground">{new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(revision.created_at))}</p><p className="mt-3 line-clamp-4 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{revision.content}</p></article>)}</div></SheetContent></Sheet>

@@ -3,7 +3,23 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ReactMarkdown from "react-markdown";
 
-import { safeMarkdownURL } from "./markdown";
+import { presentMarkdownDocument, safeMarkdownURL } from "./markdown";
+
+describe("presentMarkdownDocument", () => {
+  it("uses a leading level-one heading as the reading title without rendering it twice", () => {
+    expect(presentMarkdownDocument("# 文档标题\n\n## 第一节\n正文", "fallback")).toEqual({
+      title: "文档标题",
+      body: "## 第一节\n正文",
+    });
+  });
+
+  it("keeps the original body when the document has no leading level-one heading", () => {
+    expect(presentMarkdownDocument("普通正文\n\n- 项目", "文件名")).toEqual({
+      title: "文件名",
+      body: "普通正文\n\n- 项目",
+    });
+  });
+});
 
 describe("safeMarkdownURL", () => {
   it("keeps safe web, mail and local links", () => {
