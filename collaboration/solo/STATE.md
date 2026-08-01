@@ -18,9 +18,10 @@ completed:
   - TASK-018
   - TASK-019
   - TASK-020
+  - TASK-029
 
-current_task: TASK-029
-next_task: round_e2e
+current_task: round_e2e
+next_task: round_acceptance
 
 start_gate: explicit_user_instruction_to_start_or_continue_solo
 production_authorized: false

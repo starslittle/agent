@@ -241,3 +241,11 @@
 - validation：Go 全包 passed；隔离 PostgreSQL 15 的真实 HTTP integration passed，覆盖原样/修改接受、暂缓、拒绝、重复提交、Run 筛选、详情原内容、Revision 冲突、认证/CSRF 和跨用户隔离；前端 61 tests passed、lint 0 errors（保留既有 8 warnings）与 production build passed；
 - skills：`frontend-design` 保持启点文档式低噪声视觉；`ui-ux-pro-max` 采用渐进披露与四个显式决定；`web-design-guidelines` 约束语义按钮、焦点、44px 触控、live 状态、危险操作确认和失败恢复；
 - risk：当前产品只有文档提取实际创建 Proposal；对话结果已支持带 Run provenance 的候选但未新增另一条创建链路，真实键盘/移动端与刷新场景进入 Round 唯一 E2E。
+
+### TASK-029 · completed
+
+- commit：`3a77515`；
+- result：新增 Skills 一级入口、搜索目录、路由化只读详情和“在对话中使用”；Python Manifest 生成公开字段白名单，Go 结合签名上游、Runtime readiness、产品策略和认证边界输出 effective Catalog，前端 Slash 菜单、建议卡、Skill Chip、Runs 与目录共用同一服务端事实源；
+- validation：Python 111 passed/2 skipped；Go 全包 passed；前端 62 tests、`tsc --noEmit`、lint 0 errors（保留既有 8 warnings）与 production build passed；契约测试覆盖隐藏 Prompt/Secret、unknown 字段、hidden/unavailable、未映射 Capability、签名、产品白名单和安全错误；
+- skills：`frontend-design` 延续启点品牌而拒绝通用 AI 紫色模板；`ui-ux-pro-max` 采用目录发现、路由化详情理解、统一对话执行；`web-design-guidelines` 约束 URL 搜索、语义控件、焦点恢复、44px 触控、live/error 状态和移动端 overscroll；
+- risk：真实浏览器深链接/刷新/后退/键盘/响应式、网络失败和 Run 服务端复校验进入 Round 唯一 E2E；新增 Skill 需要 Python 公开文案与 Go 产品白名单双重评审。
