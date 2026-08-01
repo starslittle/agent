@@ -59,3 +59,10 @@ type Store interface {
 	FindAgentRunDetail(context.Context, string, string) (RunDetail, error)
 	ListAgentRunEvents(context.Context, string, string, int64, int) (RunEventPage, error)
 }
+
+// ObservabilityStore is deliberately separate from Store: cross-user reads are
+// available only through the internal observability service path.
+type ObservabilityStore interface {
+	ListObservableAgentRuns(context.Context, ObservabilityRunListParams) ([]RunSummary, error)
+	FindObservableAgentRunDetail(context.Context, string) (RunDetail, error)
+}

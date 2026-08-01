@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Bot, LogOut, MessageSquare, Moon, Sun } from "lucide-react";
+import { Bot, LogOut, MessageSquare, Moon, ShieldCheck, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { QidianWordmark } from "@/brand/QidianMark";
@@ -17,10 +17,17 @@ function RunsThemeToggle() {
   );
 }
 
-export function RunWorkspaceShell({ children }: { children: ReactNode }) {
+export function RunWorkspaceShell({
+  children,
+  mode = "user",
+}: {
+  children: ReactNode;
+  mode?: "user" | "internal";
+}) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const runsActive = location.pathname.startsWith("/agent-runs");
+  const internalActive = location.pathname.startsWith("/internal/agent-runs");
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background text-foreground">
@@ -34,6 +41,9 @@ export function RunWorkspaceShell({ children }: { children: ReactNode }) {
           <Link to="/agent-runs" aria-current={runsActive ? "page" : undefined} className={cn("flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring", runsActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")}>
             <Bot className="h-4 w-4" aria-hidden="true" />Agent Runs
           </Link>
+          {user?.role === "observability_admin" && <Link to="/internal/agent-runs" aria-current={internalActive ? "page" : undefined} className={cn("flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring", internalActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")}>
+            <ShieldCheck className="h-4 w-4" aria-hidden="true" />内部观测
+          </Link>}
         </nav>
         <div className="mt-auto rounded-xl border border-border bg-background/60 p-3">
           <p className="truncate text-xs font-medium">{user?.display_name}</p>
@@ -46,14 +56,24 @@ export function RunWorkspaceShell({ children }: { children: ReactNode }) {
           <div className="flex min-w-0 items-center gap-3">
             <div className="lg:hidden"><QidianWordmark /></div>
             <div className="hidden lg:block">
-              <p className="text-sm font-semibold">Agent Runs</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">查看我的任务实际发生了什么</p>
+              <p className="text-sm font-semibold">{mode === "internal" ? "内部观测" : "Agent Runs"}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{mode === "internal" ? "跨用户只读运行检查" : "查看我的任务实际发生了什么"}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Link to="/" className="hidden min-h-11 items-center gap-2 rounded-xl px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex">
               <MessageSquare className="h-4 w-4" aria-hidden="true" />对话
             </Link>
+            {user?.role === "observability_admin" && (
+              <Link
+                to={mode === "internal" ? "/agent-runs" : "/internal/agent-runs"}
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={mode === "internal" ? "返回 Agent Runs" : "打开内部观测"}
+              >
+                {mode === "internal" ? <Bot className="h-4 w-4" aria-hidden="true" /> : <ShieldCheck className="h-4 w-4" aria-hidden="true" />}
+                <span className="hidden sm:inline">{mode === "internal" ? "Agent Runs" : "内部观测"}</span>
+              </Link>
+            )}
             <RunsThemeToggle />
             <button type="button" onClick={() => void logout()} className="grid h-11 w-11 place-items-center rounded-xl border border-border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="退出登录">
               <LogOut className="h-4 w-4" aria-hidden="true" />

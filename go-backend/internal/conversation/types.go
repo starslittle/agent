@@ -146,6 +146,7 @@ type RunSummary struct {
 	StartedAt        time.Time       `json:"started_at"`
 	CompletedAt      *time.Time      `json:"completed_at,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
+	OwnerUserID      string          `json:"user_id,omitempty"`
 }
 
 type RunEvent struct {
@@ -212,6 +213,19 @@ type RunListParams struct {
 	Status string
 	Limit  int
 	Before *time.Time
+}
+
+type ObservabilityRunListParams struct {
+	UserID    string
+	Skill     string
+	Workflow  string
+	Model     string
+	Status    string
+	ErrorCode string
+	From      *time.Time
+	To        *time.Time
+	Limit     int
+	Before    *time.Time
 }
 
 type Generation struct {

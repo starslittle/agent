@@ -40,6 +40,7 @@ export interface RunSummary {
   started_at: string;
   completed_at?: string | null;
   created_at: string;
+  user_id?: string;
 }
 
 export interface RunEvent {
@@ -92,6 +93,16 @@ export interface RunListQuery {
   limit?: number;
 }
 
+export interface ObservabilityRunListQuery extends RunListQuery {
+  userID?: string;
+  skill?: string;
+  workflow?: string;
+  model?: string;
+  errorCode?: string;
+  from?: string;
+  to?: string;
+}
+
 async function runRequest<T>(path: string, signal?: AbortSignal): Promise<T> {
   const env = (import.meta as unknown as { env?: Record<string, unknown> }).env || {};
   const configuredBase = env.VITE_API_BASE as string | undefined;
@@ -120,6 +131,38 @@ export function listRuns(
 export function getRunDetail(runID: string, signal?: AbortSignal): Promise<RunDetail> {
   return runRequest<RunDetail>(
     `/api/v1/agent-runs/${encodeURIComponent(runID)}`,
+    signal,
+  );
+}
+
+export function listObservableRuns(
+  query: ObservabilityRunListQuery = {},
+  signal?: AbortSignal,
+): Promise<RunListResponse> {
+  const params = new URLSearchParams({ limit: String(query.limit ?? 20) });
+  const filters: Array<[string, string | undefined | null]> = [
+    ["user_id", query.userID],
+    ["skill", query.skill],
+    ["workflow", query.workflow],
+    ["model", query.model],
+    ["status", query.status],
+    ["error_code", query.errorCode],
+    ["from", query.from],
+    ["to", query.to],
+    ["before", query.before],
+  ];
+  filters.forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  return runRequest<RunListResponse>(`/api/v1/internal/agent-runs?${params}`, signal);
+}
+
+export function getObservableRunDetail(
+  runID: string,
+  signal?: AbortSignal,
+): Promise<RunDetail> {
+  return runRequest<RunDetail>(
+    `/api/v1/internal/agent-runs/${encodeURIComponent(runID)}`,
     signal,
   );
 }

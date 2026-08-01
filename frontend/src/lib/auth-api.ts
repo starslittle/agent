@@ -3,6 +3,7 @@ export interface AuthUser {
   email: string;
   display_name: string;
   status: string;
+  role: "user" | "observability_admin";
   created_at: string;
 }
 

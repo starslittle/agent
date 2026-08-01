@@ -13,11 +13,17 @@ var (
 	ErrRateLimited        = errors.New("too many login attempts")
 )
 
+const (
+	RoleUser               = "user"
+	RoleObservabilityAdmin = "observability_admin"
+)
+
 type User struct {
 	ID          string    `json:"id"`
 	Email       string    `json:"email"`
 	DisplayName string    `json:"display_name"`
 	Status      string    `json:"status"`
+	Role        string    `json:"role"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -60,6 +66,14 @@ type LoginAudit struct {
 	CreatedAt time.Time
 }
 
+type ObservabilityAccessAudit struct {
+	ActorUserID string
+	Action      string
+	TargetRunID string
+	Filters     map[string]string
+	CreatedAt   time.Time
+}
+
 type Store interface {
 	Ping(context.Context) error
 	CreateUser(context.Context, CreateUserParams) (User, error)
@@ -69,6 +83,7 @@ type Store interface {
 	TouchSession(context.Context, string, time.Time) error
 	DeleteSession(context.Context, []byte) error
 	RecordLoginAudit(context.Context, LoginAudit) error
+	RecordObservabilityAccess(context.Context, ObservabilityAccessAudit) error
 }
 
 type Result struct {

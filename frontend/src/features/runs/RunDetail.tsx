@@ -30,6 +30,9 @@ interface RunDetailProps {
   loading: boolean;
   error: string;
   onRetry: () => void;
+  basePath?: string;
+  showConversationLink?: boolean;
+  showOwner?: boolean;
 }
 
 const numberFormatter = new Intl.NumberFormat("zh-CN");
@@ -57,7 +60,15 @@ function Definition({ term, children }: { term: string; children: ReactNode }) {
   );
 }
 
-export function RunDetail({ detail, loading, error, onRetry }: RunDetailProps) {
+export function RunDetail({
+  detail,
+  loading,
+  error,
+  onRetry,
+  basePath = "/agent-runs",
+  showConversationLink = true,
+  showOwner = false,
+}: RunDetailProps) {
   if (loading) {
     return (
       <section className="flex min-h-0 flex-1 items-center justify-center gap-2 bg-background text-xs text-muted-foreground" aria-label="运行详情加载中">
@@ -78,7 +89,7 @@ export function RunDetail({ detail, loading, error, onRetry }: RunDetailProps) {
             <button type="button" onClick={onRetry} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-xs font-medium text-primary-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25">
               <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />重试
             </button>
-            <Link to="/agent-runs" className="inline-flex min-h-11 items-center rounded-xl border border-border bg-background px-4 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">返回列表</Link>
+            <Link to={basePath} className="inline-flex min-h-11 items-center rounded-xl border border-border bg-background px-4 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">返回列表</Link>
           </div>
         </div>
       </section>
@@ -108,7 +119,7 @@ export function RunDetail({ detail, loading, error, onRetry }: RunDetailProps) {
   return (
     <article className="min-h-0 flex-1 overflow-y-auto bg-background" aria-labelledby="run-detail-title">
       <div className="mx-auto w-full max-w-5xl px-4 pb-16 pt-5 sm:px-6 lg:px-8">
-        <Link to="/agent-runs" className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden">
+        <Link to={basePath} className="mb-4 inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />返回运行列表
         </Link>
 
@@ -118,11 +129,11 @@ export function RunDetail({ detail, loading, error, onRetry }: RunDetailProps) {
             <span className="text-[11px] text-muted-foreground">{formatRunTime(run.started_at)}</span>
           </div>
           <h2 id="run-detail-title" className="mt-4 break-all font-mono text-lg font-semibold tracking-[-0.02em] sm:text-xl">{run.id}</h2>
-          <div className="mt-4 flex flex-wrap gap-2">
+          {showConversationLink && <div className="mt-4 flex flex-wrap gap-2">
             <Link to={`/chat/${encodeURIComponent(run.conversation_id)}`} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-xs font-medium text-primary-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25">
               返回关联对话<ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
             </Link>
-          </div>
+          </div>}
         </header>
 
         {(run.status === "failed" || run.status === "timed_out" || run.status === "cancelled") && (
@@ -139,6 +150,7 @@ export function RunDetail({ detail, loading, error, onRetry }: RunDetailProps) {
         <section className="mt-8" aria-labelledby="run-overview-title">
           <h2 id="run-overview-title" className="text-sm font-semibold">运行概览</h2>
           <dl className="mt-3 grid gap-3 rounded-2xl border border-border bg-card p-5 sm:grid-cols-2 xl:grid-cols-4">
+            {showOwner && <Definition term="用户 ID"><span className="font-mono">{run.user_id || "—"}</span></Definition>}
             <Definition term="实际 Skill">{skill?.label ?? run.primary_skill ?? "直接回答"}</Definition>
             <Definition term="选择来源">{skillSourceLabel(run.selection_source as SkillSelectionSource | null)}</Definition>
             <Definition term="Requested">{run.requested_skill || "自动"}</Definition>

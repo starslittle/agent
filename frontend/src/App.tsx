@@ -10,6 +10,8 @@ import AuthPage from "./pages/AuthPage";
 import { AuthProvider } from "./auth/AuthProvider";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import AgentRunsPage from "./pages/AgentRunsPage";
+import AgentObservabilityPage from "./pages/AgentObservabilityPage";
+import { ObservabilityRoute } from "./auth/ObservabilityRoute";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +50,14 @@ const App = () => (
                     <AgentRunsPage />
                   </ProtectedRoute>
                 )}
+              />
+              <Route
+                path="/internal/agent-runs"
+                element={<ObservabilityRoute><AgentObservabilityPage /></ObservabilityRoute>}
+              />
+              <Route
+                path="/internal/agent-runs/:runId"
+                element={<ObservabilityRoute><AgentObservabilityPage /></ObservabilityRoute>}
               />
               <Route path="*" element={<NotFound />} />
             </Routes>

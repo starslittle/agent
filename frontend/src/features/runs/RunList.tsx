@@ -18,6 +18,11 @@ interface RunListProps {
   onStatusChange: (status: RunStatus | "") => void;
   onRetry: () => void;
   onLoadMore: () => void;
+  basePath?: string;
+  detailSearch?: string;
+  showOwner?: boolean;
+  emptyDescription?: string;
+  showEmptyAction?: boolean;
 }
 
 export function RunList({
@@ -31,6 +36,11 @@ export function RunList({
   onStatusChange,
   onRetry,
   onLoadMore,
+  basePath = "/agent-runs",
+  detailSearch,
+  showOwner = false,
+  emptyDescription = "从对话发起一次任务后，运行过程会出现在这里。",
+  showEmptyAction = true,
 }: RunListProps) {
   return (
     <section className="flex h-full min-h-0 flex-col border-r border-border bg-card" aria-label="运行列表">
@@ -64,8 +74,8 @@ export function RunList({
         ) : items.length === 0 ? (
           <div className="flex min-h-56 flex-col items-center justify-center px-5 text-center">
             <p className="text-sm font-medium">还没有符合条件的 Run</p>
-            <p className="mt-2 max-w-xs text-xs leading-5 text-muted-foreground">从对话发起一次任务后，运行过程会出现在这里。</p>
-            <Link to="/" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-primary px-4 text-xs font-medium text-primary-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25">开始对话</Link>
+            <p className="mt-2 max-w-xs text-xs leading-5 text-muted-foreground">{emptyDescription}</p>
+            {showEmptyAction && <Link to="/" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-primary px-4 text-xs font-medium text-primary-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25">开始对话</Link>}
           </div>
         ) : (
           <div className="space-y-1">
@@ -75,7 +85,7 @@ export function RunList({
               return (
                 <Link
                   key={run.id}
-                  to={`/agent-runs/${encodeURIComponent(run.id)}${status ? `?status=${status}` : ""}`}
+                  to={`${basePath}/${encodeURIComponent(run.id)}${detailSearch ?? (status ? `?status=${status}` : "")}`}
                   className={cn(
                     "group block rounded-xl border px-3 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     selected ? "border-primary/35 bg-primary/5" : "border-transparent hover:border-border hover:bg-muted/50",
@@ -86,6 +96,7 @@ export function RunList({
                     <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" aria-hidden="true" />
                   </div>
                   <p className="mt-3 truncate font-mono text-[11px] text-foreground">{run.id}</p>
+                  {showOwner && <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">用户 {run.user_id || "—"}</p>}
                   <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
                     <span className="truncate">{skill?.label ?? (run.primary_skill || "直接回答")}</span>
                     <span className="shrink-0">{formatDuration(run.total_duration_ms)}</span>

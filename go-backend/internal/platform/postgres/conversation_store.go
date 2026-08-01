@@ -1096,7 +1096,12 @@ func optionalStringEqual(left, right *string) bool {
 
 func scanRunSummary(row rowScanner) (conversation.RunSummary, error) {
 	var item conversation.RunSummary
-	err := row.Scan(
+	err := row.Scan(runSummaryScanTargets(&item)...)
+	return item, err
+}
+
+func runSummaryScanTargets(item *conversation.RunSummary) []any {
+	return []any{
 		&item.ID,
 		&item.ExecutionID,
 		&item.TraceID,
@@ -1130,8 +1135,7 @@ func scanRunSummary(row rowScanner) (conversation.RunSummary, error) {
 		&item.StartedAt,
 		&item.CompletedAt,
 		&item.CreatedAt,
-	)
-	return item, err
+	}
 }
 
 const runSummaryColumns = `
@@ -1198,6 +1202,82 @@ func (s *Store) ListAgentRuns(
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (s *Store) ListObservableAgentRuns(
+	ctx context.Context,
+	params conversation.ObservabilityRunListParams,
+) ([]conversation.RunSummary, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT `+runSummaryColumns+`, c.user_id::text
+		FROM app_core.agent_runs r
+		JOIN app_core.conversations c ON c.id = r.conversation_id
+		WHERE ($1 = '' OR c.user_id = $1::uuid)
+			AND (
+				$2 = '' OR r.primary_skill = $2 OR r.requested_skill = $2 OR
+				COALESCE(r.resolved_skills, '[]'::jsonb) @> to_jsonb(ARRAY[$2]::text[])
+			)
+			AND ($3 = '' OR r.actual_route = $3)
+			AND ($4 = '' OR r.model_id = $4 OR r.model_name = $4)
+			AND ($5 = '' OR r.status = $5)
+			AND ($6 = '' OR r.error_code = $6)
+			AND ($7::timestamptz IS NULL OR r.started_at >= $7)
+			AND ($8::timestamptz IS NULL OR r.started_at <= $8)
+			AND ($9::timestamptz IS NULL OR r.started_at < $9)
+		ORDER BY r.started_at DESC, r.id DESC
+		LIMIT $10
+	`,
+		params.UserID,
+		params.Skill,
+		params.Workflow,
+		params.Model,
+		params.Status,
+		params.ErrorCode,
+		params.From,
+		params.To,
+		params.Before,
+		params.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]conversation.RunSummary, 0, params.Limit)
+	for rows.Next() {
+		var item conversation.RunSummary
+		targets := append(runSummaryScanTargets(&item), &item.OwnerUserID)
+		if err := rows.Scan(targets...); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Store) FindObservableAgentRunDetail(
+	ctx context.Context,
+	runID string,
+) (conversation.RunDetail, error) {
+	var ownerUserID string
+	err := s.pool.QueryRow(ctx, `
+		SELECT c.user_id::text
+		FROM app_core.agent_runs r
+		JOIN app_core.conversations c ON c.id = r.conversation_id
+		WHERE r.id = $1
+	`, runID).Scan(&ownerUserID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return conversation.RunDetail{}, conversation.ErrNotFound
+	}
+	if err != nil {
+		return conversation.RunDetail{}, err
+	}
+	detail, err := s.FindAgentRunDetail(ctx, ownerUserID, runID)
+	if err != nil {
+		return detail, err
+	}
+	detail.Run.OwnerUserID = ownerUserID
+	return detail, nil
 }
 
 func (s *Store) FindAgentRunDetail(
