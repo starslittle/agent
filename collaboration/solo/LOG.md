@@ -349,3 +349,11 @@
 - validation：`tsc --noEmit`、相关前端文件 ESLint、`git diff --check` 通过；按用户要求未执行 build，也未重复产品级 Browser E2E；
 - skills：`frontend-design` 保持启点侧栏视觉连续；`ui-ux-pro-max` 将导航与历史对话拆为稳定全局层和独立内容层；`web-design-guidelines` 保留语义动作/导航、键盘焦点、44px 触控目标、虚拟列表和长标题截断；
 - risk：首次登录仍需正常请求一次对话列表；路由切换复用内存状态，不新增接口或服务端写入；未 push、部署。
+
+### TASK-015 E2E Fix · 引用编号浮层
+
+- commit：本提交；
+- result：回答内引用编号不再使用会触发原生滚动的页内锚点，点击后在当前位置展示来源标题、摘要、域名与外部链接浮层；回答底部完整来源列表保留，聊天视口不再被抬高；
+- validation：引用相关 4 tests、`tsc --noEmit`、针对性 ESLint、`git diff --check` 通过；按用户要求未执行 build，也未重复产品级 Browser E2E；
+- skills：保留启点轻量脚注视觉，以不占布局的渐进披露浮层替代跳页；保留语义按钮、可访问名称、44px 扩展点击区域、键盘焦点、外链安全属性与减少动效；
+- risk：无；未修改 Citation 协议、来源排序或复制格式，未 push、部署。

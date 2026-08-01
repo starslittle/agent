@@ -9,16 +9,19 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Copy, Check, ListTree, ChevronDown, ChevronRight, Download, Maximize2, Minimize2, Sparkles, ArrowRight, FileText } from "lucide-react";
+import { Copy, Check, ListTree, ChevronDown, ChevronRight, Download, Maximize2, Minimize2, Sparkles, ArrowRight, ExternalLink, FileText } from "lucide-react";
 import { useStreamMarkdownBuffer } from "@/hooks/useStreamMarkdownBuffer";
 import { useSmoothTyping } from "@/hooks/useSmoothTyping";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { RuntimeActivity, RuntimeArtifact, RuntimeCitation } from "@/lib/chat-api";
 import { RuntimeActivityList } from "./RuntimeActivityList";
 import { CitationList } from "@/features/citations/CitationList";
 import {
+  citationAnchorID,
   formatCitedAnswerForCopy,
   remarkCitationMarkers,
+  sortedCitations,
 } from "@/features/citations/citations";
 import { QidianMark } from "@/brand/QidianMark";
 import {
@@ -52,6 +55,74 @@ export interface ChatMessageProps {
   onConfirmSkill?: (skillID: SkillID, prompt: string) => void;
   runID?: string;
   contextUsage?: { runID: string; purpose: string; items: Array<{ itemID: string; type: string; domain: string }> };
+}
+
+const citationSourceLabels: Record<RuntimeCitation["source_type"], string> = {
+  web: "网页",
+  knowledge: "知识库",
+  tool: "工具",
+};
+
+function CitationMarker({
+  citation,
+  displayIndex,
+}: {
+  citation: RuntimeCitation;
+  displayIndex: number;
+}) {
+  const hostname = new URL(citation.url).hostname.replace(/^www\./, "");
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`查看来源 ${displayIndex}：${citation.title}`}
+          className="relative mx-0.5 inline-grid h-5 min-w-5 touch-manipulation place-items-center rounded-full bg-primary/10 px-1 align-super text-[10px] font-semibold leading-none text-primary transition-[color,background-color] before:absolute before:-inset-3 hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          {displayIndex}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        sideOffset={8}
+        collisionPadding={16}
+        className="w-[min(22rem,calc(100vw-2rem))] rounded-xl p-3 shadow-lg motion-reduce:animate-none"
+      >
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary/10 text-[11px] font-semibold tabular-nums text-primary">
+            {displayIndex}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="break-words text-sm font-medium leading-5 text-foreground">
+              {citation.title}
+            </p>
+            {citation.snippet && (
+              <p className="mt-1 line-clamp-3 break-words text-xs leading-5 text-muted-foreground">
+                {citation.snippet}
+              </p>
+            )}
+            <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <span>{citationSourceLabels[citation.source_type]}</span>
+              <span aria-hidden="true">·</span>
+              <span className="min-w-0 truncate" translate="no">{hostname}</span>
+            </p>
+          </div>
+        </div>
+        <a
+          href={citation.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`打开来源 ${displayIndex}：${citation.title}（新窗口）`}
+        >
+          打开来源
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
+        </a>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 const ThinkingProcess: React.FC<{ thoughts: string[]; thinkingFinished?: boolean }> = ({ thoughts, thinkingFinished }) => {
@@ -242,6 +313,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const tableRenderIndexRef = React.useRef(0);
   const resolvedSkill = getVisibleSkill(skills, skillID);
   const suggestedSkill = getVisibleSkill(skills, confirmation?.skillID);
+  const citationTargets = React.useMemo(() => new Map(
+    sortedCitations(citations).map((citation, index) => [
+      `#${citationAnchorID(messageId, citation.citation_id)}`,
+      { citation, displayIndex: index + 1 },
+    ]),
+  ), [citations, messageId]);
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -457,19 +534,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                   return <li>{children}</li>;
                 },
                 a({ href, children, title }: any) {
-                  if (href?.startsWith("#citation-source-")) {
-                    return (
-                      <a
-                        href={href}
-                        title={title}
-                        aria-label={
-                          title ? title + "，跳转到来源列表" : "查看来源"
-                        }
-                        className="relative mx-0.5 inline-grid h-5 min-w-5 touch-manipulation place-items-center rounded-full bg-primary/10 px-1 align-super text-[10px] font-semibold leading-none text-primary no-underline transition-[color,background-color] before:absolute before:-inset-3 hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                      >
-                        {children}
-                      </a>
-                    );
+                  const target = href ? citationTargets.get(href) : undefined;
+                  if (target) {
+                    return <CitationMarker {...target} />;
                   }
                   return (
                     <a
