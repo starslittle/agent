@@ -8,15 +8,33 @@ import (
 	"unicode/utf8"
 
 	"github.com/starslittle/agent/go-backend/internal/auth"
+	"github.com/starslittle/agent/go-backend/internal/proposals"
 )
 
 type Service struct {
-	store Store
-	now   func() time.Time
+	store     Store
+	proposals *proposals.Service
+	now       func() time.Time
 }
 
 func NewService(store Store) *Service {
-	return &Service{store: store, now: time.Now}
+	return &Service{store: store, proposals: proposals.NewService(store), now: time.Now}
+}
+
+func (s *Service) CreateProposal(ctx context.Context, params proposals.CreateParams) (proposals.Proposal, error) {
+	return s.proposals.Create(ctx, params)
+}
+
+func (s *Service) Proposal(ctx context.Context, userID, proposalID string) (proposals.Proposal, error) {
+	return s.proposals.Get(ctx, userID, proposalID)
+}
+
+func (s *Service) Proposals(ctx context.Context, params proposals.ListParams) ([]proposals.Proposal, error) {
+	return s.proposals.List(ctx, params)
+}
+
+func (s *Service) ResolveProposal(ctx context.Context, userID, proposalID, action string, content *string, idempotencyKey string) (proposals.Resolution, error) {
+	return s.proposals.Resolve(ctx, userID, proposalID, action, content, idempotencyKey)
 }
 
 func (s *Service) Create(ctx context.Context, params CreateItemParams) (ItemDetail, error) {

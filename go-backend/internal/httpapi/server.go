@@ -107,6 +107,7 @@ func newServer(
 	}
 	if productServices.Wiki != nil {
 		wikiAPI := newWikiHTTP(productServices.Wiki, cfg.MaxRequestBytes)
+		proposalAPI := newProposalHTTP(productServices.Wiki, cfg.MaxRequestBytes)
 		mux.Handle("GET /api/v1/wiki-items", authAPI.requireSession(http.HandlerFunc(wikiAPI.list)))
 		mux.Handle("POST /api/v1/wiki-items", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(wikiAPI.create)))))
 		mux.Handle("GET /api/v1/wiki-items/{itemID}", authAPI.requireSession(http.HandlerFunc(wikiAPI.detail)))
@@ -114,6 +115,9 @@ func newServer(
 		mux.Handle("POST /api/v1/wiki-items/{itemID}/{action}", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(wikiAPI.changeStatus)))))
 		mux.Handle("DELETE /api/v1/wiki-items/{itemID}", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(wikiAPI.deletePermanently)))))
 		mux.Handle("GET /api/v1/wiki-items/{itemID}/revisions", authAPI.requireSession(http.HandlerFunc(wikiAPI.revisions)))
+		mux.Handle("GET /api/v1/wiki-proposals", authAPI.requireSession(http.HandlerFunc(proposalAPI.list)))
+		mux.Handle("GET /api/v1/wiki-proposals/{proposalID}", authAPI.requireSession(http.HandlerFunc(proposalAPI.detail)))
+		mux.Handle("POST /api/v1/wiki-proposals/{proposalID}/{action}", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(proposalAPI.resolve)))))
 	}
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

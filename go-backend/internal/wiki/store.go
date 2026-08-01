@@ -3,6 +3,8 @@ package wiki
 import (
 	"context"
 	"errors"
+
+	"github.com/starslittle/agent/go-backend/internal/proposals"
 )
 
 var (
@@ -15,6 +17,7 @@ var (
 )
 
 type Store interface {
+	proposals.Store
 	CreateWikiItem(context.Context, CreateItemParams) (ItemDetail, error)
 	ListWikiItems(context.Context, ListParams) ([]Item, error)
 	FindWikiItem(context.Context, string, string) (ItemDetail, error)

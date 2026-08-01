@@ -119,3 +119,31 @@ func TestPersonalSpaceMigrationIsExpandOnlyAndPreservesOwnership(t *testing.T) {
 		t.Fatal("personal-space migration must not remove existing data")
 	}
 }
+
+func TestWikiProposalMigrationPreservesConfirmationAndAuditBoundaries(t *testing.T) {
+	t.Parallel()
+	content, err := migrationFiles.ReadFile("migrations/011_wiki_proposal.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(content)
+	required := []string{
+		"app_core.wiki_update_proposals",
+		"app_core.wiki_proposal_actions",
+		"pending', 'accepted', 'rejected', 'deferred', 'superseded",
+		"wiki_update_proposals_resolution_check",
+		"resolved_by_user_id = user_id",
+		"UNIQUE (user_id, idempotency_key)",
+		"ON DELETE SET NULL (target_revision_id, target_item_id)",
+		"Expand-only migration",
+	}
+	for _, fragment := range required {
+		if !strings.Contains(sql, fragment) {
+			t.Fatalf("proposal migration is missing %q", fragment)
+		}
+	}
+	upper := strings.ToUpper(sql)
+	if strings.Contains(upper, "DROP TABLE") || strings.Contains(upper, "DROP COLUMN") {
+		t.Fatal("proposal migration must not remove existing data")
+	}
+}
