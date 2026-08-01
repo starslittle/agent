@@ -69,7 +69,6 @@ const Index = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
   const [initialMessages, setInitialMessages] = useState<StoredMessage[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
   const [listLoading, setListLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(Boolean(conversationId));
   const [earlierCursor, setEarlierCursor] = useState<number | null>(null);
@@ -77,17 +76,17 @@ const Index = () => {
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
   const [draftKey, setDraftKey] = useState(0);
 
-  const refreshConversations = useCallback(async (query = searchQuery) => {
+  const refreshConversations = useCallback(async () => {
     if (!user) return;
     try {
-      const response = await listConversations(query);
+      const response = await listConversations();
       setConversations(response.items);
     } catch (error) {
       toast.error((error as Error).message || "无法加载会话列表");
     } finally {
       setListLoading(false);
     }
-  }, [searchQuery, user]);
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
@@ -95,11 +94,8 @@ const Index = () => {
       return;
     }
     setListLoading(true);
-    const timer = window.setTimeout(() => {
-      void refreshConversations(searchQuery);
-    }, searchQuery ? 250 : 0);
-    return () => window.clearTimeout(timer);
-  }, [refreshConversations, searchQuery, user]);
+    void refreshConversations();
+  }, [refreshConversations, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -258,8 +254,6 @@ const Index = () => {
           onNewChat={handleNewChat}
           conversations={conversations}
           activeConversationId={conversationId}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
           onSelect={(conversation) => navigate(`/chat/${conversation.id}`)}
           onRename={(conversation) => void handleRename(conversation)}
           onDelete={(conversation) => void handleDelete(conversation)}

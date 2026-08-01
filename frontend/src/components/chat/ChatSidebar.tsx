@@ -1,6 +1,6 @@
 import React, { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { MessageSquare, MoreHorizontal, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { MessageSquare, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import type { Conversation } from "@/lib/chat-api";
 import { cn } from "@/lib/utils";
 import {
@@ -15,8 +15,6 @@ interface ChatSidebarProps {
   onNewChat: () => void;
   conversations: Conversation[];
   activeConversationId?: string | null;
-  searchQuery: string;
-  onSearchChange: (value: string) => void;
   onSelect: (conversation: Conversation) => void;
   onRename: (conversation: Conversation) => void;
   onDelete: (conversation: Conversation) => void;
@@ -37,8 +35,6 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
   onNewChat,
   conversations,
   activeConversationId,
-  searchQuery,
-  onSearchChange,
   onSelect,
   onRename,
   onDelete,
@@ -67,9 +63,8 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
       </div>
 
       <SidebarGroup className="min-h-0 flex-1 px-0 py-0">
-          <SidebarGroupLabel className="mb-1 justify-between px-2 text-[11px] font-medium">
-            <span>最近对话</span>
-            <span>{conversations.length}</span>
+          <SidebarGroupLabel className="mb-1 px-2 text-[11px] font-medium">
+            最近对话
           </SidebarGroupLabel>
 
           <div
@@ -85,10 +80,10 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
             ) : conversations.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <p className="text-xs font-medium text-foreground">
-                  {searchQuery ? "没有找到相关对话" : "还没有历史对话"}
+                  还没有历史对话
                 </p>
                 <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
-                  {searchQuery ? "换个关键词试试" : "发送第一条消息后会自动保存"}
+                  发送第一条消息后会自动保存
                 </p>
               </div>
             ) : (
@@ -164,22 +159,6 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
             )}
           </div>
       </SidebarGroup>
-
-      <div className="shrink-0 pt-3">
-        <label className="flex min-h-11 items-center gap-2 rounded-xl border border-border bg-background/60 px-3 text-muted-foreground transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-sidebar-ring/20">
-          <Search className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
-          <input
-            type="search"
-            name="conversation-search"
-            autoComplete="off"
-            value={searchQuery}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="搜索历史对话…"
-            aria-label="搜索历史对话"
-            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
-          />
-        </label>
-      </div>
     </div>
   );
 };

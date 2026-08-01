@@ -32,6 +32,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { ConversationSearchDialog } from "@/components/workspace/ConversationSearchDialog";
 
 const navigationLinkClass =
   "flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring";
@@ -166,13 +167,16 @@ function WorkspaceSidebar({ content }: { content?: ReactNode }) {
   return (
     <Sidebar variant="sidebar" className="border-r border-sidebar-border bg-sidebar">
       <SidebarHeader className="gap-5 px-4 pb-3 pt-5">
-        <Link
-          to="/"
-          className="w-fit rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-          aria-label="返回启点工作区"
-        >
-          <QidianWordmark />
-        </Link>
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <Link
+            to="/"
+            className="min-w-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            aria-label="返回启点工作区"
+          >
+            <QidianWordmark />
+          </Link>
+          {user && <ConversationSearchDialog />}
+        </div>
         <WorkspaceNav />
       </SidebarHeader>
       <SidebarContent className="overflow-hidden">{content}</SidebarContent>
