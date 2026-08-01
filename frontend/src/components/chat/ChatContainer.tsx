@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import ChatMessage, { ChatRole } from "./ChatMessage";
+import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import {
   attachAgentRun,
@@ -13,17 +13,17 @@ import {
   type Conversation,
   type ConversationStreamEvent,
   type CreateAgentRunResponse,
-  type RuntimeActivity,
-  type RuntimeArtifact,
-  type RuntimeCitation,
   type StoredMessage,
 } from "@/lib/chat-api";
 import {
   explicitConfirmationTurn,
   type SkillID,
-  type SkillSelectionSource,
 } from "@/features/skills/skills";
-import { parseStoredCitations } from "@/features/citations/citations";
+import {
+  mergeStoredMessage,
+  toViewMessages,
+  type ChatViewMessage,
+} from "./chat-message-state";
 import {
   conversationStreamReducer,
   createConversationStreamState,
@@ -40,26 +40,6 @@ import { useAuth } from "@/auth/AuthProvider";
 import { ArrowDown, ArrowUpRight, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { QidianMark } from "@/brand/QidianMark";
-
-interface Message {
-  id: string;
-  role: ChatRole;
-  content: string;
-  status?: StoredMessage["status"];
-  thinking?: boolean;
-  thinkingFinished?: boolean;
-  activities?: RuntimeActivity[];
-  artifacts?: RuntimeArtifact[];
-  citations?: RuntimeCitation[];
-  skillID?: SkillID | null;
-  skillSource?: SkillSelectionSource | null;
-  confirmation?: {
-    skillID: SkillID;
-    confidence: number;
-    prompt: string;
-  };
-  runID?: string;
-}
 
 function uid() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -110,18 +90,6 @@ interface ChatContainerProps {
   onLoadEarlierMessages?: () => void;
 }
 
-function toViewMessage(message: StoredMessage): Message {
-  return {
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    status: message.status,
-    thinking: message.status === "streaming",
-    thinkingFinished: message.status !== "streaming",
-    citations: parseStoredCitations(message.metadata),
-  };
-}
-
 export const ChatContainer: React.FC<ChatContainerProps> = ({
   conversationId,
   initialMessages = [],
@@ -132,8 +100,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   onLoadEarlierMessages,
 }) => {
   const { csrfToken } = useAuth();
-  const [messages, setMessages] = useState<Message[]>(() =>
-    initialMessages.map(toViewMessage),
+  const [messages, setMessages] = useState<ChatViewMessage[]>(() =>
+    toViewMessages(initialMessages),
   );
   const [isFollowingLatest, setIsFollowingLatest] = useState(true);
 
@@ -162,21 +130,19 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 
   useEffect(() => {
     setMessages((current) => {
+      const incomingMessages = toViewMessages(initialMessages);
       const incomingByID = new Map(
-        initialMessages.map((message) => [message.id, message]),
+        incomingMessages.map((message) => [message.id, message]),
       );
       const merged = current.map((message) => {
         const incoming = incomingByID.get(message.id);
         if (!incoming) return message;
-        if (message.status === "streaming" && incoming.status === "streaming") {
-          return message;
-        }
-        return toViewMessage(incoming);
+        return mergeStoredMessage(message, incoming);
       });
       const known = new Set(merged.map((message) => message.id));
-      const earlier = initialMessages
-        .filter((message) => !known.has(message.id))
-        .map(toViewMessage);
+      const earlier = incomingMessages.filter(
+        (message) => !known.has(message.id),
+      );
       return earlier.length > 0 ? [...earlier, ...merged] : merged;
     });
   }, [initialMessages]);

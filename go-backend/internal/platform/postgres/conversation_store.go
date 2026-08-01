@@ -1506,6 +1506,28 @@ func projectAgentEvent(
 	event agent.Event,
 ) error {
 	switch event.Type {
+	case "confirmation.required":
+		confirmation, valid := conversation.ParseSkillConfirmation(event.Data)
+		if !valid {
+			return nil
+		}
+		confirmationJSON, err := json.Marshal(confirmation)
+		if err != nil {
+			return err
+		}
+		_, err = transaction.Exec(ctx, `
+			UPDATE app_core.messages m
+			SET metadata = jsonb_set(
+				COALESCE(m.metadata, '{}'::jsonb),
+				'{skill_confirmation}',
+				$2::jsonb,
+				true
+			)
+			FROM app_core.agent_runs r
+			WHERE r.id = $1
+				AND m.id = r.assistant_message_id
+		`, runID, string(confirmationJSON))
+		return err
 	case "citation.created":
 		citation, valid := conversation.ParseCitation(event.Data)
 		if !valid {

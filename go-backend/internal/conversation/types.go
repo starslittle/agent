@@ -50,6 +50,31 @@ type Citation struct {
 	Sequence   int    `json:"sequence"`
 }
 
+type SkillConfirmation struct {
+	SuggestedSkill string  `json:"suggested_skill"`
+	Confidence     float64 `json:"confidence"`
+	ReasonCode     string  `json:"reason_code"`
+}
+
+// ParseSkillConfirmation is the fail-closed boundary for confirmation data
+// persisted in assistant message metadata. It intentionally excludes prompts
+// and arbitrary event payloads.
+func ParseSkillConfirmation(raw json.RawMessage) (SkillConfirmation, bool) {
+	var confirmation SkillConfirmation
+	if err := json.Unmarshal(raw, &confirmation); err != nil {
+		return SkillConfirmation{}, false
+	}
+	confirmation.SuggestedSkill = strings.TrimSpace(confirmation.SuggestedSkill)
+	confirmation.ReasonCode = strings.TrimSpace(confirmation.ReasonCode)
+	if (confirmation.SuggestedSkill != "research" &&
+		confirmation.SuggestedSkill != "fortune") ||
+		confirmation.Confidence < 0 || confirmation.Confidence > 1 ||
+		confirmation.ReasonCode != "automatic_confirmation_required" {
+		return SkillConfirmation{}, false
+	}
+	return confirmation, true
+}
+
 // ParseCitation is the shared fail-closed boundary for durable message metadata
 // and browser-visible citation events. Event data has already passed the
 // agenttrace redaction boundary before this function is called.

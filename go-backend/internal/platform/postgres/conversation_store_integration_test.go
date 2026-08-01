@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -216,6 +217,22 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 			ExecutionID:     generation.Run.ExecutionID,
 			RunID:           generation.Run.ID,
 			Sequence:        7,
+			Type:            "confirmation.required",
+			OccurredAt:      time.Now().UTC(),
+			Category:        "route",
+			Stage:           "root.confirmation",
+			Data: json.RawMessage(`{
+				"suggested_skill":"fortune",
+				"confidence":0.94,
+				"reason_code":"automatic_confirmation_required",
+				"prompt":"must not be persisted"
+			}`),
+		},
+		{
+			ProtocolVersion: agent.ProtocolVersion,
+			ExecutionID:     generation.Run.ExecutionID,
+			RunID:           generation.Run.ID,
+			Sequence:        8,
 			Type:            "citation.created",
 			OccurredAt:      time.Now().UTC(),
 			Category:        "citation",
@@ -270,7 +287,7 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 	}
 	if len(detail.Spans) != 2 ||
 		len(detail.Prompts) != 1 ||
-		len(detail.Events) != 7 {
+		len(detail.Events) != 8 {
 		t.Fatalf("unexpected run detail: %#v", detail)
 	}
 	if _, err := service.RunDetail(
@@ -368,7 +385,8 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 		t.Fatalf("unexpected messages: %#v", messages)
 	}
 	var metadata struct {
-		Citations []conversation.Citation `json:"citations"`
+		Citations         []conversation.Citation        `json:"citations"`
+		SkillConfirmation conversation.SkillConfirmation `json:"skill_confirmation"`
 	}
 	if err := json.Unmarshal(messages[1].Metadata, &metadata); err != nil {
 		t.Fatalf("unmarshal assistant metadata: %v", err)
@@ -377,6 +395,12 @@ func TestConversationLifecycleIntegration(t *testing.T) {
 		metadata.Citations[0].CitationID != "source-1" ||
 		metadata.Citations[0].ArtifactID != "research_evidence:abc" {
 		t.Fatalf("assistant citations = %#v", metadata.Citations)
+	}
+	if metadata.SkillConfirmation.SuggestedSkill != "fortune" ||
+		metadata.SkillConfirmation.Confidence != 0.94 ||
+		metadata.SkillConfirmation.ReasonCode != "automatic_confirmation_required" ||
+		strings.Contains(string(messages[1].Metadata), "must not be persisted") {
+		t.Fatalf("assistant confirmation metadata = %s", messages[1].Metadata)
 	}
 
 	cancelledGeneration, err := service.Start(ctx, conversation.StartGenerationParams{
