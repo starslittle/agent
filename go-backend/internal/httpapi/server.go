@@ -161,6 +161,13 @@ func newServer(
 			cfg.AgentReconcileTimeout,
 			runSupervisor,
 		)
+		if productServices.Documents != nil && runSupervisor != nil {
+			extractionAPI := newDocumentExtractionHTTP(productServices.Documents, conversationServices[0], runSupervisor)
+			mux.Handle(
+				"POST /api/v1/space/documents/{documentID}/extractions",
+				authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(extractionAPI.create)))),
+			)
+		}
 		mux.Handle(
 			"POST /api/v1/conversations",
 			authAPI.protectMutation(

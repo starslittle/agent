@@ -68,12 +68,22 @@ func (s *Service) List(
 	if limit > 100 {
 		limit = 100
 	}
-	return s.store.ListConversations(ctx, ListParams{
+	items, err := s.store.ListConversations(ctx, ListParams{
 		UserID: userID,
 		Limit:  limit,
 		Query:  strings.TrimSpace(query),
 		Before: before,
 	})
+	if err != nil {
+		return nil, err
+	}
+	visible := items[:0]
+	for _, item := range items {
+		if item.AgentName != DocumentExtractionAgent {
+			visible = append(visible, item)
+		}
+	}
+	return visible, nil
 }
 
 func (s *Service) Get(ctx context.Context, userID, id string) (Conversation, error) {
@@ -291,7 +301,14 @@ func (s *Service) RecordEventOwned(
 	event agent.Event,
 	lease RunLease,
 ) (bool, error) {
-	return s.store.RecordAgentEventOwned(ctx, userID, runID, event, lease)
+	inserted, err := s.store.RecordAgentEventOwned(ctx, userID, runID, event, lease)
+	if err != nil {
+		return inserted, err
+	}
+	if err := s.projectDocumentExtraction(ctx, userID, runID, event); err != nil {
+		return inserted, err
+	}
+	return inserted, nil
 }
 
 func (s *Service) MarkSequenceGap(

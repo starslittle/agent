@@ -62,6 +62,10 @@ func TestNormalizeRunSelectionSupportsNewAndLegacyContracts(t *testing.T) {
 		*legacy.RequestedSkill != "fortune" {
 		t.Fatalf("legacy selection = %#v", legacy)
 	}
+	internal, err := NormalizeRunSelection("auto", nil, "document_extraction")
+	if err != nil || internal.AgentName != "document_extraction" || internal.RequestedSkill != nil {
+		t.Fatalf("document extraction selection = %#v, err=%v", internal, err)
+	}
 
 	if _, err := NormalizeRunSelection("provider/model", nil, ""); err == nil {
 		t.Fatal("arbitrary model_id must be rejected")

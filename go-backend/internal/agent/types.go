@@ -119,17 +119,18 @@ type NormalizedRunSelection struct {
 }
 
 var legacyAgentSkills = map[string]*string{
-	"default":           nil,
-	"default_llm_agent": nil,
-	"chat":              nil,
-	"chat_v1":           nil,
-	"research":          stringPointer("research"),
-	"research_agent":    stringPointer("research"),
-	"research_v1":       stringPointer("research"),
-	"general_rag_agent": stringPointer("research"),
-	"fortune":           stringPointer("fortune"),
-	"fortune_agent":     stringPointer("fortune"),
-	"fortune_v1":        stringPointer("fortune"),
+	"default":             nil,
+	"default_llm_agent":   nil,
+	"chat":                nil,
+	"chat_v1":             nil,
+	"research":            stringPointer("research"),
+	"research_agent":      stringPointer("research"),
+	"research_v1":         stringPointer("research"),
+	"general_rag_agent":   stringPointer("research"),
+	"fortune":             stringPointer("fortune"),
+	"fortune_agent":       stringPointer("fortune"),
+	"fortune_v1":          stringPointer("fortune"),
+	"document_extraction": nil,
 }
 
 var skillAgentNames = map[string]string{
@@ -181,6 +182,9 @@ func NormalizeRunSelection(
 		return NormalizedRunSelection{}, errors.New("unknown agent_name")
 	}
 	normalizedAgent := "default_llm_agent"
+	if agentName == "document_extraction" {
+		normalizedAgent = agentName
+	}
 	if legacySkill != nil {
 		normalizedAgent = skillAgentNames[*legacySkill]
 		if agentName == *legacySkill {

@@ -6,6 +6,12 @@ from collections.abc import AsyncIterator
 from agent.application import LangGraphAgentApplication, RunCommand
 from agent.capabilities import RegistryCapabilityExecutor
 from agent.models import get_model_gateway
+from agent.documents import (
+    DOCUMENT_EXTRACTION_AGENT,
+    DOCUMENT_EXTRACTION_PURPOSE,
+    DocumentExtractor,
+    parse_extraction_envelope,
+)
 from agent.root import SkillRouteResolution
 from agent.skills import (
     SkillSelection,
@@ -31,14 +37,17 @@ class LangGraphV1Runtime:
         checkpointer=None,
         lease_guard=None,
         artifact_stager=None,
+        document_extractor: DocumentExtractor | None = None,
     ) -> None:
+        gateway = get_model_gateway()
         self._application = application or LangGraphAgentApplication(
-            gateway=get_model_gateway(),
+            gateway=gateway,
             capability_executor=RegistryCapabilityExecutor(),
             checkpointer=checkpointer,
             lease_guard=lease_guard,
             artifact_stager=artifact_stager,
         )
+        self._document_extractor = document_extractor or DocumentExtractor(gateway)
         self._active_tasks: dict[str, asyncio.Task] = {}
 
     async def stream(
@@ -52,6 +61,31 @@ class LangGraphV1Runtime:
         task = asyncio.current_task()
         if task is not None:
             self._active_tasks[request.execution_id] = task
+        envelope = self._document_envelope(request)
+        if envelope is not None:
+            yield "document.extraction.started", {
+                "run_purpose": DOCUMENT_EXTRACTION_PURPOSE,
+                "document_id": envelope.document_id,
+                "document_revision_id": envelope.document_revision_id,
+                "extraction_version": envelope.extraction_version,
+                "stage": "document.extract",
+            }
+            yield "prompt.rendered", {
+                "stage": "document.extract",
+                "path": "agent/prompts/document_extract_v1.txt",
+                "prompt_hash": self._document_extractor.prompt_hash,
+                "rendered_characters": len(envelope.markdown),
+            }
+            if cancel_event.is_set():
+                raise asyncio.CancelledError
+            data = await self._document_extractor.event_data(envelope)
+            if cancel_event.is_set():
+                raise asyncio.CancelledError
+            yield "document.extraction.completed", data
+            yield "answer.delta", {
+                "text": f"已生成 {data['candidate_count']} 条待确认候选。"
+            }
+            return
         selection = self._selection(request)
         resolution = self._resolution(request, selection)
         command = RunCommand(
@@ -89,6 +123,8 @@ class LangGraphV1Runtime:
         self,
         request: AgentRunRequest,
     ) -> dict:
+        if self._document_envelope(request) is not None:
+            return self._document_extractor.provenance()
         selection = self._selection(request)
         resolution = self._resolution(request, selection)
         command = await self._application.resolve_command(
@@ -114,6 +150,39 @@ class LangGraphV1Runtime:
         )
 
     async def resolve_route(self, request: AgentRouteRequest) -> dict:
+        envelope = parse_extraction_envelope(request.query)
+        if request.agent_name == DOCUMENT_EXTRACTION_AGENT and envelope is not None:
+            provenance = self._document_extractor.provenance()
+            return {
+                "resolution": {
+                    "model_id": "auto",
+                    "requested_skill": None,
+                    "resolved_skills": [],
+                    "primary_skill": None,
+                    "suggested_skill": None,
+                    "confidence": 1.0,
+                    "selection_source": "direct",
+                    "requires_confirmation": False,
+                    "reason_code": DOCUMENT_EXTRACTION_PURPOSE,
+                    "agent_name": DOCUMENT_EXTRACTION_AGENT,
+                    "workflow": "document_extraction_v1",
+                    "skill_version": None,
+                    "skill_snapshot": None,
+                    "model_snapshot": provenance["model_snapshot"],
+                    "context_package_id": None,
+                },
+                "context_requirements": {
+                    "execution_mode": "direct",
+                    "primary_skill": None,
+                    "purpose": DOCUMENT_EXTRACTION_PURPOSE,
+                    "needs_personal_context": False,
+                    "allowed_types": [],
+                    "allowed_domains": [],
+                    "item_budget": 0,
+                    "character_budget": 0,
+                },
+                "route_usage": {"model_calls": 0},
+            }
         selection = resolve_compatible_selection(
             requested_skill=request.requested_skill,
             agent_name=request.agent_name,
@@ -146,6 +215,12 @@ class LangGraphV1Runtime:
             "context_requirements": requirements,
             "route_usage": {"model_calls": 1 if route_model_used else 0},
         }
+
+    @staticmethod
+    def _document_envelope(request: AgentRunRequest):
+        if request.route_reason_code != DOCUMENT_EXTRACTION_PURPOSE:
+            return None
+        return parse_extraction_envelope(request.query)
 
     @staticmethod
     def _selection(request: AgentRunRequest) -> SkillSelection:

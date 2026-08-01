@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Brain, CircleAlert, FileCheck2, Plus, RefreshCw, Scale, Sparkles } from "lucide-react";
+import { ArrowUpRight, Brain, CircleAlert, FileCheck2, LoaderCircle, Plus, RefreshCw, Scale, Sparkles, WandSparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createWikiItem, listWikiItems, type WikiItem, type WikiType } from "@/lib/wiki-api";
+import { listDocumentProposals, startDocumentExtraction, type DocumentProposal, type ExtractionRunStatus } from "@/lib/document-api";
+import { getRunDetail } from "@/lib/run-api";
 
 const typeCopy: Record<WikiType, { label: string; icon: typeof Brain }> = {
   confirmed_fact: { label: "确认事实", icon: FileCheck2 },
@@ -36,6 +38,11 @@ export function DocumentContextPanel({ documentID, documentRevisionID, className
   const [domain, setDomain] = useState("general");
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
+  const [extractionRun, setExtractionRun] = useState<{ id: string; status: ExtractionRunStatus } | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractionError, setExtractionError] = useState("");
+  const [proposals, setProposals] = useState<DocumentProposal[]>([]);
+  const [showPending, setShowPending] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -47,6 +54,62 @@ export function DocumentContextPanel({ documentID, documentRevisionID, className
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [documentID, retry]);
+
+  useEffect(() => {
+    if (!extractionRun || ["completed", "cancelled", "failed", "timed_out"].includes(extractionRun.status)) return;
+    let disposed = false;
+    const poll = async () => {
+      try {
+        const detail = await getRunDetail(extractionRun.id);
+        if (disposed) return;
+        setExtractionRun({ id: detail.run.id, status: detail.run.status });
+        if (detail.run.status === "completed") {
+          const response = await listDocumentProposals(documentID);
+          if (!disposed) setProposals(response.items.filter((item) => item.document_revision_id === documentRevisionID));
+        }
+      } catch (reason) {
+        if (!disposed) setExtractionError(reason instanceof Error ? reason.message : "无法读取提取进度");
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 1400);
+    void poll();
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [documentID, documentRevisionID, extractionRun]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void listDocumentProposals(documentID, controller.signal)
+      .then((response) => setProposals(response.items.filter((item) => item.document_revision_id === documentRevisionID)))
+      .catch((reason: unknown) => { if ((reason as Error).name !== "AbortError") setExtractionError(reason instanceof Error ? reason.message : "无法读取待确认候选"); });
+    return () => controller.abort();
+  }, [documentID, documentRevisionID]);
+
+  const extract = async () => {
+    if (extracting) return;
+    setExtracting(true);
+    setExtractionError("");
+    setShowPending(false);
+    try {
+      const run = await startDocumentExtraction(csrfToken, documentID, crypto.randomUUID());
+      setExtractionRun({ id: run.run_id, status: run.status });
+    } catch (reason) {
+      setExtractionError(reason instanceof Error ? reason.message : "文档提取没有启动");
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const proposalFlags = proposals.reduce((summary, proposal) => {
+    try {
+      const detail = JSON.parse(proposal.source_detail || "{}") as { low_confidence?: boolean; conflict_item_ids?: string[] };
+      if (detail.low_confidence) summary.low += 1;
+      if ((detail.conflict_item_ids?.length || 0) > 0 || proposal.operation === "update") summary.conflicts += 1;
+    } catch { /* malformed legacy details remain visible without derived flags */ }
+    return summary;
+  }, { low: 0, conflicts: 0 });
+
+  const terminalFailure = extractionRun && ["cancelled", "failed", "timed_out"].includes(extractionRun.status);
+  const runActive = extractionRun && ["queued", "running", "cancel_requested"].includes(extractionRun.status);
 
   const create = async () => {
     if (!content.trim() || saving) return;
@@ -67,6 +130,28 @@ export function DocumentContextPanel({ documentID, documentRevisionID, className
         <div><h2 className="text-sm font-semibold">关联上下文</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">经你确认后，才会长期影响回答。</p></div>
         <Button type="button" variant="outline" size="icon" className="h-11 w-11" onClick={() => setOpen(true)} aria-label="添加关联上下文"><Plus className="h-4 w-4" aria-hidden="true" /></Button>
       </div>
+      <section className="border-b bg-background/70 p-3" aria-labelledby="document-extraction-title">
+        <div className="rounded-xl border bg-card p-4">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><WandSparkles className="h-4 w-4" aria-hidden="true" /></span>
+            <div className="min-w-0 flex-1">
+              <h3 id="document-extraction-title" className="text-sm font-medium">从当前版本提取</h3>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">只分析这篇文档。结果先进入待确认，不会直接改变长期上下文。</p>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2" aria-live="polite">
+            <Button type="button" size="sm" onClick={() => void extract()} disabled={extracting || Boolean(runActive)}>
+              {(extracting || runActive) && <LoaderCircle className="mr-2 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+              {runActive ? "正在提取" : terminalFailure ? "重新提取" : "提取候选信息"}
+            </Button>
+            {extractionRun && <Button asChild variant="ghost" size="sm"><Link to={`/agent-runs/${encodeURIComponent(extractionRun.id)}`}>查看 Run <ArrowUpRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" /></Link></Button>}
+          </div>
+          {extractionError && <p role="alert" className="mt-3 text-xs leading-5 text-destructive">{extractionError}</p>}
+          {terminalFailure && !extractionError && <p role="status" className="mt-3 text-xs leading-5 text-destructive">本次提取未完成，没有写入文档或长期上下文。</p>}
+          {proposals.length > 0 && <div className="mt-3 rounded-lg bg-muted/60 p-3 text-xs"><p className="font-medium">{proposals.length} 条待确认候选</p><p className="mt-1 text-muted-foreground">{proposalFlags.conflicts} 条可能冲突 · {proposalFlags.low} 条低置信度</p><Button type="button" variant="link" size="sm" className="mt-1 h-auto px-0" onClick={() => setShowPending((value) => !value)}>{showPending ? "收起候选" : "查看待确认"}</Button></div>}
+          {showPending && <div className="mt-2 space-y-2">{proposals.map((proposal) => <div key={proposal.id} className="rounded-lg border bg-background p-3"><div className="flex items-center gap-2 text-xs font-medium"><span>{typeCopy[proposal.item_type].label}</span><span className="ml-auto text-muted-foreground">{proposal.operation === "update" ? "可能更新" : "新候选"}</span></div><p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">{proposal.proposed_content}</p></div>)}</div>}
+        </div>
+      </section>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3">
         {loading && <p role="status" className="px-3 py-10 text-center text-xs text-muted-foreground">正在读取上下文…</p>}
         {!loading && error && <div role="alert" className="px-3 py-8 text-center"><p className="text-xs text-destructive">{error}</p><Button variant="ghost" size="sm" className="mt-2" onClick={() => setRetry((value) => value + 1)}><RefreshCw className="mr-2 h-3.5 w-3.5" aria-hidden="true" />重试</Button></div>}
