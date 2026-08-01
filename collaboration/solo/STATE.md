@@ -4,7 +4,7 @@
 mode: solo
 executor: codex
 active_round: ROUND-02
-round_status: acceptance
+round_status: blocked
 round_base_commit: e8dd5ef89333f674106ad73ce2a566bc7e62d69b
 round_accepted_commit: pending
 round_branch: codex/round-02-solo
@@ -20,8 +20,8 @@ completed:
   - TASK-013
   - TASK-028
 
-current_task: ROUND-02-E2E
-next_task: ROUND-02-ACCEPTANCE
+current_task: TASK-012-E2E-CONFIRMATION-FIX
+next_task: pending_user_path_authorization
 
 start_gate: explicit_user_instruction_to_start_or_continue_solo
 production_authorized: false
@@ -47,3 +47,8 @@ Protocol 暂停，等待用户授权新增纠偏 Task 并冻结统一 Agent 关�
 2026-08-01 用户决定 ROUND-02 暂不实现 `unified_agent_enabled` 与
 `agent_observability_enabled`，统一助手保持唯一用户入口，内部观测继续由服务端
 `observability_admin` 角色隔离；Round 文档已同步，验收阻塞解除。
+
+2026-08-01 ROUND-02 E2E 发现自动 Fortune 的 `confirmation.required` 已写入 Run，
+但新对话切换或刷新后前端确认卡丢失。可靠修复需要将脱敏确认元数据投影到 Go 拥有的
+助手消息；TASK-012 明确禁止 `go-backend/**`，按 Solo Protocol 暂停，等待用户授权
+最小扩展相关 Go 消息投影与测试路径。

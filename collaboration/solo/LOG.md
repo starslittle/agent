@@ -146,3 +146,10 @@
 - summary：用户决定本轮暂不实现两个能力开关，统一助手保持唯一用户入口，内部观测继续由服务端管理员角色隔离；Round 验收改为统一路由、兼容读取与权限边界验证；
 - validation：`ROUND-02-unified-agent.md` 与轮次 README 已同步，不再要求两个开关的关闭/重新启用演练；
 - risk：生产级灰度与紧急停止机制留到发布准备阶段单独设计，本轮不提供应用级能力熔断。
+
+### ROUND-02 E2E Confirmation Blocker
+
+- result：blocked；
+- summary：自动 Fortune 正确产生 `confirmation.required` 且未执行 Fortune，但新会话导航/刷新会重新水合消息并丢失确认卡，用户无法创建显式后续 Turn；
+- validation：真实 Browser 复现两次，Agent Run 时间线均包含 `confirmation.required`；前端局部状态合并测试 2 passed，但无法覆盖新会话重挂载；
+- risk：持久修复需要最小修改 TASK-012 禁止的 Go 消息事件投影与测试路径，等待用户授权。
