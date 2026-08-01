@@ -4,9 +4,9 @@
 mode: solo
 executor: codex
 active_round: ROUND-02
-round_status: blocked
+round_status: accepted
 round_base_commit: e8dd5ef89333f674106ad73ce2a566bc7e62d69b
-round_accepted_commit: pending
+round_accepted_commit: a95c0b2
 round_branch: codex/round-02-solo
 round_worktree: C:/Users/10245/Desktop/qidianAgent-round-02-solo
 
@@ -20,8 +20,8 @@ completed:
   - TASK-013
   - TASK-028
 
-current_task: TASK-012-E2E-CONFIRMATION-FIX
-next_task: pending_user_path_authorization
+current_task: none
+next_task: awaiting_user_authorization_for_ROUND-03
 
 start_gate: explicit_user_instruction_to_start_or_continue_solo
 production_authorized: false
@@ -52,3 +52,10 @@ Protocol 暂停，等待用户授权新增纠偏 Task 并冻结统一 Agent 关�
 但新对话切换或刷新后前端确认卡丢失。可靠修复需要将脱敏确认元数据投影到 Go 拥有的
 助手消息；TASK-012 明确禁止 `go-backend/**`，按 Solo Protocol 暂停，等待用户授权
 最小扩展相关 Go 消息投影与测试路径。
+
+2026-08-01 用户授权 TASK-012 验收修复最小扩展到相关 Go 消息投影与测试路径，并要求
+不重复已通过的验收场景；只复验确认持久化、新显式 Turn 及受影响的消息回归。
+
+2026-08-01 ROUND-02 验收通过。确认卡刷新恢复、显式后续 Turn、取消/刷新/继续、
+基础设施失败终态与恢复、旧 `agent_name` 兼容和未知 Skill 拒绝均通过；已通过场景未
+重复执行。隔离容器、数据库、测试账号和相关临时镜像/卷已随环境删除。

@@ -153,3 +153,29 @@
 - summary：自动 Fortune 正确产生 `confirmation.required` 且未执行 Fortune，但新会话导航/刷新会重新水合消息并丢失确认卡，用户无法创建显式后续 Turn；
 - validation：真实 Browser 复现两次，Agent Run 时间线均包含 `confirmation.required`；前端局部状态合并测试 2 passed，但无法覆盖新会话重挂载；
 - risk：持久修复需要最小修改 TASK-012 禁止的 Go 消息事件投影与测试路径，等待用户授权。
+
+### TASK-012 E2E Fix
+
+- commit：`8bda499`；
+- result：completed；
+- summary：将脱敏 `confirmation.required` 投影到助手消息 metadata，前端刷新/重挂载后用前一条用户消息恢复确认动作，点击后仍创建独立显式 Skill Turn；
+- validation：Go conversation targeted passed；隔离 PostgreSQL `TestConversationLifecycleIntegration` passed；前端状态恢复 3 tests passed、lint 0 errors（8 条既有 warning）、production build passed；Browser 刷新确认卡、显式后续 Turn 与 `fortune_v1` provenance passed；
+- skills：保持既有启点视觉，仅补状态恢复；确认按钮继续使用语义 button、清晰文案和既有 44px 触控边界；
+- risk：确认 metadata 只保存 Skill、置信度和固定 reason code，不复制用户 prompt 或任意事件字段。
+
+### TASK-009 E2E Fix
+
+- commit：`a95c0b2`；
+- result：completed；
+- summary：当 Supervisor 已将 Run 置为终态但 Python 未产生终态事件时，Browser SSE 合成一次不落库的 `done`，避免前端无限重连和持续显示停止按钮；
+- validation：Go `TestAttachRunEvents*` targeted passed；Browser 验证失败及时显示“生成未完成”，服务恢复后同一对话可继续；旧 `fortune_agent` 映射为 `fortune / compatibility / fortune_v1`，未知 Skill 返回 400；
+- risk：合成终态仅存在于浏览器投影层，序号紧随持久事件 cursor，不修改 Runtime 事件历史。
+
+### ROUND-02 Acceptance
+
+- accepted commit：`a95c0b2`；
+- result：accepted；
+- summary：统一启点入口、Direct/显式与自动 Research、显式与需确认 Fortune、Skill Chip、用户 Run、管理员只读观测、兼容读取与安全回退均通过；本次恢复只复验此前未通过或受修复影响的确认、失败、取消和兼容链路，没有重复已通过场景；
+- validation：沿用本轮已通过的 Python 103 unit、Go 全包、前端 46 tests/lint/build、隔离 PostgreSQL Go/Python integration 与既有 Browser 主旅程；新增确认投影/刷新/显式 Turn、取消刷新后继续、无终态事件失败恢复、旧 `agent_name` 与未知 Skill 验收均通过；
+- risk：按产品决定不提供 `unified_agent_enabled` 和 `agent_observability_enabled`；生产灰度与紧急停止留待发布准备，保留既有 8 条 Fast Refresh warning、bundle 体积和 browserslist 陈旧提示；
+- cleanup：本轮隔离 PostgreSQL/Redis/Python/Go/Vite 容器、测试账号与对话、临时网络/卷/镜像已删除；未 push、merge、部署或修改生产环境。
