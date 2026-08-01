@@ -202,3 +202,11 @@
 - validation：隔离 PostgreSQL 15 下 `go test ./...` 通过；前端 54 tests、`tsc --noEmit`、lint（仅保留既有 8 条 Fast Refresh warning）和 build 通过；
 - deviation：Task 契约漏列真实服务接线所需的 `go-backend/cmd/server/main.go`，已提前说明并仅扩展这一文件，未修改其他禁止范围；
 - risk：产品级 Browser E2E 按 Solo Protocol 延后到 Round 完成后统一执行，bundle 体积与 browserslist 为既有警告。
+
+### TASK-016 · completed
+
+- commit：`8eb2f4b`；
+- result：在同一 Product Run 内建立 Resolve → Context → Execute，两阶段复用唯一 Root Skill Resolver；Go 只从当前用户已确认且有效的 Wiki 条目按类型、领域、数量和字符预算冻结 Context Package，Python 复用冻结解析且不回查 Wiki，Run、对话与上下文详情展示实际 Item/Revision 来源；
+- validation：Python 全量 104 passed/2 skipped；Go 全包 passed；隔离 PostgreSQL 15 的 Migration、状态过滤、跨用户隔离、历史 Revision 冻结和永久删除脱敏 integration passed；前端 `tsc --noEmit`、lint（仅既有 8 条 Fast Refresh warning）与 build passed；
+- skills：`frontend-design` 保持启点文档式层级，`ui-ux-pro-max` 将上下文依据作为次级可追溯信息，`web-design-guidelines` 约束语义链接、焦点、长 ID 与空状态；
+- risk：Context 第一版采用确定性类型/领域/时间排序，不引入向量检索；路由调用 15 秒超时并失败关闭，产品级真实 Provider 与 Browser 场景进入 Round 唯一 E2E。
