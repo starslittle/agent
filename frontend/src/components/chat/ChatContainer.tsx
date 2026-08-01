@@ -1,23 +1,29 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import ChatMessage, { ChatRole } from "./ChatMessage";
+import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import {
   attachAgentRun,
   cancelAgentRun,
   createAgentRun,
   createConversation,
+  getAgentRun,
   isRunCreateNotEnabled,
   listAgentRuns,
   streamLegacyConversation,
   type Conversation,
   type ConversationStreamEvent,
   type CreateAgentRunResponse,
-  type RuntimeActivity,
-  type RuntimeArtifact,
-  type RuntimeCitation,
   type StoredMessage,
 } from "@/lib/chat-api";
-import { parseStoredCitations } from "@/features/citations/citations";
+import {
+  explicitConfirmationTurn,
+  type SkillID,
+} from "@/features/skills/skills";
+import {
+  mergeStoredMessage,
+  toViewMessages,
+  type ChatViewMessage,
+} from "./chat-message-state";
 import {
   conversationStreamReducer,
   createConversationStreamState,
@@ -33,18 +39,7 @@ import {
 import { useAuth } from "@/auth/AuthProvider";
 import { ArrowDown, ArrowUpRight, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
-
-interface Message {
-  id: string;
-  role: ChatRole;
-  content: string;
-  status?: StoredMessage["status"];
-  thinking?: boolean;
-  thinkingFinished?: boolean;
-  activities?: RuntimeActivity[];
-  artifacts?: RuntimeArtifact[];
-  citations?: RuntimeCitation[];
-}
+import { QidianMark } from "@/brand/QidianMark";
 
 function uid() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -95,18 +90,6 @@ interface ChatContainerProps {
   onLoadEarlierMessages?: () => void;
 }
 
-function toViewMessage(message: StoredMessage): Message {
-  return {
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    status: message.status,
-    thinking: message.status === "streaming",
-    thinkingFinished: message.status !== "streaming",
-    citations: parseStoredCitations(message.metadata),
-  };
-}
-
 export const ChatContainer: React.FC<ChatContainerProps> = ({
   conversationId,
   initialMessages = [],
@@ -117,8 +100,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   onLoadEarlierMessages,
 }) => {
   const { csrfToken } = useAuth();
-  const [messages, setMessages] = useState<Message[]>(() =>
-    initialMessages.map(toViewMessage),
+  const [messages, setMessages] = useState<ChatViewMessage[]>(() =>
+    toViewMessages(initialMessages),
   );
   const [isFollowingLatest, setIsFollowingLatest] = useState(true);
 
@@ -147,21 +130,19 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 
   useEffect(() => {
     setMessages((current) => {
+      const incomingMessages = toViewMessages(initialMessages);
       const incomingByID = new Map(
-        initialMessages.map((message) => [message.id, message]),
+        incomingMessages.map((message) => [message.id, message]),
       );
       const merged = current.map((message) => {
         const incoming = incomingByID.get(message.id);
         if (!incoming) return message;
-        if (message.status === "streaming" && incoming.status === "streaming") {
-          return message;
-        }
-        return toViewMessage(incoming);
+        return mergeStoredMessage(message, incoming);
       });
       const known = new Set(merged.map((message) => message.id));
-      const earlier = initialMessages
-        .filter((message) => !known.has(message.id))
-        .map(toViewMessage);
+      const earlier = incomingMessages.filter(
+        (message) => !known.has(message.id),
+      );
       return earlier.length > 0 ? [...earlier, ...merged] : merged;
     });
   }, [initialMessages]);
@@ -272,6 +253,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       runID: string,
       assistantMessageID: string,
       controller: AbortController,
+      originalPrompt = "",
     ) => {
       let streamState = {
         ...createConversationStreamState(),
@@ -294,7 +276,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
               )
                 return;
 
-              streamState = conversationStreamReducer(streamState, event);
+              if (event.type !== "confirmation_required") {
+                streamState = conversationStreamReducer(streamState, event);
+              } else if (typeof event.sequence === "number") {
+                streamState = {
+                  ...streamState,
+                  lastSequence: Math.max(streamState.lastSequence, event.sequence),
+                };
+              }
               transitionRun({
                 type: "event_confirmed",
                 runID,
@@ -322,6 +311,23 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                 );
                 transitionRun({ type: "done", runID });
                 return;
+              }
+
+              if (event.type === "confirmation_required") {
+                setMessages((current) =>
+                  current.map((message) =>
+                    message.id === assistantMessageID
+                      ? {
+                          ...message,
+                          confirmation: {
+                            skillID: event.suggested_skill,
+                            confidence: event.confidence,
+                            prompt: originalPrompt,
+                          },
+                        }
+                      : message,
+                  ),
+                );
               }
 
               setMessages((current) =>
@@ -364,7 +370,29 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         }
       }
 
-      if (terminalReceived) onConversationChangedRef.current?.();
+      if (terminalReceived) {
+        try {
+          const detail = await getAgentRun(runID);
+          const primarySkill = detail.run.primary_skill;
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantMessageID
+                ? {
+                    ...message,
+                    skillID:
+                      primarySkill === "research" || primarySkill === "fortune"
+                        ? primarySkill
+                        : null,
+                    skillSource: detail.run.selection_source ?? null,
+                  }
+                : message,
+            ),
+          );
+        } catch (error) {
+          console.error("读取运行结果失败:", error);
+        }
+        onConversationChangedRef.current?.();
+      }
     },
     [transitionRun],
   );
@@ -374,7 +402,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       conversationID: string,
       content: string,
       clientMessageID: string,
-      agentName: string | undefined,
+      requestedSkill: SkillID | null,
       optimisticAssistantID: string,
       controller: AbortController,
     ) => {
@@ -391,7 +419,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           {
             content,
             client_message_id: clientMessageID,
-            agent_name: agentName,
+            model_id: "auto",
+            requested_skill: requestedSkill,
           },
           csrfToken,
           (event) => {
@@ -404,7 +433,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                     return { ...message, id: event.user_message_id };
                   }
                   if (message.id === optimisticAssistantID) {
-                    return { ...message, id: event.assistant_message_id };
+                    return { ...message, id: event.assistant_message_id, runID: event.run_id };
                   }
                   return message;
                 }),
@@ -418,7 +447,30 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
               });
             }
 
-            streamState = conversationStreamReducer(streamState, event);
+            if (event.type !== "confirmation_required") {
+              streamState = conversationStreamReducer(streamState, event);
+            } else if (typeof event.sequence === "number") {
+              streamState = {
+                ...streamState,
+                lastSequence: Math.max(streamState.lastSequence, event.sequence),
+              };
+            }
+            if (event.type === "confirmation_required") {
+              setMessages((current) =>
+                current.map((message) =>
+                  message.id === assistantMessageID
+                    ? {
+                        ...message,
+                        confirmation: {
+                          skillID: event.suggested_skill,
+                          confidence: event.confidence,
+                          prompt: content,
+                        },
+                      }
+                    : message,
+                ),
+              );
+            }
             if (event.type === "done") {
               setMessages((current) =>
                 current.map((message) =>
@@ -427,6 +479,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                         ...message,
                         content: streamState.answer || message.content,
                         activities: streamState.activities,
+                        artifacts: streamState.artifacts,
+                        citations: streamState.citations,
                         status: terminalMessageStatus(event.status),
                         thinking: false,
                         thinkingFinished: true,
@@ -445,6 +499,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                       ...message,
                       content: streamState.answer,
                       activities: streamState.activities,
+                      artifacts: streamState.artifacts,
+                      citations: streamState.citations,
                       status: "streaming",
                       thinking: true,
                       thinkingFinished: false,
@@ -496,6 +552,12 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                   activities: [],
                   artifacts: [],
                   citations: [],
+                  skillID:
+                    activeRun.primary_skill === "research" || activeRun.primary_skill === "fortune"
+                      ? activeRun.primary_skill
+                      : null,
+                  skillSource: activeRun.selection_source ?? null,
+                  runID: activeRun.id,
                   status: "streaming",
                   thinking: true,
                   thinkingFinished: false,
@@ -531,7 +593,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   }, [conversationId, followRun, transitionRun]);
 
   const handleSend = useCallback(
-    async (text: string, deep: boolean) => {
+    async (text: string, requestedSkill: SkillID | null) => {
       if (isRunBusy(runStateRef.current)) return;
       scrollToLatest();
 
@@ -555,6 +617,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           status: "streaming",
           thinking: true,
           thinkingFinished: false,
+          skillID: requestedSkill,
+          skillSource: requestedSkill ? "user" : null,
         },
       ]);
 
@@ -566,10 +630,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       let runCreated = false;
 
       try {
-        const agentName = deep ? "research_agent" : undefined;
         let targetConversationID = conversationId || "";
         if (!targetConversationID) {
-          createdConversation = await createConversation(csrfToken, agentName);
+          createdConversation = await createConversation(csrfToken);
           targetConversationID = createdConversation.id;
         }
 
@@ -581,7 +644,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
               content: text,
               client_message_id: clientMessageID,
               idempotency_key: clientMessageID,
-              agent_name: agentName,
+              model_id: "auto",
+              requested_skill: requestedSkill,
             },
             csrfToken,
           );
@@ -591,7 +655,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             targetConversationID,
             text,
             clientMessageID,
-            agentName,
+            requestedSkill,
             assistantId,
             controller,
           );
@@ -608,7 +672,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
               return { ...message, id: run.user_message_id };
             }
             if (message.id === assistantId) {
-              return { ...message, id: run.assistant_message_id };
+              return { ...message, id: run.assistant_message_id, runID: run.run_id };
             }
             return message;
           }),
@@ -624,7 +688,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           conversationCreatedNotified = true;
           onConversationCreated?.(createdConversation);
         }
-        await followRun(run.run_id, run.assistant_message_id, controller);
+        await followRun(run.run_id, run.assistant_message_id, controller, text);
       } catch (err: unknown) {
         // Abort only represents a local stream teardown (for example component
         // unmount). A successful cancellation is reported by the server's done
@@ -678,20 +742,25 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     {
       label: "梳理一个复杂问题",
       prompt: "帮我把一个复杂问题拆解成清晰、可执行的步骤",
+      skillID: null,
     },
     {
       label: "研究一个新方向",
       prompt: "我想研究一个新方向，请帮我搭建分析框架",
+      skillID: "research" as const,
     },
     {
-      label: "完善手头的想法",
-      prompt: "我有一个还不成熟的想法，请通过提问帮我完善它",
+      label: "进行命理分析",
+      prompt: "我想从命理视角分析一个问题。",
+      skillID: "fortune" as const,
     },
   ];
 
   return (
     <section className="relative flex h-full w-full flex-col">
-      <main
+      <div
+        role="region"
+        aria-label="对话消息"
         className="min-h-0 flex-1 overflow-y-auto"
         ref={listRef}
         onScroll={handleScroll}
@@ -703,23 +772,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
           <div className="flex flex-1 flex-col gap-7 pb-48 pt-8 sm:pt-10">
             {messages.length === 0 ? (
               <div className="flex min-h-[calc(100vh-17rem)] flex-1 flex-col items-center justify-center text-center">
-                <div className="relative mb-7 h-20 w-20" aria-hidden="true">
-                  <div className="absolute inset-[4px] rotate-[-18deg] rounded-[50%] border border-violet-400/35" />
-                  <div className="absolute inset-[13px] rotate-[22deg] rounded-[50%] border border-blue-400/30" />
-                  <div className="absolute inset-0 animate-[spin_20s_linear_infinite] rounded-[50%] border border-transparent border-t-violet-500/60 motion-reduce:animate-none" />
-                  <div className="absolute left-1/2 top-1/2 grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#121629] text-sm font-bold text-white shadow-[0_12px_32px_-12px_rgba(91,33,182,0.7)] dark:bg-white dark:text-[#121629]">
-                    奇
-                  </div>
-                </div>
+                <QidianMark className="mb-7 h-20 w-20" />
 
                 <p className="mb-3 text-[11px] font-semibold tracking-[0.18em] text-primary">
-                  奇点工作空间
+                  启点工作空间
                 </p>
                 <h2 className="text-3xl font-semibold tracking-[-0.045em] text-foreground sm:text-[2.6rem]">
                   今天想从哪里开始？
                 </h2>
                 <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
-                  描述你的目标，或从一个方向开始。奇点AI会与你一起拆解、研究并推进。
+                  描述你的目标，或从一个方向开始。启点会与你一起拆解、研究并推进。
                 </p>
 
                 <div className="mt-8 grid w-full max-w-2xl gap-3 sm:grid-cols-3">
@@ -727,8 +789,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                     <button
                       key={suggestion.label}
                       type="button"
-                      onClick={() => void handleSend(suggestion.prompt, false)}
-                      className="group flex min-h-24 flex-col justify-between rounded-2xl border border-white/80 bg-white/65 p-4 text-left shadow-[0_12px_40px_-28px_rgba(31,41,70,0.35)] backdrop-blur transition-[color,background-color,border-color,transform] hover:-translate-y-1 hover:border-violet-300/60 hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 motion-reduce:transform-none dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:border-violet-400/25 dark:hover:bg-white/[0.06]"
+                      onClick={() => void handleSend(suggestion.prompt, suggestion.skillID)}
+                      className="group flex min-h-24 flex-col justify-between rounded-2xl border border-border bg-card p-4 text-left transition-[color,background-color,border-color,transform] hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/20 motion-reduce:transform-none"
                     >
                       <span className="text-sm font-medium text-foreground">
                         {suggestion.label}
@@ -777,7 +839,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                       thinking={message.thinking}
                       thinkingFinished={message.thinkingFinished}
                       activities={message.activities}
+                      artifacts={message.artifacts}
                       citations={message.citations}
+                      skillID={message.skillID}
+                      skillSource={message.skillSource}
+                      confirmation={message.confirmation}
+                      runID={message.runID}
+                      onConfirmSkill={(skillID, prompt) => {
+                        const turn = explicitConfirmationTurn(prompt, skillID);
+                        void handleSend(turn.text, turn.requestedSkill);
+                      }}
                     />
                   </div>
                 ))}
@@ -785,9 +856,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             )}
           </div>
         </div>
-      </main>
+      </div>
 
-      <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-[#f5f7fb] via-[#f5f7fb]/95 to-transparent px-4 pb-4 pt-12 dark:from-[#080a13] dark:via-[#080a13]/95 sm:px-6 sm:pb-5">
+      <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background via-background/95 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-12 sm:px-6 sm:pb-5">
         {!isFollowingLatest && messages.length > 0 && (
           <button
             type="button"
@@ -808,7 +879,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             onStop={handleStop}
           />
           <p className="mt-2.5 text-center text-[10px] text-muted-foreground">
-            奇点AI可能会犯错，请核对重要信息。
+            启点可能会犯错，请核对重要信息。
           </p>
         </div>
       </footer>

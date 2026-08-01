@@ -91,6 +91,16 @@ class ExecutionRegistry:
     async def start(self, request: AgentRunRequest) -> Execution:
         await self._purge_expired()
         async with self._lock:
+            provenance = {
+                "service_version": self._service_version,
+                "graph_version": self._graph_version,
+                "protocol_version": request.protocol_version,
+                **(
+                    await self._runtime.describe_provenance(request)
+                    if hasattr(self._runtime, "describe_provenance")
+                    else {}
+                ),
+            }
             result = await self._store.start_execution(
                 request,
                 owner_id=self._owner_id,
@@ -98,16 +108,7 @@ class ExecutionRegistry:
                 graph_version=self._graph_version,
                 lease_seconds=self._lease_seconds,
                 retention_seconds=self._retention_seconds,
-                provenance={
-                    "service_version": self._service_version,
-                    "graph_version": self._graph_version,
-                    "protocol_version": request.protocol_version,
-                    **(
-                        await self._runtime.describe_provenance(request)
-                        if hasattr(self._runtime, "describe_provenance")
-                        else {}
-                    ),
-                },
+                provenance=provenance,
             )
             existing = self._executions.get(request.execution_id)
             if existing is not None:
@@ -119,7 +120,10 @@ class ExecutionRegistry:
                 return existing
 
             execution = Execution(
-                request=request,
+                request=self._request_with_provenance(
+                    request,
+                    result.execution.provenance,
+                ),
                 status=result.execution.status,
                 expires_at=result.execution.expires_at,
                 deadline_at=result.execution.deadline_at,
@@ -253,6 +257,29 @@ class ExecutionRegistry:
             ):
                 raise asyncio.CancelledError
             await self._transition(execution, RunStatus.RUNNING)
+            resolution = {
+                "model_id": execution.provenance.get("model_id", request.model_id),
+                "requested_skill": execution.provenance.get("requested_skill"),
+                "resolved_skills": execution.provenance.get("resolved_skills", []),
+                "primary_skill": execution.provenance.get("primary_skill"),
+                "selection_source": execution.provenance.get(
+                    "selection_source", "direct"
+                ),
+                "skill_snapshot": execution.provenance.get("skill_snapshot"),
+                "model_snapshot": execution.provenance.get("model_snapshot", {}),
+                "context_package_id": execution.provenance.get(
+                    "context_package_id"
+                ),
+                "suggested_skill": execution.provenance.get("suggested_skill"),
+                "confidence": execution.provenance.get("route_confidence", 1),
+                "requires_confirmation": execution.provenance.get(
+                    "route_requires_confirmation", False
+                ),
+                "reason_code": execution.provenance.get(
+                    "route_reason_code", "pre_resolved"
+                ),
+            }
+            await self._publish(execution, "run.resolved", resolution)
             await self._publish(
                 execution,
                 "run.resumed" if resume else "run.started",
@@ -285,6 +312,7 @@ class ExecutionRegistry:
                         "workflow_name",
                         "",
                     ),
+                    **resolution,
                     **(
                         {"lease_epoch": execution.lease.lease_epoch}
                         if resume
@@ -623,6 +651,24 @@ class ExecutionRegistry:
             await self._notifier.close()
 
     @staticmethod
+    def _request_with_provenance(request, provenance) -> AgentRunRequest:
+        return request.model_copy(
+            update={
+                "requested_skill": provenance.get("requested_skill"),
+                "resolved_skills": provenance.get("resolved_skills", []),
+                "primary_skill": provenance.get("primary_skill"),
+                "selection_source": provenance.get("selection_source"),
+                "suggested_skill": provenance.get("suggested_skill"),
+                "route_confidence": provenance.get("route_confidence"),
+                "route_requires_confirmation": provenance.get(
+                    "route_requires_confirmation", False
+                ),
+                "route_reason_code": provenance.get("route_reason_code"),
+                "context_package_id": provenance.get("context_package_id"),
+            }
+        )
+
+    @staticmethod
     def _placeholder_request(record) -> AgentRunRequest:
         # Only identifiers are used by attached/replay handles. User content is
         # intentionally not duplicated in runtime_executions.
@@ -633,6 +679,18 @@ class ExecutionRegistry:
             idempotency_key=record.idempotency_key,
             conversation_id="runtime-replay",
             agent_name=record.agent_name,
+            model_id=record.provenance.get("model_id", "auto"),
+            requested_skill=record.provenance.get("requested_skill"),
+            resolved_skills=record.provenance.get("resolved_skills", []),
+            primary_skill=record.provenance.get("primary_skill"),
+            selection_source=record.provenance.get("selection_source"),
+            suggested_skill=record.provenance.get("suggested_skill"),
+            route_confidence=record.provenance.get("route_confidence"),
+            route_requires_confirmation=record.provenance.get(
+                "route_requires_confirmation", False
+            ),
+            route_reason_code=record.provenance.get("route_reason_code"),
+            context_package_id=record.provenance.get("context_package_id"),
             query="runtime replay",
             deadline_ms=max(
                 1000,

@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   attachAgentRun,
   ChatAPIError,
+  createConversation,
   createAgentRun,
+  getAgentRun,
   streamLegacyConversation,
   type ConversationStreamEvent,
 } from "./chat-api";
@@ -13,6 +15,22 @@ afterEach(() => {
 });
 
 describe("Agent Run API", () => {
+  it("creates conversations without a legacy agent_name selection", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ id: "conversation-1" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createConversation("csrf-1");
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init?.body).toBe("{}");
+    expect(init?.body).not.toContain("agent_name");
+  });
+
   it("creates a run before attaching and sends the idempotency key", async () => {
     const fetchMock = vi.fn(
       async () =>
@@ -51,6 +69,32 @@ describe("Agent Run API", () => {
     expect(init?.method).toBe("POST");
     expect(new Headers(init?.headers).get("X-CSRF-Token")).toBe("csrf-1");
     expect(init?.body).toContain('"idempotency_key":"client-1"');
+    expect(init?.body).not.toContain("agent_name");
+  });
+
+  it("reads the authoritative Skill resolution from run detail", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            run: {
+              id: "run-1",
+              primary_skill: "research",
+              selection_source: "automatic",
+            },
+            spans: [],
+            events: [],
+            prompts: [],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    const detail = await getAgentRun("run-1");
+    expect(detail.run.primary_skill).toBe("research");
+    expect(detail.run.selection_source).toBe("automatic");
   });
 
   it("reattaches after the last confirmed sequence and stops at done", async () => {

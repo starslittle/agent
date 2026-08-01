@@ -106,9 +106,17 @@ func (s *Service) Start(
 	if params.Content == "" || utf8.RuneCountInString(params.Content) > 20000 {
 		return Generation{}, ErrInvalidInput
 	}
-	if params.AgentName == "" {
-		params.AgentName = DefaultAgent
+	selection, err := agent.NormalizeRunSelection(
+		params.ModelID,
+		params.RequestedSkill,
+		params.AgentName,
+	)
+	if err != nil {
+		return Generation{}, ErrInvalidInput
 	}
+	params.ModelID = selection.ModelID
+	params.RequestedSkill = selection.RequestedSkill
+	params.AgentName = selection.AgentName
 	if params.ClientMessageID == "" {
 		params.ClientMessageID = newID()
 	}

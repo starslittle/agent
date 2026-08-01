@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -132,12 +133,13 @@ func (s *Store) CreateUser(
 	err = transaction.QueryRow(ctx, `
 		INSERT INTO app_core.users (id, email, display_name)
 		VALUES ($1, $2, $3)
-		RETURNING id::text, email, display_name, status, created_at
+		RETURNING id::text, email, display_name, status, role, created_at
 	`, params.ID, params.Email, params.DisplayName).Scan(
 		&user.ID,
 		&user.Email,
 		&user.DisplayName,
 		&user.Status,
+		&user.Role,
 		&user.CreatedAt,
 	)
 	if err != nil {
@@ -177,6 +179,7 @@ func (s *Store) FindCredentialByEmail(
 			u.email,
 			u.display_name,
 			u.status,
+			u.role,
 			u.created_at,
 			p.password_hash
 		FROM app_core.users u
@@ -187,6 +190,7 @@ func (s *Store) FindCredentialByEmail(
 		&credential.User.Email,
 		&credential.User.DisplayName,
 		&credential.User.Status,
+		&credential.User.Role,
 		&credential.User.CreatedAt,
 		&credential.PasswordHash,
 	)
@@ -232,6 +236,7 @@ func (s *Store) FindSession(
 			u.email,
 			u.display_name,
 			u.status,
+			u.role,
 			u.created_at
 		FROM app_core.sessions s
 		JOIN app_core.users u ON u.id = s.user_id
@@ -249,6 +254,7 @@ func (s *Store) FindSession(
 		&session.User.Email,
 		&session.User.DisplayName,
 		&session.User.Status,
+		&session.User.Role,
 		&session.User.CreatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -303,6 +309,26 @@ func (s *Store) RecordLoginAudit(
 		truncate(audit.UserAgent, 512),
 		audit.CreatedAt,
 	)
+	return err
+}
+
+func (s *Store) RecordObservabilityAccess(
+	ctx context.Context,
+	audit auth.ObservabilityAccessAudit,
+) error {
+	filters, err := json.Marshal(audit.Filters)
+	if err != nil {
+		return err
+	}
+	var targetRunID any
+	if audit.TargetRunID != "" {
+		targetRunID = audit.TargetRunID
+	}
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO app_core.observability_access_audit_logs
+			(actor_user_id, action, target_run_id, filters, created_at)
+		VALUES ($1, $2, $3, $4, $5)
+	`, audit.ActorUserID, audit.Action, targetRunID, filters, audit.CreatedAt)
 	return err
 }
 

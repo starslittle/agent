@@ -3,6 +3,15 @@ from .factory import (
     default_model_profiles,
     get_model_gateway,
 )
+from .catalog import (
+    ModelCatalog,
+    ModelCatalogEntry,
+    ModelCatalogFile,
+    ResolvedModel,
+    UnknownModelIDError,
+    get_model_catalog,
+    load_model_catalog,
+)
 from .gateway import (
     ModelGateway,
     ObservedModelGateway,
@@ -25,6 +34,9 @@ from .types import (
 )
 
 __all__ = [
+    "ModelCatalog",
+    "ModelCatalogEntry",
+    "ModelCatalogFile",
     "ModelCapabilities",
     "ModelGateway",
     "ObservedModelGateway",
@@ -33,6 +45,7 @@ __all__ = [
     "ModelProviderError",
     "ModelProvider",
     "ModelRequest",
+    "ResolvedModel",
     "ModelResult",
     "ModelStreamEvent",
     "ModelStreamEventType",
@@ -41,7 +54,10 @@ __all__ = [
     "StructuredOutputError",
     "UnknownModelProfileError",
     "UnknownModelProviderError",
+    "UnknownModelIDError",
     "build_model_gateway",
     "default_model_profiles",
     "get_model_gateway",
+    "get_model_catalog",
+    "load_model_catalog",
 ]

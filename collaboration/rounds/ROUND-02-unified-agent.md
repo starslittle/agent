@@ -71,29 +71,29 @@ Answer，也可以自动或显式使用 Research/Fortune；用户能查看自己
 - 用户 Run 所有权和管理员只读边界。
 - ROUND-01 对话、Activity、Citation、取消和恢复在启点外壳中保持原语义。
 
-## 能力控制与回滚
+## 发布控制与兼容
 
-逻辑控制：
+2026-08-01 产品决定：本轮暂不实现 `unified_agent_enabled` 和
+`agent_observability_enabled`。统一助手是唯一用户入口，不通过恢复旧 Agent 选择或
+静默切换处理路径增加用户心智；内部观测以服务端 `observability_admin` 角色作为
+访问边界，普通用户没有入口且内部 API 必须返回拒绝。
 
-- `unified_agent_enabled`；
-- `agent_observability_enabled`。
+本轮验收不要求两个能力开关的关闭/重新启用演练，改为验证：
 
-关闭统一 Agent 时，停止新 Root Skill 路由并回到 ROUND-01 的上一稳定入口；不删除
-Skill Manifest、Run Snapshot 或新协议字段。关闭内部观测时，只关闭管理员入口和
-API，普通用户 Agent Runs、聊天和 Runtime 保持可用。
-
-回滚演练必须分别验证：
-
-1. 只关闭内部观测；
-2. 关闭统一 Agent；
+1. Root Skill 路由、显式 Skill 和安全回退在统一入口内行为稳定；
+2. 普通用户与内部观测的前后端权限边界不可绕过；
 3. 历史新旧 Run 均可按兼容策略读取；
-4. 重新启用后新 Run 的 requested/resolved Skill 和 provenance 正确。
+4. 新 Run 的 requested/resolved Skill 和 provenance 正确。
+
+生产级灰度、紧急停止或版本回退机制在发布准备阶段单独设计；不得为了回退而在本轮
+重新向用户暴露旧 Agent 选择器。Migration 继续遵守 Expand–Migrate–Contract，任何
+发布回退都不得删除 Skill Manifest、Run Snapshot、新协议字段或历史数据。
 
 ## 完成标准
 
 - 所有 Task `accepted`；
 - 主验收旅程通过；
 - ROUND-01 完整核心回归通过；
-- 两个能力控制分别演练；
+- 统一入口、兼容读取和管理员权限边界通过验收；
 - 形成“通用 Agent”稳定基线；
 - 停止并等待用户是否进入 ROUND-03。

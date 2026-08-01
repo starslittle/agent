@@ -1,12 +1,10 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import {
-  ArrowRight,
-  Eye,
-  EyeOff,
-  LoaderCircle,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { useAuth } from "@/auth/AuthProvider";
+import { QidianMark, QidianWordmark } from "@/brand/QidianMark";
+
+type FieldErrors = Partial<Record<"displayName" | "email" | "password", string>>;
 
 export default function AuthPage() {
   const location = useLocation();
@@ -18,181 +16,190 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [requestError, setRequestError] = useState("");
+  const displayNameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   const destination = useMemo(() => {
     const state = location.state as { from?: string } | null;
-    return state?.from || "/";
+    return state?.from?.startsWith("/") ? state.from : "/";
   }, [location.state]);
 
-  if (!loading && user) {
-    return <Navigate to="/" replace />;
+  if (!loading && user) return <Navigate to="/" replace />;
+
+  function validate(): FieldErrors {
+    const errors: FieldErrors = {};
+    if (isRegister && !displayName.trim()) errors.displayName = "请输入你的称呼";
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) errors.email = "请输入有效的邮箱地址";
+    if (password.length < 12) errors.password = "密码至少需要 12 个字符";
+    return errors;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
-    if (password.length < 12) {
-      setError("密码至少需要 12 个字符");
+    setRequestError("");
+    const errors = validate();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      requestAnimationFrame(() => {
+        if (errors.displayName) displayNameRef.current?.focus();
+        else if (errors.email) emailRef.current?.focus();
+        else passwordRef.current?.focus();
+      });
       return;
     }
+
     setSubmitting(true);
     try {
       if (isRegister) {
-        await register({ email, password, display_name: displayName });
+        await register({ email: email.trim(), password, display_name: displayName.trim() });
       } else {
-        await login({ email, password });
+        await login({ email: email.trim(), password });
       }
       navigate(destination, { replace: true });
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "操作没有完成");
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : "操作没有完成，请稍后重试");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-[#f7f8fc] text-foreground dark:bg-[#080a13]">
-      <div
-        className="pointer-events-none absolute inset-0 opacity-90 dark:opacity-70"
-        aria-hidden="true"
-      >
-        <div className="absolute left-1/2 top-[42%] h-[32rem] w-[48rem] -translate-x-1/2 -translate-y-1/2 rotate-[-9deg] rounded-[50%] border border-violet-300/25 dark:border-violet-400/10" />
-        <div className="absolute left-1/2 top-[42%] h-[24rem] w-[38rem] -translate-x-1/2 -translate-y-1/2 rotate-[12deg] rounded-[50%] border border-blue-300/20 dark:border-blue-400/10" />
-        <div className="absolute left-1/2 top-[38%] h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-300/15 blur-3xl dark:bg-violet-600/10" />
-      </div>
-
-      <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-5 py-5 sm:px-8 sm:py-7">
-        <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-[0.9rem] border border-violet-200/80 bg-white/80 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5">
-            <span className="bg-gradient-to-tr from-violet-600 to-blue-500 bg-clip-text text-sm font-bold text-transparent dark:from-violet-300 dark:to-blue-300">
-              奇
-            </span>
-          </div>
-          <div>
-            <p className="text-[15px] font-semibold tracking-tight">奇点AI</p>
-            <p className="text-[10px] tracking-[0.2em] text-muted-foreground">
-              QIDIAN INTELLIGENCE
-            </p>
-          </div>
-        </div>
-        <p className="hidden text-xs text-muted-foreground sm:block">
-          对话与任务，回到同一个工作空间
-        </p>
+    <main className="min-h-dvh bg-background text-foreground">
+      <a href="#auth-form" className="skip-link">跳到登录表单</a>
+      <header className="flex min-h-[4.5rem] items-center justify-between border-b border-border px-5 sm:px-8">
+        <Link to="/" className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="返回工作区预览">
+          <QidianWordmark />
+        </Link>
+        <Link
+          to="/"
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          查看工作区
+        </Link>
       </header>
 
-      <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-[29rem] flex-col justify-center px-5 pb-12 pt-28 sm:px-4 sm:pb-16">
-        <div className="animate-in fade-in-0 slide-in-from-bottom-3 duration-500 motion-reduce:animate-none motion-reduce:transition-none">
-          <div className="mb-6 text-center">
-            <div className="relative mx-auto mb-6 h-16 w-16" aria-hidden="true">
-              <div className="absolute inset-[3px] rotate-[-18deg] rounded-[50%] border border-violet-400/40" />
-              <div className="absolute inset-[10px] rotate-[22deg] rounded-[50%] border border-blue-400/35" />
-              <div className="absolute inset-0 animate-[spin_18s_linear_infinite] rounded-[50%] border border-transparent border-t-violet-500/70 motion-reduce:animate-none" />
-              <div className="absolute left-1/2 top-1/2 grid h-9 w-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#111526] text-xs font-bold text-white shadow-[0_10px_30px_-10px_rgba(91,33,182,0.75)] dark:bg-white dark:text-[#111526]">
-                奇
-              </div>
-            </div>
+      <section className="mx-auto grid min-h-[calc(100dvh-4.5rem)] max-w-6xl items-center gap-12 px-5 py-10 lg:grid-cols-[1fr_28rem] lg:px-8">
+        <div className="hidden max-w-xl lg:block">
+          <QidianMark className="h-20 w-20" />
+          <p className="mt-7 text-xs font-semibold tracking-[0.16em] text-primary">启点工作空间</p>
+          <p className="mt-4 text-5xl font-semibold leading-[1.12] tracking-[-0.045em]">
+            让每次对话，<br />都有清晰的下一步。
+          </p>
+          <p className="mt-6 max-w-md text-base leading-8 text-muted-foreground">
+            一个统一助手，根据你的明确选择或意图调用专业 Skill。运行依据、来源与结果都留在同一个工作区。
+          </p>
+        </div>
 
-            <p className="mb-3 text-[11px] font-semibold tracking-[0.18em] text-primary">
-              {isRegister ? "创建工作空间账号" : "进入你的工作空间"}
-            </p>
-            <h1 className="text-[2.35rem] font-semibold leading-tight tracking-[-0.045em] text-foreground sm:text-[2.65rem]">
-              {isRegister ? "从这里开始" : "欢迎回来"}
-            </h1>
-            <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
-              {isRegister
-                ? "创建账号后，你的对话与任务会安全地归于同一个工作空间。"
-                : "登录后继续上次的对话、研究与智能体任务。"}
-            </p>
+        <div id="auth-form" className="mx-auto w-full max-w-md scroll-mt-6">
+          <div className="mb-7 lg:hidden">
+            <QidianMark className="h-14 w-14" />
           </div>
+          <p className="text-xs font-semibold tracking-[0.14em] text-primary">
+            {isRegister ? "创建启点账号" : "进入启点工作区"}
+          </p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em]">
+            {isRegister ? "从这里开始" : "欢迎回来"}
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            {isRegister ? "创建账号后开始你的第一段对话。" : "登录后继续已有对话和 Agent Run。"}
+          </p>
 
-          <div className="rounded-[1.75rem] border border-white/80 bg-white/85 p-5 shadow-[0_24px_80px_-36px_rgba(31,41,70,0.3)] backdrop-blur-xl sm:p-7 dark:border-white/10 dark:bg-white/[0.055] dark:shadow-[0_24px_80px_-36px_rgba(0,0,0,0.8)]">
-            <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="mt-8 space-y-5" onSubmit={handleSubmit} noValidate>
             {isRegister && (
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-foreground">称呼</span>
+              <div>
+                <label htmlFor="display-name" className="text-xs font-medium">称呼</label>
                 <input
+                  ref={displayNameRef}
                   id="display-name"
+                  name="display_name"
+                  type="text"
+                  autoComplete="name"
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
-                  autoComplete="name"
-                  maxLength={80}
-                  placeholder="你希望我们如何称呼你"
-                  className="h-12 w-full rounded-xl border border-input bg-background/70 px-4 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 focus:border-primary focus:ring-4 focus:ring-primary/15"
+                  aria-invalid={Boolean(fieldErrors.displayName)}
+                  aria-describedby={fieldErrors.displayName ? "display-name-error" : undefined}
+                  className="mt-2 h-12 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-ring/15"
+                  placeholder="希望启点怎样称呼你"
                 />
-              </label>
+                {fieldErrors.displayName && <p id="display-name-error" className="mt-1.5 text-xs text-destructive">{fieldErrors.displayName}</p>}
+              </div>
             )}
 
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-foreground">邮箱</span>
+            <div>
+              <label htmlFor="email" className="text-xs font-medium">邮箱</label>
               <input
+                ref={emailRef}
                 id="email"
+                name="email"
                 type="email"
-                required
+                inputMode="email"
+                autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                autoComplete="email"
+                aria-invalid={Boolean(fieldErrors.email)}
+                aria-describedby={fieldErrors.email ? "email-error" : undefined}
+                className="mt-2 h-12 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-ring/15"
                 placeholder="name@example.com"
-                className="h-12 w-full rounded-xl border border-input bg-background/70 px-4 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 focus:border-primary focus:ring-4 focus:ring-primary/15"
               />
-            </label>
+              {fieldErrors.email && <p id="email-error" className="mt-1.5 text-xs text-destructive">{fieldErrors.email}</p>}
+            </div>
 
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-foreground">密码</span>
-              <span className="relative block">
+            <div>
+              <label htmlFor="password" className="text-xs font-medium">密码</label>
+              <div className="relative mt-2">
                 <input
+                  ref={passwordRef}
                   id="password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
-                  required
-                  minLength={12}
-                  maxLength={128}
+                  autoComplete={isRegister ? "new-password" : "current-password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  autoComplete={isRegister ? "new-password" : "current-password"}
-                  placeholder={isRegister ? "至少 12 个字符" : "输入你的密码"}
-                  className="h-12 w-full rounded-xl border border-input bg-background/70 px-4 pr-12 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 focus:border-primary focus:ring-4 focus:ring-primary/15"
+                  aria-invalid={Boolean(fieldErrors.password)}
+                  aria-describedby={fieldErrors.password ? "password-error" : "password-help"}
+                  className="h-12 w-full rounded-xl border border-input bg-background px-3 pr-12 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-ring/15"
+                  placeholder="至少 12 个字符"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((visible) => !visible)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  onClick={() => setShowPassword((current) => !current)}
+                  className="absolute inset-y-0 right-0 grid w-12 place-items-center rounded-r-xl text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   aria-label={showPassword ? "隐藏密码" : "显示密码"}
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
                 </button>
-              </span>
-            </label>
+              </div>
+              {fieldErrors.password ? (
+                <p id="password-error" className="mt-1.5 text-xs text-destructive">{fieldErrors.password}</p>
+              ) : (
+                <p id="password-help" className="mt-1.5 text-[11px] text-muted-foreground">至少 12 个字符</p>
+              )}
+            </div>
 
-            {error && (
-              <div
-                role="alert"
-                className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-              >
-                {error}
+            {requestError && (
+              <div role="alert" className="rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-3 text-xs text-destructive">
+                {requestError}
               </div>
             )}
 
             <button
               type="submit"
-              disabled={submitting}
-              className="group flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#121629] px-5 text-sm font-semibold text-white shadow-[0_16px_35px_-20px_rgba(18,22,41,0.8)] transition hover:-translate-y-0.5 hover:bg-[#1d2340] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:pointer-events-none disabled:opacity-60 motion-reduce:transform-none dark:bg-white dark:text-[#121629] dark:hover:bg-white/90"
+              disabled={submitting || loading}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-[background-color,transform,opacity] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transform-none"
             >
-              {submitting ? (
-                <><LoaderCircle className="h-4 w-4 animate-spin" />正在处理</>
-              ) : (
-                <>{isRegister ? "创建账号" : "登录"}<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></>
-              )}
+              {submitting || loading ? <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}
+              {submitting ? "正在提交" : isRegister ? "创建账号" : "登录"}
             </button>
-            </form>
-          </div>
+          </form>
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            {isRegister ? "已经有账号？" : "还没有账号？"}
-            <Link
-              to={isRegister ? "/login" : "/register"}
-              className="ml-2 font-semibold text-primary underline-offset-4 hover:underline"
-            >
-              {isRegister ? "直接登录" : "现在注册"}
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            {isRegister ? "已有账号？" : "还没有账号？"}{" "}
+            <Link to={isRegister ? "/login" : "/register"} className="font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              {isRegister ? "直接登录" : "创建账号"}
             </Link>
           </p>
         </div>

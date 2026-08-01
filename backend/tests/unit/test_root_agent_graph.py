@@ -97,6 +97,7 @@ class FakeGateway:
 class FakeCapabilities:
     def __init__(self):
         self.calls: list[tuple[str, dict, str, bool]] = []
+        self.allowed_sets: list[set[str]] = []
 
     async def execute(
         self,
@@ -109,6 +110,7 @@ class FakeCapabilities:
         event_sink=None,
         event_metadata=None,
     ):
+        self.allowed_sets.append(set(allowed_capabilities))
         self.calls.append(
             (name, arguments, context.execution_id, context.shadow)
         )
@@ -228,6 +230,7 @@ async def test_research_uses_structured_plan_and_bounded_search_fanout():
         "tavily_search",
     ]
     assert all(call[2] == "exec-test" for call in capabilities.calls)
+    assert capabilities.allowed_sets == [{"tavily_search"}, {"tavily_search"}]
     assert any(event.type == "workflow.completed" for event in events)
     assert sum(event.type == "tool.completed" for event in events) == 2
     artifact_event = next(
@@ -374,6 +377,11 @@ async def test_complete_ziwei_profile_uses_deterministic_chart_then_interprets()
     )
 
     assert capabilities.calls[0][0] == "get_ziwei_chart"
+    assert capabilities.allowed_sets[0] == {
+        "get_current_date",
+        "get_lunar_chart",
+        "get_ziwei_chart",
+    }
     assert capabilities.calls[0][1]["birthplace"] == "杭州"
     assert ("stream", "default_reasoning") in gateway.calls
     assert any(event.type == "workflow.completed" for event in events)

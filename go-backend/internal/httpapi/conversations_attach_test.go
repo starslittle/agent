@@ -50,6 +50,31 @@ func TestAttachRunEventsReplaysThenFollowsToOneTerminalEvent(t *testing.T) {
 	}
 }
 
+func TestAttachRunEventsSynthesizesTerminalFrameWithoutRuntimeEvent(t *testing.T) {
+	errorCode := "supervisor_execution_failed"
+	page := attachPage("failed", "failed", []agent.Event{
+		attachEvent(1, "run.started", `{}`),
+	})
+	page.ErrorCode = &errorCode
+	store := &attachRunStore{
+		userID: "user-1",
+		pages:  []conversation.RunEventPage{page},
+	}
+	response := httptest.NewRecorder()
+
+	newAttachTestHandler(store).attachRunEvents(
+		response,
+		attachTestRequest("user-1", 0),
+	)
+
+	body := response.Body.String()
+	if strings.Count(body, `"type":"done"`) != 1 ||
+		!strings.Contains(body, `"sequence":2,"status":"failed"`) ||
+		!strings.Contains(body, `"error_code":"supervisor_execution_failed"`) {
+		t.Fatalf("synthetic terminal frame mismatch: %s", body)
+	}
+}
+
 func TestAttachRunEventsFailsClosedOnSequenceGap(t *testing.T) {
 	store := &attachRunStore{
 		userID: "user-1",

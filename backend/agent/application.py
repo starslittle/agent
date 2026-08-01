@@ -5,7 +5,7 @@ import hashlib
 import json
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from agent.capabilities import (
@@ -24,15 +24,24 @@ from agent.graph import build_root_graph
 from agent.models import (
     ModelGateway,
     ObservedModelGateway,
+    ModelCatalog,
+    get_model_catalog,
     get_model_gateway,
 )
 from agent.prompts import prompt_sha256
+from agent.root import RootSkillResolver, SkillRouteResolution
 from agent.specs import (
     PROMPT_BUNDLES,
     AgentCatalog,
     get_agent_catalog,
 )
 from agent.state import create_root_state
+from agent.skills import (
+    SkillRegistry,
+    SkillSelection,
+    get_skill_registry,
+    resolve_compatible_selection,
+)
 
 
 @dataclass(frozen=True)
@@ -41,6 +50,10 @@ class RunCommand:
     query: str
     messages: list[dict[str, str]]
     requested_workflow: str
+    model_id: str = "auto"
+    selection: SkillSelection | None = None
+    resolution: SkillRouteResolution | None = None
+    context_package_id: str | None = None
     shadow: bool = False
     deadline_ms: int = 120_000
     cancel_event: asyncio.Event | None = None
@@ -63,18 +76,29 @@ class LangGraphAgentApplication:
         gateway: ModelGateway | None = None,
         capability_executor: CapabilityExecutor | None = None,
         catalog: AgentCatalog | None = None,
+        skill_registry: SkillRegistry | None = None,
+        model_catalog: ModelCatalog | None = None,
+        skill_resolver: RootSkillResolver | None = None,
         checkpointer=None,
         lease_guard=None,
         artifact_stager=None,
     ) -> None:
+        raw_gateway = gateway or get_model_gateway()
         self._gateway = ObservedModelGateway(
-            gateway or get_model_gateway(),
+            raw_gateway,
             emit_model_event,
         )
         self._capabilities = (
             capability_executor or RegistryCapabilityExecutor()
         )
         self._catalog = catalog or get_agent_catalog()
+        self._skill_registry = skill_registry or get_skill_registry()
+        self._model_catalog = model_catalog or get_model_catalog()
+        self._skill_resolver = skill_resolver or RootSkillResolver(
+            gateway=raw_gateway,
+            skill_registry=self._skill_registry,
+            model_catalog=self._model_catalog,
+        )
         self._checkpointer = checkpointer
         self._lease_guard = lease_guard
         self._artifact_stager = artifact_stager
@@ -83,6 +107,7 @@ class LangGraphAgentApplication:
             self._capabilities,
             self._catalog,
             checkpointer,
+            skill_registry=self._skill_registry,
         )
 
     async def has_checkpoint(self, execution_id: str) -> bool:
@@ -101,9 +126,23 @@ class LangGraphAgentApplication:
     def describe_provenance(
         self,
         requested_workflow: str,
+        *,
+        model_id: str = "auto",
+        selection: SkillSelection | None = None,
+        resolution: SkillRouteResolution | None = None,
+        context_package_id: str | None = None,
     ) -> dict[str, Any]:
+        if resolution is not None:
+            requested_workflow = resolution.workflow
+            selection = resolution.as_selection()
         spec = self._catalog.resolve(requested_workflow)
         profile = self._gateway.profile(spec.model_profile)
+        resolved_model = self._model_catalog.resolve(model_id)
+        selected_skill = None
+        if selection is not None and selection.primary_skill is not None:
+            selected_skill = self._skill_registry.resolve(selection.primary_skill)
+            if selected_skill.workflow != spec.workflow:
+                raise ValueError("Skill workflow does not match compatibility spec")
         prompt_versions = {
             stage: {
                 "path": path,
@@ -120,6 +159,11 @@ class LangGraphAgentApplication:
                 separators=(",", ":"),
             ).encode("utf-8")
         ).hexdigest()
+        allowed_capabilities = (
+            selected_skill.allowed_capabilities
+            if selected_skill is not None
+            else spec.allowed_capabilities
+        )
         capabilities = [
             {
                 "name": capability.name,
@@ -129,9 +173,27 @@ class LangGraphAgentApplication:
             }
             for capability in (
                 TARGET_CAPABILITY_SPECS[name]
-                for name in sorted(spec.allowed_capabilities)
+                for name in sorted(allowed_capabilities)
             )
         ]
+        skill_snapshot = None
+        if selected_skill is not None:
+            skill_snapshot = {
+                **selected_skill.model_dump(mode="json"),
+                "allowed_capabilities": sorted(
+                    selected_skill.allowed_capabilities
+                ),
+                "fingerprint": self._skill_registry.fingerprint(),
+            }
+        model_snapshot = {
+            **resolved_model.model_dump(mode="json"),
+            "execution_profile": spec.model_profile,
+            "execution_provider": profile.provider,
+            "execution_model": profile.model,
+            "execution_capabilities": profile.capabilities.model_dump(
+                mode="json"
+            ),
+        }
         return {
             "workflow_name": spec.workflow,
             "workflow_version": spec.workflow.rsplit("_v", 1)[-1],
@@ -144,12 +206,70 @@ class LangGraphAgentApplication:
             "prompt_bundle_hash": prompt_bundle_hash,
             "prompt_versions": prompt_versions,
             "capabilities": capabilities,
+            "model_id": resolved_model.model_id,
+            "model_catalog_fingerprint": self._model_catalog.fingerprint(),
+            "model_snapshot": model_snapshot,
+            "requested_skill": (
+                selection.requested_skill if selection is not None else None
+            ),
+            "resolved_skills": (
+                selection.resolved_skills if selection is not None else []
+            ),
+            "primary_skill": (
+                selection.primary_skill if selection is not None else None
+            ),
+            "selection_source": (
+                selection.selection_source if selection is not None else "direct"
+            ),
+            "skill_snapshot": skill_snapshot,
+            "context_package_id": context_package_id,
+            "route_confidence": (
+                resolution.confidence if resolution is not None else 1.0
+            ),
+            "route_requires_confirmation": (
+                resolution.requires_confirmation
+                if resolution is not None
+                else False
+            ),
+            "route_reason_code": (
+                resolution.reason_code
+                if resolution is not None
+                else "pre_resolved"
+            ),
+            "suggested_skill": (
+                resolution.suggested_skill if resolution is not None else None
+            ),
+            "route_prompt": {
+                "path": "agent/prompts/skill_route_v1.txt",
+                "sha256": prompt_sha256("agent/prompts/skill_route_v1.txt"),
+            },
         }
+
+    async def resolve_command(self, command: RunCommand) -> RunCommand:
+        if command.resolution is not None:
+            return command
+        selection = command.selection or resolve_compatible_selection(
+            requested_skill=None,
+            agent_name=command.requested_workflow,
+            registry=self._skill_registry,
+        )
+        resolution = await self._skill_resolver.resolve(
+            query=command.query,
+            model_id=command.model_id,
+            selection=selection,
+        )
+        return replace(
+            command,
+            requested_workflow=resolution.workflow,
+            selection=resolution.as_selection(),
+            resolution=resolution,
+        )
 
     async def stream(
         self,
         command: RunCommand,
     ) -> AsyncIterator[RuntimeEvent]:
+        command = await self.resolve_command(command)
         state = (
             None
             if command.resume
@@ -157,14 +277,25 @@ class LangGraphAgentApplication:
                 query=command.query,
                 messages=command.messages,
                 requested_workflow=command.requested_workflow,
+                resolution=command.resolution,
                 execution_id=command.execution_id,
                 shadow=command.shadow,
             )
         )
-        spec = self._catalog.resolve(command.requested_workflow)
+        spec = self._catalog.resolve(command.resolution.workflow)
+        skill = (
+            self._skill_registry.resolve(command.resolution.primary_skill)
+            if command.resolution.primary_skill is not None
+            else None
+        )
+        policy_deadline = (
+            skill.budgets.deadline_seconds
+            if skill is not None
+            else spec.budgets.deadline_seconds
+        )
         deadline_seconds = min(
             command.deadline_ms / 1000,
-            spec.budgets.deadline_seconds,
+            policy_deadline,
         )
         cancel_event = command.cancel_event or asyncio.Event()
         context = RunContext(

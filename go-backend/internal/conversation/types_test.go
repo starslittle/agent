@@ -95,3 +95,30 @@ func TestParseCitationValidatesAndBoundsBrowserData(t *testing.T) {
 		}
 	}
 }
+
+func TestParseSkillConfirmationRejectsUnsafeData(t *testing.T) {
+	t.Parallel()
+
+	confirmation, ok := ParseSkillConfirmation(json.RawMessage(`{
+		"suggested_skill":"fortune",
+		"confidence":0.94,
+		"reason_code":"automatic_confirmation_required",
+		"prompt":"must not be projected"
+	}`))
+	if !ok || confirmation.SuggestedSkill != "fortune" ||
+		confirmation.Confidence != 0.94 {
+		t.Fatalf("ParseSkillConfirmation() = (%#v, %t)", confirmation, ok)
+	}
+
+	invalid := []json.RawMessage{
+		json.RawMessage(`{}`),
+		json.RawMessage(`{"suggested_skill":"decision","confidence":0.9,"reason_code":"automatic_confirmation_required"}`),
+		json.RawMessage(`{"suggested_skill":"fortune","confidence":1.1,"reason_code":"automatic_confirmation_required"}`),
+		json.RawMessage(`{"suggested_skill":"fortune","confidence":0.9,"reason_code":"other"}`),
+	}
+	for _, item := range invalid {
+		if got, accepted := ParseSkillConfirmation(item); accepted {
+			t.Fatalf("ParseSkillConfirmation(%s) = %#v, want rejected", item, got)
+		}
+	}
+}

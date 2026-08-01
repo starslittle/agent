@@ -1,0 +1,5 @@
+default_model_id: auto
+models:
+  - id: auto
+    profile: default_chat
+    available: true

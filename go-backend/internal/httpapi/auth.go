@@ -180,6 +180,17 @@ func (a *authHTTP) requireCSRF(next http.Handler) http.Handler {
 	})
 }
 
+func (a *authHTTP) requireObservabilityAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, ok := sessionFromContext(r.Context())
+		if !ok || session.User.Role != auth.RoleObservabilityAdmin {
+			writeJSONError(w, http.StatusForbidden, "observability_access_denied")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (a *authHTTP) protectMutation(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.EqualFold(r.Header.Get("Sec-Fetch-Site"), "cross-site") {

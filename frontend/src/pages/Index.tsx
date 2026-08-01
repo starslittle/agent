@@ -12,13 +12,110 @@ import {
   type Conversation,
   type StoredMessage,
 } from "@/lib/chat-api";
-import { LoaderCircle, LogOut } from "lucide-react";
-import ThemeToggle from "@/components/ThemeToggle";
-import { useNavigate, useParams } from "react-router-dom";
+import { ArrowRight, Bot, LoaderCircle, LogOut, MessageSquare, Moon, Sparkles, Sun } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
+import { QidianMark, QidianWordmark } from "@/brand/QidianMark";
+import { useTheme } from "next-themes";
+
+function WorkspaceThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      className="grid h-11 w-11 place-items-center rounded-xl border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={isDark ? "切换到亮色模式" : "切换到暗色模式"}
+    >
+      {isDark ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+    </button>
+  );
+}
+
+function WorkspacePreview() {
+  return (
+    <div className="flex min-h-dvh bg-background text-foreground">
+      <a href="#preview-main" className="skip-link">跳到主要内容</a>
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-sidebar p-5 lg:flex">
+        <QidianWordmark />
+        <nav className="mt-10 space-y-1" aria-label="工作区预览导航">
+          <div className="flex min-h-11 items-center gap-3 rounded-xl bg-sidebar-accent px-3 text-sm font-medium text-sidebar-accent-foreground">
+            <MessageSquare className="h-4 w-4" aria-hidden="true" />
+            对话
+          </div>
+          <div className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-muted-foreground">
+            <Bot className="h-4 w-4" aria-hidden="true" />
+            Agent Runs
+          </div>
+        </nav>
+        <div className="mt-auto rounded-xl border border-border bg-background/60 p-4">
+          <p className="text-xs font-medium">登录后开始使用</p>
+          <p className="mt-1 text-[11px] leading-5 text-muted-foreground">对话和运行记录只对你的账号可见。</p>
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex min-h-[4.5rem] items-center justify-between border-b border-border px-4 sm:px-6">
+          <div className="lg:hidden"><QidianWordmark /></div>
+          <div className="hidden lg:block">
+            <p className="text-sm font-semibold">工作区预览</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">一个助手，多种专业 Skill</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <WorkspaceThemeToggle />
+            <Link
+              to="/login"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25 motion-reduce:transform-none"
+            >
+              登录
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </div>
+        </header>
+
+        <main id="preview-main" className="flex flex-1 items-center justify-center px-5 py-12 sm:px-8">
+          <section className="w-full max-w-3xl">
+            <QidianMark className="h-16 w-16" />
+            <p className="mt-6 text-xs font-semibold tracking-[0.16em] text-primary">启点工作空间</p>
+            <h1 className="mt-3 max-w-2xl text-3xl font-semibold tracking-[-0.04em] sm:text-5xl sm:leading-[1.12]">
+              从一个问题开始，<br className="hidden sm:block" />把思考推进到下一步。
+            </h1>
+            <p className="mt-5 max-w-xl text-sm leading-7 text-muted-foreground sm:text-base">
+              默认直接对话；需要时明确选择深度研究或命理分析。每次运行都保留真实的 Skill 来源和过程记录。
+            </p>
+
+            <div className="mt-9 grid gap-3 lg:grid-cols-3">
+              {[
+                ["直接对话", "自然输入，不预设能力"],
+                ["深度研究", "检索、核验并综合信息"],
+                ["命理分析", "明确选择后再开始"],
+              ].map(([title, description], index) => (
+                <div key={title} className="rounded-2xl border border-border bg-card p-4">
+                  <span className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 text-primary">
+                    {index === 0 ? <MessageSquare className="h-4 w-4" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+                  </span>
+                  <h2 className="mt-5 text-sm font-semibold">{title}</h2>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8 flex items-center gap-3 border-t border-border pt-6">
+              <Link to="/login" className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                登录后进入工作区
+              </Link>
+              <span className="text-xs text-muted-foreground">预览页不会读取你的对话或 Run 数据</span>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  );
+}
 
 const Index = () => {
-  const { user, csrfToken, logout } = useAuth();
+  const { user, csrfToken, logout, loading: authLoading } = useAuth();
   const { conversationId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -33,6 +130,7 @@ const Index = () => {
   const [draftKey, setDraftKey] = useState(0);
 
   const refreshConversations = useCallback(async (query = searchQuery) => {
+    if (!user) return;
     try {
       const response = await listConversations(query);
       setConversations(response.items);
@@ -41,20 +139,24 @@ const Index = () => {
     } finally {
       setListLoading(false);
     }
-  }, [searchQuery]);
+  }, [searchQuery, user]);
 
   useEffect(() => {
+    if (!user) {
+      setListLoading(false);
+      return;
+    }
     setListLoading(true);
     const timer = window.setTimeout(() => {
       void refreshConversations(searchQuery);
     }, searchQuery ? 250 : 0);
     return () => window.clearTimeout(timer);
-  }, [refreshConversations, searchQuery]);
+  }, [refreshConversations, searchQuery, user]);
 
   useEffect(() => {
     let cancelled = false;
     let retryTimer: number | undefined;
-    if (!conversationId) {
+    if (!user || !conversationId) {
       setActiveConversation(null);
       setInitialMessages([]);
       setEarlierCursor(null);
@@ -113,7 +215,7 @@ const Index = () => {
       cancelled = true;
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [conversationId, navigate]);
+  }, [conversationId, navigate, user]);
 
   const handleLoadEarlier = useCallback(async () => {
     if (!conversationId || earlierCursor === null || earlierLoading) return;
@@ -185,6 +287,19 @@ const Index = () => {
     }
   }, [conversationId, csrfToken, handleNewChat]);
 
+  if (authLoading) {
+    return (
+      <main className="grid min-h-dvh place-items-center bg-background text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs">
+          <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          正在准备工作区
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) return <WorkspacePreview />;
+
   const displayedConversation = conversationId &&
     activeConversation?.id === conversationId
     ? activeConversation
@@ -194,7 +309,8 @@ const Index = () => {
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-[#f5f7fb] dark:bg-[#080a13]">
+      <div className="flex h-dvh w-full overflow-hidden bg-background">
+        <a href="#workspace-main" className="skip-link">跳到主要内容</a>
         <ChatSidebar
           onNewChat={handleNewChat}
           conversations={conversations}
@@ -208,7 +324,7 @@ const Index = () => {
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="z-20 flex h-[4.5rem] flex-shrink-0 items-center border-b border-border/60 bg-background/75 px-4 backdrop-blur-xl sm:px-6">
+          <header className="z-20 flex min-h-[4.5rem] shrink-0 items-center border-b border-border bg-background px-4 sm:px-6">
             <div className="flex w-full items-center justify-between gap-4">
               <div className="flex min-w-0 items-center gap-3">
                 <SidebarTrigger className="h-9 w-9 rounded-xl border border-border/70 bg-background/80 text-muted-foreground hover:bg-muted" />
@@ -217,32 +333,28 @@ const Index = () => {
                     <h1 className="truncate text-sm font-semibold sm:text-base">
                       {displayedConversation?.title || "新的对话"}
                     </h1>
-                    <span className="hidden items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 sm:inline-flex dark:text-emerald-300">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      在线
-                    </span>
                   </div>
                   <p className="mt-0.5 hidden truncate text-xs text-muted-foreground sm:block">
-                    与奇点AI一起梳理问题、研究信息和执行任务
+                    与启点一起梳理问题、研究信息和执行任务
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
                 <div className="hidden items-center gap-2 rounded-full border border-border/70 bg-background/70 py-1.5 pl-2 pr-3 shadow-sm sm:flex">
-                  <div className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-tr from-violet-500 to-blue-500 text-[11px] font-semibold text-white">
-                    {user?.display_name?.trim().slice(0, 1) || "奇"}
+                  <div className="grid h-7 w-7 place-items-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                    {user.display_name?.trim().slice(0, 1) || "启"}
                   </div>
                   <div className="max-w-36 text-left">
                     <p className="truncate text-xs font-medium">{user?.display_name}</p>
                     <p className="truncate text-[10px] text-muted-foreground">{user?.email}</p>
                   </div>
                 </div>
-                <ThemeToggle />
+                <WorkspaceThemeToggle />
                 <button
                   type="button"
                   onClick={() => void logout()}
-                  className="grid h-9 w-9 place-items-center rounded-xl border border-border/70 bg-background/80 text-muted-foreground transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="grid h-11 w-11 place-items-center rounded-xl border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label="退出登录"
                   title="退出登录"
                 >
@@ -252,12 +364,7 @@ const Index = () => {
             </div>
           </header>
 
-          <main className="relative w-full flex-1 overflow-hidden">
-            <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-              <div className="absolute left-1/2 top-[38%] h-[34rem] w-[48rem] -translate-x-1/2 -translate-y-1/2 rotate-[-8deg] rounded-[50%] border border-violet-300/15 dark:border-violet-400/[0.06]" />
-              <div className="absolute left-1/2 top-[38%] h-[24rem] w-[38rem] -translate-x-1/2 -translate-y-1/2 rotate-[11deg] rounded-[50%] border border-blue-300/15 dark:border-blue-400/[0.06]" />
-              <div className="absolute left-1/2 top-[35%] h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-300/10 blur-3xl dark:bg-violet-600/[0.06]" />
-            </div>
+          <main id="workspace-main" className="relative w-full flex-1 overflow-hidden">
             {isConversationLoading ? (
               <div className="relative z-10 flex h-full items-center justify-center text-muted-foreground">
                 <LoaderCircle className="h-5 w-5 animate-spin" />

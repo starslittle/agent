@@ -50,6 +50,31 @@ type Citation struct {
 	Sequence   int    `json:"sequence"`
 }
 
+type SkillConfirmation struct {
+	SuggestedSkill string  `json:"suggested_skill"`
+	Confidence     float64 `json:"confidence"`
+	ReasonCode     string  `json:"reason_code"`
+}
+
+// ParseSkillConfirmation is the fail-closed boundary for confirmation data
+// persisted in assistant message metadata. It intentionally excludes prompts
+// and arbitrary event payloads.
+func ParseSkillConfirmation(raw json.RawMessage) (SkillConfirmation, bool) {
+	var confirmation SkillConfirmation
+	if err := json.Unmarshal(raw, &confirmation); err != nil {
+		return SkillConfirmation{}, false
+	}
+	confirmation.SuggestedSkill = strings.TrimSpace(confirmation.SuggestedSkill)
+	confirmation.ReasonCode = strings.TrimSpace(confirmation.ReasonCode)
+	if (confirmation.SuggestedSkill != "research" &&
+		confirmation.SuggestedSkill != "fortune") ||
+		confirmation.Confidence < 0 || confirmation.Confidence > 1 ||
+		confirmation.ReasonCode != "automatic_confirmation_required" {
+		return SkillConfirmation{}, false
+	}
+	return confirmation, true
+}
+
 // ParseCitation is the shared fail-closed boundary for durable message metadata
 // and browser-visible citation events. Event data has already passed the
 // agenttrace redaction boundary before this function is called.
@@ -101,39 +126,52 @@ type Run struct {
 	AssistantMessageID string
 	RequestID          string
 	AgentName          string
+	ModelID            string
+	RequestedSkill     *string
+	ResolvedSkills     json.RawMessage
+	PrimarySkill       *string
+	SelectionSource    *string
+	ContextPackageID   *string
 	Status             string
 	ProtocolVersion    int
 	LastSequence       int64
 }
 
 type RunSummary struct {
-	ID               string     `json:"id"`
-	ExecutionID      string     `json:"execution_id"`
-	TraceID          string     `json:"trace_id"`
-	ConversationID   string     `json:"conversation_id"`
-	AgentName        string     `json:"agent_name"`
-	ActualRoute      *string    `json:"actual_route,omitempty"`
-	ModelName        *string    `json:"model_name,omitempty"`
-	Status           string     `json:"status"`
-	ProtocolVersion  int        `json:"protocol_version"`
-	ServiceVersion   *string    `json:"service_version,omitempty"`
-	AgentVersion     *string    `json:"agent_version,omitempty"`
-	GraphVersion     *string    `json:"graph_version,omitempty"`
-	PromptBundleHash *string    `json:"prompt_bundle_hash,omitempty"`
-	InputTokens      int64      `json:"input_tokens"`
-	OutputTokens     int64      `json:"output_tokens"`
-	CachedTokens     int64      `json:"cached_tokens"`
-	TotalTokens      int64      `json:"total_tokens"`
-	ModelCallCount   int        `json:"model_call_count"`
-	ToolCallCount    int        `json:"tool_call_count"`
-	RetrievalCount   int        `json:"retrieval_count"`
-	TotalDurationMS  *int64     `json:"total_duration_ms,omitempty"`
-	ErrorCode        *string    `json:"error_code,omitempty"`
-	ErrorDetail      *string    `json:"error_detail,omitempty"`
-	FirstTokenAt     *time.Time `json:"first_token_at,omitempty"`
-	StartedAt        time.Time  `json:"started_at"`
-	CompletedAt      *time.Time `json:"completed_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
+	ID               string          `json:"id"`
+	ExecutionID      string          `json:"execution_id"`
+	TraceID          string          `json:"trace_id"`
+	ConversationID   string          `json:"conversation_id"`
+	AgentName        string          `json:"agent_name"`
+	ModelID          string          `json:"model_id"`
+	RequestedSkill   *string         `json:"requested_skill,omitempty"`
+	ResolvedSkills   json.RawMessage `json:"resolved_skills"`
+	PrimarySkill     *string         `json:"primary_skill,omitempty"`
+	SelectionSource  *string         `json:"selection_source,omitempty"`
+	ContextPackageID *string         `json:"context_package_id,omitempty"`
+	ActualRoute      *string         `json:"actual_route,omitempty"`
+	ModelName        *string         `json:"model_name,omitempty"`
+	Status           string          `json:"status"`
+	ProtocolVersion  int             `json:"protocol_version"`
+	ServiceVersion   *string         `json:"service_version,omitempty"`
+	AgentVersion     *string         `json:"agent_version,omitempty"`
+	GraphVersion     *string         `json:"graph_version,omitempty"`
+	PromptBundleHash *string         `json:"prompt_bundle_hash,omitempty"`
+	InputTokens      int64           `json:"input_tokens"`
+	OutputTokens     int64           `json:"output_tokens"`
+	CachedTokens     int64           `json:"cached_tokens"`
+	TotalTokens      int64           `json:"total_tokens"`
+	ModelCallCount   int             `json:"model_call_count"`
+	ToolCallCount    int             `json:"tool_call_count"`
+	RetrievalCount   int             `json:"retrieval_count"`
+	TotalDurationMS  *int64          `json:"total_duration_ms,omitempty"`
+	ErrorCode        *string         `json:"error_code,omitempty"`
+	ErrorDetail      *string         `json:"error_detail,omitempty"`
+	FirstTokenAt     *time.Time      `json:"first_token_at,omitempty"`
+	StartedAt        time.Time       `json:"started_at"`
+	CompletedAt      *time.Time      `json:"completed_at,omitempty"`
+	CreatedAt        time.Time       `json:"created_at"`
+	OwnerUserID      string          `json:"user_id,omitempty"`
 }
 
 type RunEvent struct {
@@ -202,6 +240,19 @@ type RunListParams struct {
 	Before *time.Time
 }
 
+type ObservabilityRunListParams struct {
+	UserID    string
+	Skill     string
+	Workflow  string
+	Model     string
+	Status    string
+	ErrorCode string
+	From      *time.Time
+	To        *time.Time
+	Limit     int
+	Before    *time.Time
+}
+
 type Generation struct {
 	Conversation Conversation
 	UserMessage  Message
@@ -233,6 +284,8 @@ type StartGenerationParams struct {
 	IdempotencyKey    string
 	Content           string
 	AgentName         string
+	ModelID           string
+	RequestedSkill    *string
 	ProtocolVersion   int
 	Idempotent        bool
 	SupervisorManaged bool

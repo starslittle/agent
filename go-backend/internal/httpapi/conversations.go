@@ -50,16 +50,20 @@ type updateConversationRequest struct {
 }
 
 type streamConversationRequest struct {
-	Content         string `json:"content"`
-	ClientMessageID string `json:"client_message_id"`
-	AgentName       string `json:"agent_name"`
+	Content         string  `json:"content"`
+	ClientMessageID string  `json:"client_message_id"`
+	AgentName       string  `json:"agent_name"`
+	ModelID         string  `json:"model_id"`
+	RequestedSkill  *string `json:"requested_skill"`
 }
 
 type createRunRequest struct {
-	Content         string `json:"content"`
-	ClientMessageID string `json:"client_message_id"`
-	IdempotencyKey  string `json:"idempotency_key"`
-	AgentName       string `json:"agent_name"`
+	Content         string  `json:"content"`
+	ClientMessageID string  `json:"client_message_id"`
+	IdempotencyKey  string  `json:"idempotency_key"`
+	AgentName       string  `json:"agent_name"`
+	ModelID         string  `json:"model_id"`
+	RequestedSkill  *string `json:"requested_skill"`
 }
 
 type upstreamChatMessage struct {
@@ -124,6 +128,8 @@ func (h *conversationHTTP) createRun(w http.ResponseWriter, r *http.Request) {
 			RequestID:       r.Header.Get(requestIDHeader),
 			Content:         input.Content,
 			AgentName:       input.AgentName,
+			ModelID:         input.ModelID,
+			RequestedSkill:  input.RequestedSkill,
 		},
 	)
 	if err != nil {
@@ -151,6 +157,8 @@ func (h *conversationHTTP) createRun(w http.ResponseWriter, r *http.Request) {
 		"assistant_message_id": generation.Assistant.ID,
 		"status":               generation.Run.Status,
 		"protocol_version":     generation.Run.ProtocolVersion,
+		"model_id":             generation.Run.ModelID,
+		"requested_skill":      generation.Run.RequestedSkill,
 		"events_url":           "/api/v1/agent-runs/" + generation.Run.ID + "/events",
 	})
 }
@@ -465,6 +473,17 @@ func (h *conversationHTTP) attachRunEvents(w http.ResponseWriter, r *http.Reques
 		}
 		if !terminalPending && runStatusTerminal(page.RunStatus) &&
 			cursor >= page.LastSequence {
+			// Supervisor-side failures can make the durable Run terminal without
+			// a Python terminal event. Emit one presentation-only terminal frame
+			// so browser clients do not reconnect forever. Its sequence follows
+			// the durable event cursor and is never persisted as a runtime event.
+			writeSSEJSON(w, browserDoneEvent{
+				Type:      "done",
+				Sequence:  page.LastSequence + 1,
+				Status:    page.RunStatus,
+				ErrorCode: page.ErrorCode,
+			})
+			flusher.Flush()
 			return
 		}
 
@@ -618,6 +637,8 @@ func (h *conversationHTTP) stream(w http.ResponseWriter, r *http.Request) {
 		RequestID:       requestID,
 		Content:         input.Content,
 		AgentName:       input.AgentName,
+		ModelID:         input.ModelID,
+		RequestedSkill:  input.RequestedSkill,
 	})
 	if err != nil {
 		h.writeError(w, err)
@@ -878,6 +899,8 @@ func (h *conversationHTTP) streamV1(
 		RequestID:       requestID,
 		Content:         input.Content,
 		AgentName:       input.AgentName,
+		ModelID:         input.ModelID,
+		RequestedSkill:  input.RequestedSkill,
 		ProtocolVersion: agent.ProtocolVersion,
 	})
 	if err != nil {

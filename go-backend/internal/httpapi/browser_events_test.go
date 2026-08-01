@@ -108,6 +108,12 @@ func TestProjectBrowserEvent(t *testing.T) {
 			wantType:  "answer_delta",
 		},
 		{
+			name:      "confirmation",
+			eventType: "confirmation.required",
+			data:      `{"suggested_skill":"fortune","confidence":0.99,"reason_code":"automatic_confirmation_required"}`,
+			wantType:  "confirmation_required",
+		},
+		{
 			name:      "citation",
 			eventType: "citation.created",
 			data: `{

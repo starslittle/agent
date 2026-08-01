@@ -9,12 +9,13 @@ import (
 )
 
 var (
-	ErrNotFound            = errors.New("conversation not found")
-	ErrInvalidInput        = errors.New("invalid conversation input")
-	ErrGenerationActive    = errors.New("conversation already has an active generation")
-	ErrDuplicateMessage    = errors.New("message already exists")
-	ErrIdempotencyConflict = errors.New("idempotency key conflicts with an existing run")
-	ErrRunLeaseLost        = errors.New("run supervisor lease lost")
+	ErrNotFound                = errors.New("conversation not found")
+	ErrInvalidInput            = errors.New("invalid conversation input")
+	ErrGenerationActive        = errors.New("conversation already has an active generation")
+	ErrDuplicateMessage        = errors.New("message already exists")
+	ErrIdempotencyConflict     = errors.New("idempotency key conflicts with an existing run")
+	ErrRunLeaseLost            = errors.New("run supervisor lease lost")
+	ErrSkillResolutionConflict = errors.New("skill resolution conflicts with sealed run")
 )
 
 type Store interface {
@@ -57,4 +58,11 @@ type Store interface {
 	ListAgentRuns(context.Context, RunListParams) ([]RunSummary, error)
 	FindAgentRunDetail(context.Context, string, string) (RunDetail, error)
 	ListAgentRunEvents(context.Context, string, string, int64, int) (RunEventPage, error)
+}
+
+// ObservabilityStore is deliberately separate from Store: cross-user reads are
+// available only through the internal observability service path.
+type ObservabilityStore interface {
+	ListObservableAgentRuns(context.Context, ObservabilityRunListParams) ([]RunSummary, error)
+	FindObservableAgentRunDetail(context.Context, string) (RunDetail, error)
 }

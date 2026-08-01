@@ -94,6 +94,13 @@ export type ConversationStreamEvent =
       data: string;
     }
   | {
+      type: "confirmation_required";
+      sequence?: number;
+      suggested_skill: "research" | "fortune";
+      confidence: number;
+      reason_code: "automatic_confirmation_required";
+    }
+  | {
       type: "citation";
       sequence?: number;
       citation: RuntimeCitation;
@@ -266,6 +273,19 @@ export function parseConversationStreamEvent(
         return null;
       }
       return value as ConversationStreamEvent;
+    case "confirmation_required":
+      if (
+        (value.suggested_skill !== "research" &&
+          value.suggested_skill !== "fortune") ||
+        typeof value.confidence !== "number" ||
+        value.confidence < 0 ||
+        value.confidence > 1 ||
+        value.reason_code !== "automatic_confirmation_required" ||
+        !hasOptionalNumber(value, "sequence")
+      ) {
+        return null;
+      }
+      return value as ConversationStreamEvent;
     case "citation":
       if (
         !hasOptionalNumber(value, "sequence") ||
@@ -387,13 +407,12 @@ export async function listConversations(
 
 export async function createConversation(
   csrfToken: string,
-  agentName?: string,
 ): Promise<Conversation> {
   return apiRequest<Conversation>(
     "/api/v1/conversations",
     {
       method: "POST",
-      body: JSON.stringify({ agent_name: agentName || "default_llm_agent" }),
+      body: JSON.stringify({}),
     },
     csrfToken,
   );
@@ -451,6 +470,8 @@ export interface CreateAgentRunResponse {
   assistant_message_id: string;
   status: AgentRunStatus;
   protocol_version: number;
+  model_id: string;
+  requested_skill?: string | null;
   events_url: string;
 }
 
@@ -469,7 +490,25 @@ export interface AgentRunSummary {
   conversation_id: string;
   status: AgentRunStatus;
   protocol_version: number;
+  model_id: string;
+  requested_skill?: string | null;
+  resolved_skills: string[] | null;
+  primary_skill?: string | null;
+  selection_source?:
+    | "direct"
+    | "user"
+    | "compatibility"
+    | "automatic"
+    | "fallback"
+    | null;
   started_at: string;
+}
+
+export interface AgentRunDetail {
+  run: AgentRunSummary;
+  spans: Array<Record<string, unknown>>;
+  events: Array<Record<string, unknown>>;
+  prompts: Array<Record<string, unknown>>;
 }
 
 interface AgentRunListResponse {
@@ -483,7 +522,8 @@ export async function createAgentRun(
     content: string;
     client_message_id: string;
     idempotency_key: string;
-    agent_name?: string;
+    model_id?: string;
+    requested_skill?: string | null;
   },
   csrfToken: string,
 ): Promise<CreateAgentRunResponse> {
@@ -502,7 +542,8 @@ export async function streamLegacyConversation(
   input: {
     content: string;
     client_message_id: string;
-    agent_name?: string;
+    model_id?: string;
+    requested_skill?: string | null;
   },
   csrfToken: string,
   onEvent: (event: ConversationStreamEvent) => void,
@@ -566,6 +607,12 @@ export async function listAgentRuns(
 ): Promise<AgentRunListResponse> {
   return apiRequest<AgentRunListResponse>(
     `/api/v1/agent-runs?limit=${encodeURIComponent(String(limit))}`,
+  );
+}
+
+export async function getAgentRun(runID: string): Promise<AgentRunDetail> {
+  return apiRequest<AgentRunDetail>(
+    `/api/v1/agent-runs/${encodeURIComponent(runID)}`,
   );
 }
 

@@ -61,6 +61,7 @@ def test_registry_streams_terminal_run_and_reuses_idempotent_execution():
         assert duplicate is execution
         events = [event async for event in registry.events(execution)]
         assert [event.type for event in events] == [
+            "run.resolved",
             "run.started",
             "answer.delta",
             "run.completed",
@@ -72,10 +73,10 @@ def test_registry_streams_terminal_run_and_reuses_idempotent_execution():
                 starting_after=1,
             )
         ]
-        assert [event.sequence for event in replayed] == [2, 3]
+        assert [event.sequence for event in replayed] == [2, 3, 4]
         snapshot = await registry.snapshot(request.execution_id)
         assert snapshot.status == RunStatus.COMPLETED
-        assert snapshot.last_sequence == 3
+        assert snapshot.last_sequence == 4
 
     asyncio.run(scenario())
 

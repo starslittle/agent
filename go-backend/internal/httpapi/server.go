@@ -90,6 +90,7 @@ func New(
 		),
 	)
 	if len(conversationServices) > 0 && conversationServices[0] != nil {
+		observabilityAPI := newObservabilityHTTP(authService, conversationServices[0])
 		conversationAPI := newConversationHTTP(
 			conversationServices[0],
 			proxy,
@@ -153,6 +154,22 @@ func New(
 		mux.Handle(
 			"GET /api/v1/agent-runs/{runID}",
 			authAPI.requireSession(http.HandlerFunc(conversationAPI.runDetail)),
+		)
+		mux.Handle(
+			"GET /api/v1/internal/agent-runs",
+			authAPI.requireSession(
+				authAPI.requireObservabilityAdmin(
+					http.HandlerFunc(observabilityAPI.runs),
+				),
+			),
+		)
+		mux.Handle(
+			"GET /api/v1/internal/agent-runs/{runID}",
+			authAPI.requireSession(
+				authAPI.requireObservabilityAdmin(
+					http.HandlerFunc(observabilityAPI.runDetail),
+				),
+			),
 		)
 		mux.Handle(
 			"GET /api/v1/agent-runs/{runID}/events",

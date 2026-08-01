@@ -377,11 +377,13 @@ func (s *Store) StartGeneration(
 		INSERT INTO app_core.agent_runs (
 			id, conversation_id, user_message_id, assistant_message_id,
 			request_id, execution_id, idempotency_key, agent_name,
+			model_id, requested_skill,
 			protocol_version, status, trace_id, metadata
 		)
 		VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $6,
-			jsonb_build_object('run_supervisor_managed', $10::boolean)
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+			$11, 'queued', $6,
+			jsonb_build_object('run_supervisor_managed', $12::boolean)
 		)
 	`,
 		runID,
@@ -392,6 +394,8 @@ func (s *Store) StartGeneration(
 		params.ExecutionID,
 		params.IdempotencyKey,
 		agentName,
+		params.ModelID,
+		params.RequestedSkill,
 		params.ProtocolVersion,
 		params.SupervisorManaged,
 	)
@@ -443,6 +447,9 @@ func (s *Store) StartGeneration(
 		AssistantMessageID: assistantMessageID,
 		RequestID:          params.RequestID,
 		AgentName:          agentName,
+		ModelID:            params.ModelID,
+		RequestedSkill:     params.RequestedSkill,
+		ResolvedSkills:     json.RawMessage(`null`),
 		Status:             "queued",
 		ProtocolVersion:    params.ProtocolVersion,
 	}
@@ -474,6 +481,12 @@ func loadIdempotentGeneration(
 			r.assistant_message_id::text,
 			r.request_id,
 			r.agent_name,
+			r.model_id,
+			r.requested_skill,
+			COALESCE(r.resolved_skills, 'null'::jsonb),
+			r.primary_skill,
+			r.selection_source,
+			r.context_package_id::text,
 			r.status,
 			r.protocol_version,
 			r.last_sequence,
@@ -505,6 +518,12 @@ func loadIdempotentGeneration(
 		&run.AssistantMessageID,
 		&run.RequestID,
 		&run.AgentName,
+		&run.ModelID,
+		&run.RequestedSkill,
+		&run.ResolvedSkills,
+		&run.PrimarySkill,
+		&run.SelectionSource,
+		&run.ContextPackageID,
 		&run.Status,
 		&run.ProtocolVersion,
 		&run.LastSequence,
@@ -521,7 +540,9 @@ func loadIdempotentGeneration(
 	if existingClientID != params.ClientMessageID ||
 		run.IdempotencyKey != params.IdempotencyKey ||
 		existingContent != params.Content ||
-		(params.AgentName != "" && existingAgent != params.AgentName) {
+		(params.AgentName != "" && existingAgent != params.AgentName) ||
+		run.ModelID != params.ModelID ||
+		!optionalStringEqual(run.RequestedSkill, params.RequestedSkill) {
 		return conversation.Generation{}, false, conversation.ErrIdempotencyConflict
 	}
 
@@ -901,6 +922,20 @@ func (s *Store) recordAgentEvent(
 		}
 		return false, transaction.Commit(ctx)
 	}
+	if event.Type == "run.resolved" {
+		resolution, resolutionErr := agent.ParseSkillResolution(event.Data)
+		if resolutionErr != nil {
+			return false, resolutionErr
+		}
+		if resolutionErr = sealSkillResolution(
+			ctx,
+			transaction,
+			runID,
+			resolution,
+		); resolutionErr != nil {
+			return false, resolutionErr
+		}
+	}
 
 	status := statusForEvent(event.Type)
 	_, err = transaction.Exec(ctx, `
@@ -978,14 +1013,106 @@ func (s *Store) recordAgentEvent(
 	return true, transaction.Commit(ctx)
 }
 
+func sealSkillResolution(
+	ctx context.Context,
+	transaction pgx.Tx,
+	runID string,
+	resolution agent.SkillResolution,
+) error {
+	resolved, err := json.Marshal(resolution.ResolvedSkills)
+	if err != nil {
+		return err
+	}
+	skillSnapshot := string(resolution.SkillSnapshot)
+	if skillSnapshot == "" || skillSnapshot == "null" {
+		skillSnapshot = "{}"
+	}
+	modelSnapshot := string(resolution.ModelSnapshot)
+	command, err := transaction.Exec(ctx, `
+		UPDATE app_core.agent_runs
+		SET resolved_skills = CASE
+				WHEN resolved_skills IS NULL THEN $4::jsonb
+				ELSE resolved_skills
+			END,
+			primary_skill = CASE
+				WHEN resolved_skills IS NULL THEN $5
+				ELSE primary_skill
+			END,
+			selection_source = CASE
+				WHEN resolved_skills IS NULL THEN $6
+				ELSE selection_source
+			END,
+			skill_snapshot = CASE
+				WHEN resolved_skills IS NULL THEN $7::jsonb
+				ELSE skill_snapshot
+			END,
+			model_snapshot = CASE
+				WHEN resolved_skills IS NULL THEN $8::jsonb
+				ELSE model_snapshot
+			END,
+			context_package_id = CASE
+				WHEN resolved_skills IS NULL THEN $9::uuid
+				ELSE context_package_id
+			END
+		WHERE id = $1
+			AND model_id = $2
+			AND requested_skill IS NOT DISTINCT FROM $3
+			AND (
+				resolved_skills IS NULL OR (
+					resolved_skills = $4::jsonb
+					AND primary_skill IS NOT DISTINCT FROM $5
+					AND selection_source = $6
+					AND skill_snapshot = $7::jsonb
+					AND model_snapshot = $8::jsonb
+					AND context_package_id::text IS NOT DISTINCT FROM $9::text
+				)
+			)
+	`,
+		runID,
+		resolution.ModelID,
+		resolution.RequestedSkill,
+		string(resolved),
+		resolution.PrimarySkill,
+		resolution.SelectionSource,
+		skillSnapshot,
+		modelSnapshot,
+		resolution.ContextPackageID,
+	)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() == 0 {
+		return conversation.ErrSkillResolutionConflict
+	}
+	return nil
+}
+
+func optionalStringEqual(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
 func scanRunSummary(row rowScanner) (conversation.RunSummary, error) {
 	var item conversation.RunSummary
-	err := row.Scan(
+	err := row.Scan(runSummaryScanTargets(&item)...)
+	return item, err
+}
+
+func runSummaryScanTargets(item *conversation.RunSummary) []any {
+	return []any{
 		&item.ID,
 		&item.ExecutionID,
 		&item.TraceID,
 		&item.ConversationID,
 		&item.AgentName,
+		&item.ModelID,
+		&item.RequestedSkill,
+		&item.ResolvedSkills,
+		&item.PrimarySkill,
+		&item.SelectionSource,
+		&item.ContextPackageID,
 		&item.ActualRoute,
 		&item.ModelName,
 		&item.Status,
@@ -1008,8 +1135,7 @@ func scanRunSummary(row rowScanner) (conversation.RunSummary, error) {
 		&item.StartedAt,
 		&item.CompletedAt,
 		&item.CreatedAt,
-	)
-	return item, err
+	}
 }
 
 const runSummaryColumns = `
@@ -1018,6 +1144,12 @@ const runSummaryColumns = `
 	r.trace_id,
 	r.conversation_id::text,
 	r.agent_name,
+	r.model_id,
+	r.requested_skill,
+	COALESCE(r.resolved_skills, 'null'::jsonb),
+	r.primary_skill,
+	r.selection_source,
+	r.context_package_id::text,
 	r.actual_route,
 	r.model_name,
 	r.status,
@@ -1070,6 +1202,82 @@ func (s *Store) ListAgentRuns(
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (s *Store) ListObservableAgentRuns(
+	ctx context.Context,
+	params conversation.ObservabilityRunListParams,
+) ([]conversation.RunSummary, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT `+runSummaryColumns+`, c.user_id::text
+		FROM app_core.agent_runs r
+		JOIN app_core.conversations c ON c.id = r.conversation_id
+		WHERE ($1 = '' OR c.user_id = $1::uuid)
+			AND (
+				$2 = '' OR r.primary_skill = $2 OR r.requested_skill = $2 OR
+				COALESCE(r.resolved_skills, '[]'::jsonb) @> to_jsonb(ARRAY[$2]::text[])
+			)
+			AND ($3 = '' OR r.actual_route = $3)
+			AND ($4 = '' OR r.model_id = $4 OR r.model_name = $4)
+			AND ($5 = '' OR r.status = $5)
+			AND ($6 = '' OR r.error_code = $6)
+			AND ($7::timestamptz IS NULL OR r.started_at >= $7)
+			AND ($8::timestamptz IS NULL OR r.started_at <= $8)
+			AND ($9::timestamptz IS NULL OR r.started_at < $9)
+		ORDER BY r.started_at DESC, r.id DESC
+		LIMIT $10
+	`,
+		params.UserID,
+		params.Skill,
+		params.Workflow,
+		params.Model,
+		params.Status,
+		params.ErrorCode,
+		params.From,
+		params.To,
+		params.Before,
+		params.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]conversation.RunSummary, 0, params.Limit)
+	for rows.Next() {
+		var item conversation.RunSummary
+		targets := append(runSummaryScanTargets(&item), &item.OwnerUserID)
+		if err := rows.Scan(targets...); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Store) FindObservableAgentRunDetail(
+	ctx context.Context,
+	runID string,
+) (conversation.RunDetail, error) {
+	var ownerUserID string
+	err := s.pool.QueryRow(ctx, `
+		SELECT c.user_id::text
+		FROM app_core.agent_runs r
+		JOIN app_core.conversations c ON c.id = r.conversation_id
+		WHERE r.id = $1
+	`, runID).Scan(&ownerUserID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return conversation.RunDetail{}, conversation.ErrNotFound
+	}
+	if err != nil {
+		return conversation.RunDetail{}, err
+	}
+	detail, err := s.FindAgentRunDetail(ctx, ownerUserID, runID)
+	if err != nil {
+		return detail, err
+	}
+	detail.Run.OwnerUserID = ownerUserID
+	return detail, nil
 }
 
 func (s *Store) FindAgentRunDetail(
@@ -1298,6 +1506,28 @@ func projectAgentEvent(
 	event agent.Event,
 ) error {
 	switch event.Type {
+	case "confirmation.required":
+		confirmation, valid := conversation.ParseSkillConfirmation(event.Data)
+		if !valid {
+			return nil
+		}
+		confirmationJSON, err := json.Marshal(confirmation)
+		if err != nil {
+			return err
+		}
+		_, err = transaction.Exec(ctx, `
+			UPDATE app_core.messages m
+			SET metadata = jsonb_set(
+				COALESCE(m.metadata, '{}'::jsonb),
+				'{skill_confirmation}',
+				$2::jsonb,
+				true
+			)
+			FROM app_core.agent_runs r
+			WHERE r.id = $1
+				AND m.id = r.assistant_message_id
+		`, runID, string(confirmationJSON))
+		return err
 	case "citation.created":
 		citation, valid := conversation.ParseCitation(event.Data)
 		if !valid {

@@ -1,0 +1,58 @@
+skills:
+  - id: research
+    version: 1
+    title: 深度研究
+    description: 基于结构化计划和可追溯来源完成开放式调研。
+    workflow: research_v1
+    input_schema: ResearchInput
+    output_schema: ResearchResult
+    allowed_capabilities:
+      - tavily_search
+    model_requirements:
+      streaming: true
+      structured_output: true
+      tool_calling: true
+    budgets:
+      deadline_seconds: 180
+      max_model_calls: 8
+      max_tool_calls: 5
+    risk:
+      tier: low
+      explicit_confirmation: never
+    memory:
+      may_propose_updates: false
+      may_commit_updates: false
+    ui:
+      command: /research
+      visible: true
+    available: true
+
+  - id: fortune
+    version: 1
+    title: 命理分析
+    description: 使用确定性排盘和受控解释提供命理视角。
+    workflow: fortune_v1
+    input_schema: FortuneInput
+    output_schema: FortuneResult
+    allowed_capabilities:
+      - get_current_date
+      - get_lunar_chart
+      - get_ziwei_chart
+    model_requirements:
+      streaming: true
+      structured_output: true
+      tool_calling: true
+    budgets:
+      deadline_seconds: 180
+      max_model_calls: 6
+      max_tool_calls: 3
+    risk:
+      tier: medium
+      explicit_confirmation: contextual
+    memory:
+      may_propose_updates: true
+      may_commit_updates: false
+    ui:
+      command: /fortune
+      visible: true
+    available: true

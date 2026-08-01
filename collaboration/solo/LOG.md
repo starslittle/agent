@@ -63,3 +63,119 @@
 - validation：Browser 产品 E2E 通过；隔离 PostgreSQL `full` profile 11 suites passed、9 risks passed（Python 62 unit、2 PostgreSQL integration、Go 全包与 PostgreSQL integration、前端 27 tests/lint/build、Compose 与 diff check）；
 - risk：保留 8 条既有 Fast Refresh warning、既有 bundle 体积提示与 browserslist 数据陈旧提示；Fortune 当前仅有 Runtime 工作流入口，统一前端 `/fortune` 属于 ROUND-02 TASK-012；无本轮阻塞风险；
 - cleanup：隔离 Go/Vite/测试 Agent、两套临时 PostgreSQL、测试账号/对话和临时报告已删除；未 push、merge 或部署。
+
+## ROUND-02
+
+### TASK-001
+
+- commit：`5a1a619`；
+- result：completed；
+- summary：新增强类型 Skill Manifest、仅含 Research/Fortune 的配置与启动即失败的稳定 Registry，未接入现有请求链；
+- validation：Skill tests 12 passed、Python unit 74 passed、Ruff passed；
+- risk：无。
+
+### TASK-008
+
+- commit：`b32b286`；
+- result：completed；
+- summary：新增稳定 `model_id=auto` Catalog，封存受控 provider/profile/model/能力与限制快照，不接受请求侧 Provider 参数或 Secret；
+- validation：Model tests 15 passed、Python unit 82 passed、Ruff passed；
+- risk：Windows 不展开 pytest 文件 glob，已改用两个明确测试文件执行同一范围。
+
+### TASK-009
+
+- commit：`dd9acff`；
+- result：completed；
+- summary：建立 Go/Python/Browser 一致的 model/Skill Run 契约、兼容适配、稳定解析事件、不可变创建字段和 PostgreSQL CAS 投影，并以 expand-only Migration 保留旧数据；
+- validation：Python 88 passed/2 skipped、Ruff passed；Go 全包 passed；隔离 PostgreSQL Migration、幂等及冲突写入 integration passed；前端 lint 0 errors（8 条既有 warning）与 build passed；
+- risk：保留既有前端 bundle 体积与 browserslist 陈旧提示；临时 PostgreSQL 已删除，未连接现有开发库。
+
+### TASK-010
+
+- commit：`643be64`（跨服务冻结补充 `eb1c7f9`）；
+- result：completed；
+- summary：新增唯一 Root Skill Resolver，支持显式、结构化自动路由、稳定置信度边界、失败回退和 Fortune 强制确认，并在执行前冻结到 provenance/Run Event；
+- validation：Root tests 21 passed、Python unit 98 passed、Ruff passed；Go 全包 passed；前端 lint 0 errors（8 条既有 warning）与 build passed；
+- risk：路由模型使用默认模型目录和 Provider 超时策略；产品级真实模型效果与确认交互进入 Round E2E。
+
+### TASK-011
+
+- commit：`eef7e18`；
+- result：completed；
+- summary：Research/Fortune 通过 Skill Registry 进入原 Subworkflow，Manifest 成为 Capability、预算和 Skill 快照来源，Direct 与旧 Agent Alias 保持兼容；
+- validation：Skill/Root targeted 27 passed；Python 全量 103 passed/2 skipped；Ruff passed；
+- risk：Research/Fortune 工作流文件未改动；真实 Provider、Citation、取消与确认链进入 Round E2E。
+
+### TASK-012
+
+- commit：`83ac2cf`；
+- result：completed；
+- summary：正式前端统一迁移为启点，新增未登录静态工作区预览、真实登录/注册页、Slash Skill 菜单与可移除 Chip；新 Run 仅发送 `model_id=auto` 和可选 `requested_skill`，确认操作创建显式后续 Turn，并展示权威 Skill 来源、Activity、Artifact、Citation 与正文分层；
+- validation：前端 34 tests passed、lint 0 errors（8 条既有 warning）、production build passed；Browser 覆盖亮暗色、375/768/1024/1440、登录表单错误聚焦和未登录私有请求边界；
+- skills：`frontend-design` 与 `ui-ux-pro-max` 收敛为文档式松石绿/珊瑚启点线视觉，`web-design-guidelines` 推动语义导航、单一 H1、动态视口、44px 触控、可见焦点、表单名称/错误关联与 reduced-motion；
+- risk：完整登录后普通/Research/Fortune/确认/取消/恢复/Citation 场景按 Solo 协议并入 Round 唯一一次产品 E2E；保留既有 bundle 体积与 browserslist 陈旧提示。
+
+### TASK-013
+
+- commit：`471f3f3`；
+- result：completed；
+- summary：新增普通用户 Agent Runs 列表和详情，支持状态筛选、游标分页、移动端列表/详情路由、运行状态、稳定 sequence 时间线、Skill/Workflow/Model、Capability/Tool、Artifact/Citation、Token/调用/耗时、错误与 provenance 摘要，并从当前聊天回答链接到关联 Run；
+- validation：前端 41 tests passed、lint 0 errors（8 条既有 warning）、production build passed；未登录 `/agent-runs` Browser 门禁跳转登录且未请求 Agent Runs API；
+- skills：延续 TASK-012 的启点视觉和响应式外壳，以用户问题“这次任务发生了什么”组织信息；状态控件、分页、深链接、44px 触控和错误/空/加载状态遵循 Web Guidelines；
+- risk：前端明确忽略 Prompt 集合、Span attributes 和 Event 原始 data，仅对白名单 Citation/Artifact 字段投影；真实完成/取消/失败 Run 的页面验收进入 Round E2E。
+
+### TASK-028
+
+- commit：`aa52418`；
+- result：completed；
+- summary：新增独立 `/api/v1/internal/agent-runs` 只读权限边界、`observability_admin` 角色、跨用户筛选/详情、fail-closed 访问审计与服务端脱敏投影；前端复用 Agent Runs 状态、时间线、Usage、Capability、Citation、Artifact 和 provenance 组件，普通用户无入口且稳定拒绝；
+- validation：Go 全包 passed；隔离 PostgreSQL Migration、跨用户筛选/详情及审计 integration passed；前端 46 tests passed、lint 0 errors（8 条既有 warning）、production build passed；Browser 覆盖普通用户拒绝、管理员组合/时间筛选、空状态、完成/取消/失败详情、审计、375/1440 响应式、无写操作和敏感字段不出现；
+- skills：`frontend-design` 与 `ui-ux-pro-max` 延续启点文档式信息层级，`web-design-guidelines` 推动显式标签、44px 控件、空/错/加载状态、移动端详情隐藏筛选区和管理员移动端入口；
+- risk：权限仅支持 `user`/`observability_admin` 两级且无产品内提权入口；生产授权与账号授予不在本轮范围；保留既有 bundle、browserslist 与 React Router warning。
+
+### ROUND-02 Acceptance Blocker
+
+- result：blocked；
+- summary：Round 文档要求的 `unified_agent_enabled` 与 `agent_observability_enabled` 尚无代码实现，既有 Task 也未授权实现所需的跨服务路径，无法执行独立关闭、回滚与重新启用演练；
+- validation：仓库全文检索确认两个逻辑能力名仅存在于 `collaboration/rounds/README.md` 与 `ROUND-02-unified-agent.md`；TASK-028 产品场景及代码验证已通过；
+- risk：在新增纠偏 Task 并冻结统一 Agent 关闭后的 ROUND-01 回退语义前，ROUND-02 不能标记为 accepted。
+
+### ROUND-02 Acceptance Decision
+
+- result：resolved；
+- summary：用户决定本轮暂不实现两个能力开关，统一助手保持唯一用户入口，内部观测继续由服务端管理员角色隔离；Round 验收改为统一路由、兼容读取与权限边界验证；
+- validation：`ROUND-02-unified-agent.md` 与轮次 README 已同步，不再要求两个开关的关闭/重新启用演练；
+- risk：生产级灰度与紧急停止机制留到发布准备阶段单独设计，本轮不提供应用级能力熔断。
+
+### ROUND-02 E2E Confirmation Blocker
+
+- result：blocked；
+- summary：自动 Fortune 正确产生 `confirmation.required` 且未执行 Fortune，但新会话导航/刷新会重新水合消息并丢失确认卡，用户无法创建显式后续 Turn；
+- validation：真实 Browser 复现两次，Agent Run 时间线均包含 `confirmation.required`；前端局部状态合并测试 2 passed，但无法覆盖新会话重挂载；
+- risk：持久修复需要最小修改 TASK-012 禁止的 Go 消息事件投影与测试路径，等待用户授权。
+
+### TASK-012 E2E Fix
+
+- commit：`8bda499`；
+- result：completed；
+- summary：将脱敏 `confirmation.required` 投影到助手消息 metadata，前端刷新/重挂载后用前一条用户消息恢复确认动作，点击后仍创建独立显式 Skill Turn；
+- validation：Go conversation targeted passed；隔离 PostgreSQL `TestConversationLifecycleIntegration` passed；前端状态恢复 3 tests passed、lint 0 errors（8 条既有 warning）、production build passed；Browser 刷新确认卡、显式后续 Turn 与 `fortune_v1` provenance passed；
+- skills：保持既有启点视觉，仅补状态恢复；确认按钮继续使用语义 button、清晰文案和既有 44px 触控边界；
+- risk：确认 metadata 只保存 Skill、置信度和固定 reason code，不复制用户 prompt 或任意事件字段。
+
+### TASK-009 E2E Fix
+
+- commit：`a95c0b2`；
+- result：completed；
+- summary：当 Supervisor 已将 Run 置为终态但 Python 未产生终态事件时，Browser SSE 合成一次不落库的 `done`，避免前端无限重连和持续显示停止按钮；
+- validation：Go `TestAttachRunEvents*` targeted passed；Browser 验证失败及时显示“生成未完成”，服务恢复后同一对话可继续；旧 `fortune_agent` 映射为 `fortune / compatibility / fortune_v1`，未知 Skill 返回 400；
+- risk：合成终态仅存在于浏览器投影层，序号紧随持久事件 cursor，不修改 Runtime 事件历史。
+
+### ROUND-02 Acceptance
+
+- accepted commit：`a95c0b2`；
+- result：accepted；
+- summary：统一启点入口、Direct/显式与自动 Research、显式与需确认 Fortune、Skill Chip、用户 Run、管理员只读观测、兼容读取与安全回退均通过；本次恢复只复验此前未通过或受修复影响的确认、失败、取消和兼容链路，没有重复已通过场景；
+- validation：沿用本轮已通过的 Python 103 unit、Go 全包、前端 46 tests/lint/build、隔离 PostgreSQL Go/Python integration 与既有 Browser 主旅程；新增确认投影/刷新/显式 Turn、取消刷新后继续、无终态事件失败恢复、旧 `agent_name` 与未知 Skill 验收均通过；
+- risk：按产品决定不提供 `unified_agent_enabled` 和 `agent_observability_enabled`；生产灰度与紧急停止留待发布准备，保留既有 8 条 Fast Refresh warning、bundle 体积和 browserslist 陈旧提示；
+- cleanup：本轮隔离 PostgreSQL/Redis/Python/Go/Vite 容器、测试账号与对话、临时网络/卷/镜像已删除；未 push、merge、部署或修改生产环境。

@@ -154,6 +154,18 @@ func (s *Service) Ping(ctx context.Context) error {
 	return s.store.Ping(ctx)
 }
 
+func (s *Service) RecordObservabilityAccess(
+	ctx context.Context,
+	audit ObservabilityAccessAudit,
+) error {
+	if audit.ActorUserID == "" ||
+		(audit.Action != "agent_runs.list" && audit.Action != "agent_runs.detail") {
+		return errors.New("invalid observability access audit")
+	}
+	audit.CreatedAt = s.now().UTC()
+	return s.store.RecordObservabilityAccess(ctx, audit)
+}
+
 func (s *Service) newSession(
 	ctx context.Context,
 	user User,

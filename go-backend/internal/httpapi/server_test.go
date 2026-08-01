@@ -371,6 +371,7 @@ func newTestAuthService() *auth.Service {
 		Email:       "test@example.com",
 		DisplayName: "Test User",
 		Status:      "active",
+		Role:        auth.RoleUser,
 		CreatedAt:   time.Now().UTC(),
 	}
 	store.users[user.ID] = auth.Credential{User: user}
@@ -504,6 +505,13 @@ func (s *memoryAuthStore) DeleteSession(
 func (s *memoryAuthStore) RecordLoginAudit(
 	context.Context,
 	auth.LoginAudit,
+) error {
+	return nil
+}
+
+func (s *memoryAuthStore) RecordObservabilityAccess(
+	context.Context,
+	auth.ObservabilityAccessAudit,
 ) error {
 	return nil
 }

@@ -92,7 +92,8 @@ def test_v1_stream_and_status_api(monkeypatch):
     )
     assert response.status_code == 200
     assert "event: run.started" in response.text
-    assert "id: exec-api-1:1" in response.text
+    assert "event: run.resolved" in response.text
+    assert "id: exec-api-1:2" in response.text
     assert "event: run.completed" in response.text
 
     status_path = "/internal/v1/agent-runs/exec-api-1"
@@ -102,4 +103,4 @@ def test_v1_stream_and_status_api(monkeypatch):
     )
     assert status.status_code == 200
     assert status.json()["status"] == "completed"
-    assert status.json()["last_sequence"] == 4
+    assert status.json()["last_sequence"] == 5
