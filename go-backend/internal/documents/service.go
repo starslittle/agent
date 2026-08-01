@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"mime"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -14,6 +17,14 @@ import (
 	"github.com/starslittle/agent/go-backend/internal/auth"
 	"golang.org/x/text/unicode/norm"
 )
+
+const (
+	MaxImportFiles = 500
+	MaxImportBytes = int64(20 * 1024 * 1024)
+	MaxImportDepth = 20
+)
+
+var importBatchIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
 type Service struct {
 	store  Store
@@ -217,6 +228,174 @@ func (s *Service) Touch(ctx context.Context, userID, entryID string) error {
 		return ErrInvalidInput
 	}
 	return s.store.TouchEntry(ctx, userID, entryID)
+}
+
+func (s *Service) PreflightImport(ctx context.Context, userID string, manifest ImportManifest) (ImportPreview, error) {
+	if strings.TrimSpace(userID) == "" {
+		return ImportPreview{}, ErrInvalidInput
+	}
+	normalized, preview, err := s.normalizeImportManifest(manifest, false)
+	if err != nil {
+		return ImportPreview{}, err
+	}
+	if normalized.TargetFolderID != nil {
+		if _, err := s.store.FindFolder(ctx, userID, *normalized.TargetFolderID); err != nil {
+			return ImportPreview{}, err
+		}
+	}
+	items, err := s.store.PreviewMarkdownImport(ctx, userID, normalized)
+	if err != nil {
+		return ImportPreview{}, err
+	}
+	preview.Items = append(preview.Items, items...)
+	for _, item := range items {
+		switch item.Status {
+		case ImportSkippedDuplicate:
+			preview.Duplicates++
+		case ImportConflict:
+			preview.Conflicts++
+		}
+	}
+	return preview, nil
+}
+
+func (s *Service) Import(ctx context.Context, userID, idempotencyKey string, manifest ImportManifest) (ImportResult, error) {
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if strings.TrimSpace(userID) == "" || idempotencyKey == "" || utf8.RuneCountInString(idempotencyKey) > 200 {
+		return ImportResult{}, ErrInvalidInput
+	}
+	normalized, _, err := s.normalizeImportManifest(manifest, true)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	encoded, _ := json.Marshal(normalized)
+	sum := sha256.Sum256(encoded)
+	return s.store.ImportMarkdownBatch(ctx, ImportBatchParams{UserID: userID, IdempotencyKey: idempotencyKey, ManifestHash: hex.EncodeToString(sum[:]), Manifest: normalized, CreatedAt: s.now().UTC()})
+}
+
+func (s *Service) normalizeImportManifest(manifest ImportManifest, requireContent bool) (ImportManifest, ImportPreview, error) {
+	manifest.BatchID = strings.TrimSpace(manifest.BatchID)
+	manifest.TargetFolderID = cleanID(manifest.TargetFolderID)
+	if !importBatchIDPattern.MatchString(manifest.BatchID) {
+		return ImportManifest{}, ImportPreview{}, ErrInvalidInput
+	}
+	if len(manifest.Entries) == 0 || len(manifest.Entries) > MaxImportFiles {
+		return ImportManifest{}, ImportPreview{}, ErrLimitExceeded
+	}
+	preview := ImportPreview{BatchID: manifest.BatchID, TargetFolderID: manifest.TargetFolderID, RootName: manifest.RootName, Items: []ImportItemResult{}}
+	if manifest.RootName != nil {
+		name, _, err := s.validateName(*manifest.RootName)
+		if err != nil {
+			return ImportManifest{}, ImportPreview{}, err
+		}
+		manifest.RootName = &name
+		preview.RootName = &name
+	} else if manifest.TargetFolderID == nil {
+		return ImportManifest{}, ImportPreview{}, ErrInvalidInput
+	}
+	seen := map[string]bool{}
+	var total int64
+	for index := range manifest.Entries {
+		entry := &manifest.Entries[index]
+		normalized, err := normalizeImportPath(entry.RelativePath, s.limits.MaxPathRunes)
+		if err != nil {
+			return ImportManifest{}, ImportPreview{}, err
+		}
+		parts := strings.Split(normalized, "/")
+		for partIndex, part := range parts {
+			clean, _, nameErr := s.validateName(part)
+			if nameErr != nil {
+				return ImportManifest{}, ImportPreview{}, nameErr
+			}
+			parts[partIndex] = clean
+		}
+		normalized = strings.Join(parts, "/")
+		entry.RelativePath = normalized
+		if seen[strings.ToLower(normalized)] {
+			return ImportManifest{}, ImportPreview{}, ErrInvalidInput
+		}
+		seen[strings.ToLower(normalized)] = true
+		depth := len(strings.Split(normalized, "/"))
+		if depth > MaxImportDepth {
+			return ImportManifest{}, ImportPreview{}, ErrLimitExceeded
+		}
+		if entry.Kind != "file" && entry.Kind != "folder" && entry.Kind != "unsupported" {
+			return ImportManifest{}, ImportPreview{}, ErrInvalidInput
+		}
+		if entry.Kind == "folder" {
+			continue
+		}
+		if !strings.EqualFold(path.Ext(normalized), ".md") || entry.Kind == "unsupported" {
+			entry.Kind = "unsupported"
+			preview.Items = append(preview.Items, ImportItemResult{RelativePath: normalized, Status: ImportUnsupported, Reason: "仅支持 Markdown"})
+			preview.Unsupported++
+			continue
+		}
+		if entry.Size < 0 || entry.Size > s.limits.MaxDocumentBytes {
+			return ImportManifest{}, ImportPreview{}, ErrLimitExceeded
+		}
+		total += entry.Size
+		if total > MaxImportBytes {
+			return ImportManifest{}, ImportPreview{}, ErrLimitExceeded
+		}
+		entry.ContentHash = strings.ToLower(strings.TrimSpace(entry.ContentHash))
+		decodedHash, decodeErr := hex.DecodeString(entry.ContentHash)
+		if decodeErr != nil || len(decodedHash) != 32 {
+			return ImportManifest{}, ImportPreview{}, ErrInvalidInput
+		}
+		if requireContent {
+			if !utf8.ValidString(entry.Content) || int64(len([]byte(entry.Content))) != entry.Size || unsafeImportContent(entry.Content) {
+				return ImportManifest{}, ImportPreview{}, ErrInvalidInput
+			}
+			hash := contentHash(entry.Content)
+			if hash != strings.ToLower(entry.ContentHash) {
+				return ImportManifest{}, ImportPreview{}, ErrInvalidInput
+			}
+			media, _, mimeErr := mime.ParseMediaType(strings.ToLower(strings.TrimSpace(entry.MediaType)))
+			if entry.MediaType == "" {
+				media = ""
+				mimeErr = nil
+			}
+			if mimeErr != nil || media != "" && media != "text/markdown" && media != "text/plain" && media != "application/octet-stream" {
+				return ImportManifest{}, ImportPreview{}, ErrInvalidInput
+			}
+		}
+		preview.MarkdownCount++
+		preview.TotalBytes += entry.Size
+	}
+	return manifest, preview, nil
+}
+
+func unsafeImportContent(content string) bool {
+	for _, value := range content {
+		if unicode.IsControl(value) && value != '\n' && value != '\r' && value != '\t' {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeImportPath(raw string, maxRunes int) (string, error) {
+	value := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
+	if value == "" || strings.ContainsRune(value, '\x00') || strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") || len(value) >= 2 && value[1] == ':' {
+		return "", ErrInvalidInput
+	}
+	parts := strings.Split(value, "/")
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return "", ErrInvalidInput
+		}
+		for _, r := range part {
+			if unicode.IsControl(r) {
+				return "", ErrInvalidInput
+			}
+		}
+	}
+	clean := path.Clean(value)
+	if clean != value || utf8.RuneCountInString(clean) > maxRunes {
+		return "", ErrInvalidInput
+	}
+	return clean, nil
 }
 
 func (s *Service) moveEntry(ctx context.Context, userID, entryID string, parentID *string, name string, expectedVersion int64) (Entry, error) {

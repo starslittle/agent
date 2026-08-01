@@ -1,10 +1,14 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -66,6 +70,43 @@ func TestPersonalSpaceHTTPIntegration(t *testing.T) {
 
 	root := createSpaceFolderHTTP(t, server, cookie, csrf, nil, "求职")
 	nested := createSpaceFolderHTTP(t, server, cookie, csrf, &root.ID, "面试")
+	importContent := "# 导入文档\n"
+	importHash := sha256.Sum256([]byte(importContent))
+	importManifest := documents.ImportManifest{
+		BatchID:        "11111111-1111-4111-8111-111111111111",
+		TargetFolderID: &root.ID,
+		RootName:       documentStringPointer("资料库"),
+		Entries:        []documents.ImportEntry{{Kind: "file", RelativePath: "嵌套/说明.md", Size: int64(len(importContent)), ContentHash: fmt.Sprintf("%x", importHash), MediaType: "text/markdown", UploadField: "file_0"}},
+	}
+	preflightBody, _ := json.Marshal(importManifest)
+	preflightRequest := authenticatedRequest(http.MethodPost, "/api/v1/space/imports:preflight", string(preflightBody), cookie, csrf)
+	preflightResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(preflightResponse, preflightRequest)
+	if preflightResponse.Code != http.StatusOK {
+		t.Fatalf("import preflight status = %d: %s", preflightResponse.Code, preflightResponse.Body.String())
+	}
+	var upload bytes.Buffer
+	multipartWriter := multipart.NewWriter(&upload)
+	manifestPart, _ := multipartWriter.CreateFormField("manifest")
+	_, _ = manifestPart.Write(preflightBody)
+	filePart, _ := multipartWriter.CreateFormFile("file_0", "说明.md")
+	_, _ = filePart.Write([]byte(importContent))
+	_ = multipartWriter.Close()
+	importRequest := httptest.NewRequest(http.MethodPost, "/api/v1/space/imports", &upload)
+	importRequest.AddCookie(cookie)
+	importRequest.Header.Set("Content-Type", multipartWriter.FormDataContentType())
+	importRequest.Header.Set("X-CSRF-Token", csrf)
+	importRequest.Header.Set("Idempotency-Key", "space-http-import")
+	importResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(importResponse, importRequest)
+	if importResponse.Code != http.StatusOK {
+		t.Fatalf("import status = %d: %s", importResponse.Code, importResponse.Body.String())
+	}
+	var importResult documents.ImportResult
+	decodeHTTPJSON(t, importResponse, &importResult)
+	if importResult.Added != 1 || importResult.RootFolderID == nil {
+		t.Fatalf("import result = %#v", importResult)
+	}
 	conflict := authenticatedRequest(http.MethodPost, "/api/v1/space/folders", `{"parent_id":null,"name":" 求职 "}`, cookie, csrf)
 	conflict.Header.Set("Idempotency-Key", auth.NewID())
 	conflictResponse := httptest.NewRecorder()
@@ -144,6 +185,8 @@ func TestPersonalSpaceHTTPIntegration(t *testing.T) {
 		t.Fatalf("private response Cache-Control = %q", cacheControl)
 	}
 }
+
+func documentStringPointer(value string) *string { return &value }
 
 func createSpaceFolderHTTP(t *testing.T, server *Server, cookie *http.Cookie, csrf string, parentID *string, name string) documents.Folder {
 	t.Helper()

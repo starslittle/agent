@@ -6,12 +6,13 @@ import (
 )
 
 var (
-	ErrNotFound        = errors.New("space entry not found")
-	ErrInvalidInput    = errors.New("invalid space input")
-	ErrNameConflict    = errors.New("space entry name conflicts with a sibling")
-	ErrVersionConflict = errors.New("space entry version conflict")
-	ErrFolderNotEmpty  = errors.New("folder is not empty")
-	ErrLimitExceeded   = errors.New("space limit exceeded")
+	ErrNotFound            = errors.New("space entry not found")
+	ErrInvalidInput        = errors.New("invalid space input")
+	ErrNameConflict        = errors.New("space entry name conflicts with a sibling")
+	ErrVersionConflict     = errors.New("space entry version conflict")
+	ErrFolderNotEmpty      = errors.New("folder is not empty")
+	ErrLimitExceeded       = errors.New("space limit exceeded")
+	ErrIdempotencyConflict = errors.New("document import idempotency conflict")
 )
 
 type Store interface {
@@ -29,4 +30,6 @@ type Store interface {
 	DeleteDocument(context.Context, string, string, int64) error
 	ListDocumentRevisions(context.Context, string, string, int) ([]Revision, error)
 	TouchEntry(context.Context, string, string) error
+	PreviewMarkdownImport(context.Context, string, ImportManifest) ([]ImportItemResult, error)
+	ImportMarkdownBatch(context.Context, ImportBatchParams) (ImportResult, error)
 }

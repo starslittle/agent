@@ -1,12 +1,23 @@
 package httpapi
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/starslittle/agent/go-backend/internal/documents"
+)
+
+const (
+	maxImportRequestBytes  = int64(22 * 1024 * 1024)
+	importPreflightTimeout = 15 * time.Second
+	importUploadTimeout    = 2 * time.Minute
 )
 
 type spaceHTTP struct {
@@ -302,6 +313,105 @@ func (h *spaceHTTP) revisions(w http.ResponseWriter, r *http.Request) {
 	writePrivateJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
+func (h *spaceHTTP) preflightImport(w http.ResponseWriter, r *http.Request) {
+	session, ok := sessionFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), importPreflightTimeout)
+	defer cancel()
+	var manifest documents.ImportManifest
+	if decodeJSONBody(r, &manifest, h.maxRequestBytes) != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_import_manifest")
+		return
+	}
+	preview, err := h.service.PreflightImport(ctx, session.User.ID, manifest)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writePrivateJSON(w, http.StatusOK, preview)
+}
+
+func (h *spaceHTTP) importMarkdown(w http.ResponseWriter, r *http.Request) {
+	session, ok := sessionFromContext(r.Context())
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required")
+		return
+	}
+	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if idempotencyKey == "" {
+		writeJSONError(w, http.StatusBadRequest, "idempotency_key_required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), importUploadTimeout)
+	defer cancel()
+	r.Body = http.MaxBytesReader(w, r.Body, maxImportRequestBytes)
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		writeJSONError(w, http.StatusRequestEntityTooLarge, "space_limit_exceeded")
+		return
+	}
+	defer func() {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+	}()
+	manifestRaw := r.FormValue("manifest")
+	var manifest documents.ImportManifest
+	if manifestRaw == "" || json.Unmarshal([]byte(manifestRaw), &manifest) != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_import_manifest")
+		return
+	}
+	expectedFields := map[string]bool{}
+	for index := range manifest.Entries {
+		entry := &manifest.Entries[index]
+		if entry.Kind != "file" {
+			continue
+		}
+		field := strings.TrimSpace(entry.UploadField)
+		if field == "" || expectedFields[field] {
+			writeJSONError(w, http.StatusBadRequest, "invalid_import_manifest")
+			return
+		}
+		expectedFields[field] = true
+		header, file, err := openImportFile(r.MultipartForm, field)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid_import_upload")
+			return
+		}
+		content, readErr := io.ReadAll(io.LimitReader(file, 2*1024*1024+1))
+		_ = file.Close()
+		if readErr != nil || len(content) > 2*1024*1024 {
+			writeJSONError(w, http.StatusRequestEntityTooLarge, "space_limit_exceeded")
+			return
+		}
+		entry.Content = string(content)
+		entry.MediaType = header.Header.Get("Content-Type")
+	}
+	for field := range r.MultipartForm.File {
+		if !expectedFields[field] {
+			writeJSONError(w, http.StatusBadRequest, "unexpected_import_file")
+			return
+		}
+	}
+	result, err := h.service.Import(ctx, session.User.ID, idempotencyKey, manifest)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	writePrivateJSON(w, http.StatusOK, result)
+}
+
+func openImportFile(form *multipart.Form, field string) (*multipart.FileHeader, multipart.File, error) {
+	files := form.File[field]
+	if len(files) != 1 {
+		return nil, nil, documents.ErrInvalidInput
+	}
+	file, err := files[0].Open()
+	return files[0], file, err
+}
+
 func (h *spaceHTTP) writeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, documents.ErrNotFound):
@@ -310,6 +420,8 @@ func (h *spaceHTTP) writeError(w http.ResponseWriter, err error) {
 		writeJSONError(w, http.StatusConflict, "space_name_conflict")
 	case errors.Is(err, documents.ErrVersionConflict):
 		writeJSONError(w, http.StatusConflict, "space_version_conflict")
+	case errors.Is(err, documents.ErrIdempotencyConflict):
+		writeJSONError(w, http.StatusConflict, "import_idempotency_conflict")
 	case errors.Is(err, documents.ErrFolderNotEmpty):
 		writeJSONError(w, http.StatusConflict, "folder_not_empty")
 	case errors.Is(err, documents.ErrLimitExceeded):

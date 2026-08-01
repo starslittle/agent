@@ -51,6 +51,55 @@ export interface SpaceListResponse {
   has_more: boolean;
 }
 
+export type ImportItemStatus = "added" | "skipped_duplicate" | "conflict" | "unsupported" | "failed";
+
+export interface MarkdownImportEntry {
+  kind: "file" | "unsupported";
+  relative_path: string;
+  size: number;
+  content_hash: string;
+  media_type?: string;
+  upload_field?: string;
+}
+
+export interface MarkdownImportManifest {
+  batch_id: string;
+  target_folder_id: string | null;
+  root_name?: string | null;
+  entries: MarkdownImportEntry[];
+}
+
+export interface MarkdownImportItem {
+  relative_path: string;
+  status: ImportItemStatus;
+  reason?: string;
+  entry_id?: string;
+}
+
+export interface MarkdownImportPreview {
+  batch_id: string;
+  target_folder_id: string | null;
+  root_name?: string | null;
+  markdown_count: number;
+  total_bytes: number;
+  unsupported: number;
+  duplicates: number;
+  conflicts: number;
+  items: MarkdownImportItem[];
+}
+
+export interface MarkdownImportResult {
+  batch_id: string;
+  root_folder_id?: string;
+  items: MarkdownImportItem[];
+  added: number;
+  duplicates: number;
+  conflicts: number;
+  unsupported: number;
+  failed: number;
+  replayed: boolean;
+}
+
 export class SpaceAPIError extends Error {
   constructor(public readonly code: string, public readonly status: number) {
     super(spaceErrorMessage(code));
@@ -139,6 +188,61 @@ export function listDocumentRevisions(documentID: string, signal?: AbortSignal):
   return spaceRequest<{ items: DocumentRevision[] }>(`/api/v1/space/documents/${encodeURIComponent(documentID)}/revisions?limit=50`, { signal });
 }
 
+export function preflightMarkdownImport(csrfToken: string, manifest: MarkdownImportManifest, signal?: AbortSignal): Promise<MarkdownImportPreview> {
+  return spaceRequest<MarkdownImportPreview>("/api/v1/space/imports:preflight", {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(manifest),
+    signal,
+  });
+}
+
+export function uploadMarkdownImport(
+  csrfToken: string,
+  idempotencyKey: string,
+  manifest: MarkdownImportManifest,
+  files: Map<string, File>,
+  onProgress: (percent: number) => void,
+  signal: AbortSignal,
+): Promise<MarkdownImportResult> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const form = new FormData();
+    form.append("manifest", JSON.stringify(manifest));
+    for (const entry of manifest.entries) {
+      if (entry.kind === "file" && entry.upload_field) {
+        const file = files.get(entry.upload_field);
+        if (file) form.append(entry.upload_field, file, entry.relative_path.split("/").at(-1));
+      }
+    }
+    xhr.open("POST", `${configuredBase()}/api/v1/space/imports`);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.setRequestHeader("X-CSRF-Token", csrfToken);
+    xhr.setRequestHeader("Idempotency-Key", idempotencyKey);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    };
+    xhr.onload = () => {
+      let payload: MarkdownImportResult & { error?: string };
+      try {
+        payload = JSON.parse(xhr.responseText || "{}") as MarkdownImportResult & { error?: string };
+      } catch {
+        reject(new Error("服务返回了无法识别的导入结果"));
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
+      else reject(new SpaceAPIError(payload.error || "space_request_failed", xhr.status));
+    };
+    xhr.onerror = () => reject(new Error("上传连接中断，请重试"));
+    xhr.onabort = () => reject(new DOMException("导入已取消", "AbortError"));
+    const abort = () => xhr.abort();
+    signal.addEventListener("abort", abort, { once: true });
+    xhr.onloadend = () => signal.removeEventListener("abort", abort);
+    xhr.send(form);
+  });
+}
+
 function spaceErrorMessage(code: string): string {
   switch (code) {
     case "space_entry_not_found": return "这个项目不存在，或你没有访问权限";
@@ -148,6 +252,7 @@ function spaceErrorMessage(code: string): string {
     case "space_limit_exceeded": return "内容超出当前空间限制";
     case "confirmation_name_mismatch": return "确认名称不匹配";
     case "invalid_space_input": return "名称、路径或内容不符合要求";
+    case "import_idempotency_conflict": return "这次导入请求已被其他内容使用，请重新选择文件";
     default: return "空间操作没有完成，请稍后重试";
   }
 }

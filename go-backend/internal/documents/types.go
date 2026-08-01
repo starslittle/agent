@@ -25,6 +25,70 @@ type Limits struct {
 	MaxEntries       int
 }
 
+const (
+	ImportAdded            = "added"
+	ImportSkippedDuplicate = "skipped_duplicate"
+	ImportConflict         = "conflict"
+	ImportUnsupported      = "unsupported"
+	ImportFailed           = "failed"
+)
+
+type ImportEntry struct {
+	Kind         string `json:"kind"`
+	RelativePath string `json:"relative_path"`
+	Size         int64  `json:"size"`
+	ContentHash  string `json:"content_hash"`
+	MediaType    string `json:"media_type,omitempty"`
+	UploadField  string `json:"upload_field,omitempty"`
+	Content      string `json:"-"`
+}
+
+type ImportManifest struct {
+	BatchID        string        `json:"batch_id"`
+	TargetFolderID *string       `json:"target_folder_id"`
+	RootName       *string       `json:"root_name,omitempty"`
+	Entries        []ImportEntry `json:"entries"`
+}
+
+type ImportItemResult struct {
+	RelativePath string  `json:"relative_path"`
+	Status       string  `json:"status"`
+	Reason       string  `json:"reason,omitempty"`
+	EntryID      *string `json:"entry_id,omitempty"`
+}
+
+type ImportResult struct {
+	BatchID      string             `json:"batch_id"`
+	RootFolderID *string            `json:"root_folder_id,omitempty"`
+	Items        []ImportItemResult `json:"items"`
+	Added        int                `json:"added"`
+	Duplicates   int                `json:"duplicates"`
+	Conflicts    int                `json:"conflicts"`
+	Unsupported  int                `json:"unsupported"`
+	Failed       int                `json:"failed"`
+	Replayed     bool               `json:"replayed"`
+}
+
+type ImportBatchParams struct {
+	UserID         string
+	IdempotencyKey string
+	ManifestHash   string
+	Manifest       ImportManifest
+	CreatedAt      time.Time
+}
+
+type ImportPreview struct {
+	BatchID        string             `json:"batch_id"`
+	TargetFolderID *string            `json:"target_folder_id"`
+	RootName       *string            `json:"root_name,omitempty"`
+	MarkdownCount  int                `json:"markdown_count"`
+	TotalBytes     int64              `json:"total_bytes"`
+	Items          []ImportItemResult `json:"items"`
+	Unsupported    int                `json:"unsupported"`
+	Duplicates     int                `json:"duplicates"`
+	Conflicts      int                `json:"conflicts"`
+}
+
 func DefaultLimits() Limits {
 	return Limits{
 		MaxDepth:         32,

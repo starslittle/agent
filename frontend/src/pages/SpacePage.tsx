@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FilePlus2, FileText, Folder, FolderPlus, MoreHorizontal, Move, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { FilePlus2, FileText, Folder, FolderPlus, FolderUp, MoreHorizontal, Move, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FolderPickerDialog } from "@/features/space/FolderPickerDialog";
+import { ImportMarkdownDialog } from "@/features/space/ImportMarkdownDialog";
 import { createDocument, createFolder, deleteFolder, getFolder, getFolderBreadcrumbs, listSpaceEntries, updateFolder, type SpaceEntry, type SpaceFolder, type SpaceSort } from "@/lib/space-api";
 
 type EditMode = "folder" | "document" | "rename" | null;
@@ -37,6 +38,7 @@ export default function SpacePage() {
   const [busy, setBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SpaceFolder | null>(null);
   const [moveTarget, setMoveTarget] = useState<SpaceFolder | null>(null);
+  const [importMode, setImportMode] = useState<"folder" | "file" | null>(null);
 
   const load = useCallback((signal?: AbortSignal) => {
     setLoading(true);
@@ -139,6 +141,8 @@ export default function SpacePage() {
             </Select>
             <Button variant="outline" size="icon" className="h-11 w-11" aria-label="刷新当前文件夹" onClick={() => setRetry((value) => value + 1)}><RefreshCw className="h-4 w-4" aria-hidden="true" /></Button>
             <Button variant="outline" className="h-11" onClick={() => openCreate("folder")}><FolderPlus className="mr-2 h-4 w-4" aria-hidden="true" />新建文件夹</Button>
+            <Button variant="outline" className="h-11" onClick={() => setImportMode("file")}><Upload className="mr-2 h-4 w-4" aria-hidden="true" />导入 Markdown</Button>
+            <Button className="h-11" onClick={() => setImportMode("folder")}><FolderUp className="mr-2 h-4 w-4" aria-hidden="true" />导入文件夹</Button>
             {folderId && <Button className="h-11" onClick={() => openCreate("document")}><FilePlus2 className="mr-2 h-4 w-4" aria-hidden="true" />新建文档</Button>}
           </div>
         </div>
@@ -170,6 +174,7 @@ export default function SpacePage() {
 
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>删除空文件夹“{deleteTarget?.name}”？</AlertDialogTitle><AlertDialogDescription>只有空文件夹可以删除。此操作不能撤销。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => void confirmDelete()}>删除文件夹</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <FolderPickerDialog open={Boolean(moveTarget)} onOpenChange={(open) => { if (!open) setMoveTarget(null); }} initialFolderID={moveTarget?.parent_id ?? null} excludedFolderID={moveTarget?.id} allowRoot onSelect={(target) => void moveFolderTo(target)} />
+      {importMode && <ImportMarkdownDialog open mode={importMode} currentFolderID={folderId ?? null} currentFolderName={folder?.name ?? "我的空间"} onOpenChange={(open) => { if (!open) setImportMode(null); }} onImported={(result) => { toast.success(`已新增 ${result.added} 篇 Markdown`); if (result.root_folder_id) navigate(`/space/folders/${result.root_folder_id}?sort=${sort}`); else setRetry((value) => value + 1); }} />}
     </WorkspaceShell>
   );
 }

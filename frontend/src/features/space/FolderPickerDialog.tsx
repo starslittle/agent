@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { ChevronLeft, Folder, Home } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -12,9 +13,12 @@ interface FolderPickerDialogProps {
   excludedFolderID?: string;
   onSelect: (folder: SpaceFolder | null) => void;
   allowRoot?: boolean;
+  selectionVerb?: string;
+  description?: string;
+  footerBefore?: ReactNode;
 }
 
-export function FolderPickerDialog({ open, onOpenChange, initialFolderID = null, excludedFolderID, onSelect, allowRoot = false }: FolderPickerDialogProps) {
+export function FolderPickerDialog({ open, onOpenChange, initialFolderID = null, excludedFolderID, onSelect, allowRoot = false, selectionVerb = "移动到", description = "逐层进入文件夹，再确认移动位置。", footerBefore }: FolderPickerDialogProps) {
   const [folderID, setFolderID] = useState<string | null>(initialFolderID);
   const [folders, setFolders] = useState<SpaceFolder[]>([]);
   const [breadcrumbs, setBreadcrumbs] = useState<SpaceFolder[]>([]);
@@ -53,7 +57,7 @@ export function FolderPickerDialog({ open, onOpenChange, initialFolderID = null,
       <DialogContent className="max-w-lg overflow-hidden p-0">
         <DialogHeader className="border-b px-6 py-5">
           <DialogTitle>选择目标文件夹</DialogTitle>
-          <DialogDescription>逐层进入文件夹，再确认移动位置。</DialogDescription>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="flex min-h-72 flex-col px-4 py-3">
           <div className="flex items-center gap-1 border-b pb-3 text-xs text-muted-foreground">
@@ -75,9 +79,10 @@ export function FolderPickerDialog({ open, onOpenChange, initialFolderID = null,
           </div>
         </div>
         <DialogFooter className="border-t px-6 py-4">
+          {footerBefore}
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
           <Button type="button" onClick={() => { onSelect(current); onOpenChange(false); }} disabled={!allowRoot && !current}>
-            {current ? `移动到“${current.name}”` : <><Home className="mr-2 h-4 w-4" aria-hidden="true" />移动到根目录</>}
+            {current ? `${selectionVerb}“${current.name}”` : <><Home className="mr-2 h-4 w-4" aria-hidden="true" />{selectionVerb}根目录</>}
           </Button>
         </DialogFooter>
       </DialogContent>

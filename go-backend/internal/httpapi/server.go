@@ -102,6 +102,8 @@ func newServer(
 		mux.Handle("PATCH /api/v1/space/documents/{documentID}/location", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(spaceAPI.moveDocument)))))
 		mux.Handle("DELETE /api/v1/space/documents/{documentID}", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(spaceAPI.deleteDocument)))))
 		mux.Handle("GET /api/v1/space/documents/{documentID}/revisions", authAPI.requireSession(http.HandlerFunc(spaceAPI.revisions)))
+		mux.Handle("POST /api/v1/space/imports:preflight", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(spaceAPI.preflightImport)))))
+		mux.Handle("POST /api/v1/space/imports", authAPI.protectMutation(authAPI.requireSession(authAPI.requireCSRF(http.HandlerFunc(spaceAPI.importMarkdown)))))
 	}
 	if productServices.Wiki != nil {
 		wikiAPI := newWikiHTTP(productServices.Wiki, cfg.MaxRequestBytes)
