@@ -8,6 +8,7 @@ from .registry import ToolDefinition, ToolRegistry, get_tool_registry
 
 _LAZY_EXPORTS = {
     "get_current_date": ("agent.tools.date", "get_current_date"),
+    "get_weather": ("agent.tools.weather", "get_weather"),
     "get_lunar_chart": ("agent.tools.lunar_chart", "get_lunar_chart"),
     "get_ziwei_chart": ("agent.tools.ziwei_chart", "get_ziwei_chart"),
 }

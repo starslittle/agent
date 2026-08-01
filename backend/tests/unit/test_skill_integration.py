@@ -69,7 +69,7 @@ async def test_skill_manifest_drives_frozen_execution_snapshot(
 
 
 @pytest.mark.asyncio
-async def test_direct_answer_has_no_skill_or_capability_snapshot():
+async def test_direct_answer_has_no_skill_and_freezes_default_capability_policy():
     selection = resolve_compatible_selection(
         requested_skill=None,
         agent_name="default_llm_agent",
@@ -112,4 +112,6 @@ async def test_direct_answer_has_no_skill_or_capability_snapshot():
 
     assert provenance["resolved_skills"] == []
     assert provenance["skill_snapshot"] is None
-    assert provenance["capabilities"] == []
+    assert {
+        item["name"] for item in provenance["capabilities"]
+    } == {"get_current_date", "get_weather", "web_search"}

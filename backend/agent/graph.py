@@ -26,7 +26,7 @@ def build_root_graph(
     skill_registry: SkillRegistry | None = None,
 ):
     skill_registry = skill_registry or get_skill_registry()
-    chat = build_chat_workflow(gateway)
+    chat = build_chat_workflow(gateway, capability_executor)
     research = build_research_workflow(gateway, capability_executor)
     fortune = build_fortune_workflow(gateway, capability_executor)
 
@@ -74,6 +74,7 @@ def build_root_graph(
             selection_source=resolution["selection_source"],
             requires_confirmation=resolution["requires_confirmation"],
             reason_code=resolution["reason_code"],
+            direct_capability=resolution.get("direct_capability"),
             skill_version=(skill.version if skill is not None else None),
             selected_workflow=selected,
             agent_name=spec.name,
@@ -113,7 +114,7 @@ def build_root_graph(
     async def confirmation_required(state: RootState):
         resolution = state["skill_resolution"]
         suggested = resolution["suggested_skill"]
-        labels = {"research": "深度研究", "fortune": "命理分析"}
+        labels = {"research": "联网调研", "fortune": "命理分析"}
         label = labels.get(suggested, "建议的 Skill")
         answer = f"这个请求可能更适合使用{label}。确认后我会在下一条消息中执行。"
         emit_runtime_event(

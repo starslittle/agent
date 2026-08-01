@@ -13,6 +13,7 @@ from agent.capabilities import (
     target_capability_schemas,
 )
 from agent.context import RunContext
+from agent.models.factory import default_model_profiles
 from agent.readiness import validate_target_runtime
 from agent.specs import get_agent_catalog, prompt_for
 
@@ -30,10 +31,14 @@ def test_agent_catalog_is_the_effective_workflow_configuration():
     fortune = catalog.resolve("fortune")
 
     assert chat.workflow == "chat_v1"
-    assert chat.allowed_capabilities == []
-    assert chat.budgets.max_tool_calls == 0
+    assert chat.allowed_capabilities == [
+        "get_current_date",
+        "get_weather",
+        "web_search",
+    ]
+    assert chat.budgets.max_tool_calls == 1
     assert research.workflow == "research_v1"
-    assert research.allowed_capabilities == ["tavily_search"]
+    assert research.allowed_capabilities == ["web_search"]
     assert research.budgets.max_tool_calls == 5
     assert fortune.workflow == "fortune_v1"
     assert "get_lunar_chart" in fortune.allowed_capabilities
@@ -45,11 +50,16 @@ def test_agent_catalog_is_the_effective_workflow_configuration():
         for item in target_capability_schemas()
     }
     assert (
-        schemas["tavily_search"]["input_schema"]["additionalProperties"]
+        schemas["web_search"]["input_schema"]["additionalProperties"]
         is False
     )
     assert "birth_date" in schemas["get_lunar_chart"]["input_schema"]["required"]
-    assert "items" in schemas["tavily_search"]["output_schema"]["properties"]
+    assert "items" in schemas["web_search"]["output_schema"]["properties"]
+    assert "location" in schemas["get_weather"]["input_schema"]["required"]
+
+    profiles = {item.name: item for item in default_model_profiles()}
+    assert profiles["default_chat"].extra_body == {"enable_thinking": False}
+    assert profiles["default_reasoning"].extra_body == {"enable_thinking": True}
 
 
 def test_target_readiness_compiles_graph_and_validates_references():
@@ -61,7 +71,8 @@ def test_target_readiness_compiles_graph_and_validates_references():
         "research_v1",
         "fortune_v1",
     ]
-    assert "tavily_search" in report["capabilities"]
+    assert "web_search" in report["capabilities"]
+    assert "get_weather" in report["capabilities"]
 
 
 @pytest.mark.asyncio

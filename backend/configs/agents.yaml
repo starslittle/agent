@@ -1,15 +1,18 @@
 agents:
   - name: default_llm_agent
-    description: 默认低延迟对话，不使用工具。
+    description: 默认低延迟对话，按需使用一次只读时效信息能力。
     is_default: true
     workflow: chat_v1
     model_profile: default_chat
     prompt_bundle: chat_v1
-    allowed_capabilities: []
+    allowed_capabilities:
+      - get_current_date
+      - get_weather
+      - web_search
     budgets:
       deadline_seconds: 60
       max_model_calls: 2
-      max_tool_calls: 0
+      max_tool_calls: 1
 
   - name: research_agent
     description: 基于结构化计划和来源证据完成开放式调研。
@@ -18,7 +21,7 @@ agents:
     model_profile: default_reasoning
     prompt_bundle: research_v1
     allowed_capabilities:
-      - tavily_search
+      - web_search
     budgets:
       deadline_seconds: 180
       max_model_calls: 8

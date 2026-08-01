@@ -133,11 +133,12 @@ flowchart TD
 
 ## 4. Task 清单
 
-当前共 29 个 Task。TASK-028 是在最初 27 个 Task 冻结后新增的观测需求，TASK-029 是
+当前共 30 个 Task。TASK-028 是在最初 27 个 Task 冻结后新增的观测需求，TASK-029 是
 用户确认 ROUND-03 产品形态后新增的 Skills 只读目录，因此保留追加编号以维持审计
-关系；它们按 `depends_on` 和 Round 门禁决定执行位置，不按编号大小决定执行顺序。
+关系；TASK-030 是 ROUND-03 验收中经用户确认加入的轻量时效信息能力。它们按
+`depends_on` 和 Round 门禁决定执行位置，不按编号大小决定执行顺序。
 
-秋招最小 MVP 的实现与验收范围现在是 TASK-001～TASK-024 加 TASK-028～TASK-029；
+秋招最小 MVP 的实现与验收范围现在是 TASK-001～TASK-024 加 TASK-028～TASK-030；
 TASK-025～TASK-026 仍是 P1，TASK-027 仍是发布准备而不是产品功能或生产切换。
 
 | ID | 目标 | 里程碑 | 风险 | Codex E2E | 状态 |
@@ -164,6 +165,7 @@ TASK-025～TASK-026 仍是 P1，TASK-027 仍是发布准备而不是产品功能
 | [TASK-019](TASK-019-markdown-extraction.md) | 选定 Markdown 的候选信息提取 | M10 | high | required | draft |
 | [TASK-020](TASK-020-proposal-confirmation-ui.md) | 文档 Proposal 接受、修改、暂缓与拒绝 | M10 | high | required | draft |
 | [TASK-029](TASK-029-skill-catalog-preview.md) | Skills 安全目录与只读详情 | M10 | high | required | draft |
+| [TASK-030](TASK-030-native-current-info-capabilities.md) | 统一助手轻量联网、天气与自适应调研 | M10 | high | required | ready |
 | [TASK-021](TASK-021-decision-skill.md) | Decision Skill 与强类型结果 | M11 | high | required | draft |
 | [TASK-022](TASK-022-decision-persistence.md) | 最小决策卡与历史依据 | M11 | high | required | draft |
 | [TASK-023](TASK-023-decision-experience.md) | Decision 对话与保存体验 | M11 | high | required | draft |
@@ -199,7 +201,7 @@ ROUND-01 不夹带品牌改造，ROUND-03～04 只在验收后的启点外壳上
 ### ROUND-03：我的空间、Skills 与确认写入
 
 ```text
-TASK-014 ～ TASK-020、TASK-029
+TASK-014 ～ TASK-020、TASK-029～TASK-030
 ```
 
 实现递归个人空间、Markdown 文件夹导入、Skills 只读目录、上下文使用记录以及用户
@@ -233,7 +235,6 @@ Review 属于 MVP 后续能力。TASK-027 是独立 RELEASE-GATE，只做发布�
   这是已确认的目标方向，但实现轮次尚未决定，且文档隐藏/恢复始终只允许用户手动；
 - 模型选择器 UI 和多模型切换；
 - 股票 Skill；
-- Research 自适应 0/1/N 检索；
 - Fortune 知识 Capability 和领域质量审核；
 - Obsidian 单向或双向同步；
 - Skill 改进 Proposal、自动版本和市场；

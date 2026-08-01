@@ -303,3 +303,10 @@
 - validation：展示投影 4 tests、`tsc --noEmit`、针对性 ESLint 与 `git diff --check` 通过；按用户要求未执行 build，也未重复 Round 产品级 Browser E2E；
 - skills：`frontend-design` 将嵌套日志卡收敛为启点低噪声状态条；`ui-ux-pro-max` 采用“当前状态 → 按需关键步骤 → Agent Runs 完整记录”的渐进披露；`web-design-guidelines` 保留 44px 控件、语义展开状态、键盘焦点、`aria-live`、动效降级和移动端截断；
 - risk：本修复只改变前端展示投影，不修改 Runtime 事件协议或 Agent Runs 数据；ROUND-03 服务端能力控制验收阻塞仍然存在。
+
+### TASK-030 · completed
+
+- commit：本提交；
+- result：统一助手默认仍为零工具调用，Root Resolver 可为单一时效问题选择一次当前日期、结构化天气或联网搜索；多来源问题进入 v2“联网调研”，首轮检索按 0/1/N 预算执行；`tavily_search` 保留历史兼容，聊天与调研的模型推理由服务端 Profile 分别关闭/启用；
+- validation：`uvx ruff check agent tests` passed；Python 全量 119 passed/2 skipped；覆盖零工具、日期 Schema、天气数据、单次搜索 Citation、失败降级、Research 0/1/N、旧工具名兼容、Prompt 哈希和 provenance；未修改前端/Go，未执行 build、Browser E2E、push 或部署；
+- risk：实时搜索仍依赖现有 Tavily 凭据，天气依赖 Open-Meteo 可用性；真实 Provider 路由质量与页面回归并入 Round 验收。ROUND-03 原有五项服务端能力控制验收阻塞仍未解除。

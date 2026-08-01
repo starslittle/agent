@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -11,6 +11,7 @@ from agent.skills import SkillRegistry, SkillSelection
 
 
 RouteChoice = Literal["direct", "research", "fortune"]
+DirectCapability = Literal["get_current_date", "get_weather", "web_search"]
 PublicRouteReason = Literal[
     "general_conversation",
     "needs_current_sources",
@@ -29,6 +30,8 @@ class SkillRouteProposal(BaseModel):
     route: RouteChoice
     confidence: float = Field(ge=0, le=1)
     reason_code: PublicRouteReason
+    direct_capability: DirectCapability | None = None
+    direct_capability_arguments: dict[str, Any] = Field(default_factory=dict)
 
 
 class SkillRouteResolution(BaseModel):
@@ -47,6 +50,8 @@ class SkillRouteResolution(BaseModel):
     agent_name: str
     workflow: str
     skill_version: int | None = None
+    direct_capability: DirectCapability | None = None
+    direct_capability_arguments: dict[str, Any] = Field(default_factory=dict)
 
     def as_selection(self) -> SkillSelection:
         return SkillSelection(
@@ -174,7 +179,15 @@ class RootSkillResolver:
         confidence: float,
         source: Literal["direct", "fallback"],
         reason_code: str,
+        capability: DirectCapability | None = None,
+        capability_arguments: dict[str, Any] | None = None,
     ) -> SkillRouteResolution:
+        normalized_arguments: dict[str, Any] = {}
+        if capability is not None:
+            spec = TARGET_CAPABILITY_SPECS[capability]
+            normalized_arguments = spec.input_type.model_validate(
+                capability_arguments or {}
+            ).model_dump(exclude_none=True)
         return SkillRouteResolution(
             requested_skill=None,
             resolved_skills=[],
@@ -185,6 +198,8 @@ class RootSkillResolver:
             reason_code=reason_code,
             agent_name="default_llm_agent",
             workflow="chat_v1",
+            direct_capability=capability,
+            direct_capability_arguments=normalized_arguments,
         )
 
     async def resolve(
@@ -242,11 +257,20 @@ class RootSkillResolver:
             )
 
         if proposal.route == "direct":
-            return self._direct(
-                confidence=proposal.confidence,
-                source="direct",
-                reason_code=proposal.reason_code,
-            )
+            try:
+                return self._direct(
+                    confidence=proposal.confidence,
+                    source="direct",
+                    reason_code=proposal.reason_code,
+                    capability=proposal.direct_capability,
+                    capability_arguments=proposal.direct_capability_arguments,
+                )
+            except (KeyError, ValueError):
+                return self._direct(
+                    confidence=proposal.confidence,
+                    source="fallback",
+                    reason_code="invalid_direct_capability",
+                )
         if proposal.confidence < LOW_CONFIDENCE:
             return self._direct(
                 confidence=proposal.confidence,

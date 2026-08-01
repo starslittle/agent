@@ -1,13 +1,13 @@
 skills:
   - id: research
-    version: 1
-    title: 深度研究
-    description: 基于结构化计划和可追溯来源完成开放式调研。
+    version: 2
+    title: 联网调研
+    description: 按问题复杂度检索、核验并综合可追溯的公开来源。
     workflow: research_v1
     input_schema: ResearchInput
     output_schema: ResearchResult
     allowed_capabilities:
-      - tavily_search
+      - web_search
     model_requirements:
       streaming: true
       structured_output: true
@@ -26,7 +26,7 @@ skills:
       command: /research
       visible: true
     public:
-      purpose: 面向需要外部资料的问题，先拆分研究步骤，再检索、核验并综合可追溯来源。
+      purpose: 面向需要多来源比较或证据核验的问题，按复杂度规划并综合可追溯来源。
       context_scope:
         - confirmed_fact
         - current_state

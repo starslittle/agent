@@ -183,7 +183,7 @@ def _tavily_search(query: str, max_results: int = 5) -> str:
 def invoke_tool_sync(name: str, arguments: dict[str, Any]) -> Any:
     definition = get_tool_registry().get(name)
     handler = _load_handler(definition.handler)
-    if name == "tavily_search":
+    if name in {"tavily_search", "web_search"}:
         return handler(**arguments)
     if hasattr(handler, "invoke"):
         return handler.invoke(arguments)
@@ -213,6 +213,18 @@ def get_tool_registry() -> ToolRegistry:
                 ),
                 ToolDefinition(
                     "tavily_search",
+                    "历史兼容的通用互联网搜索。",
+                    "agent.tools.registry:_tavily_search",
+                    "read",
+                    True,
+                    True,
+                    45,
+                    32 * 1024,
+                    standard_limit,
+                    "thread",
+                ),
+                ToolDefinition(
+                    "web_search",
                     "通用互联网搜索。",
                     "agent.tools.registry:_tavily_search",
                     "read",
@@ -221,6 +233,18 @@ def get_tool_registry() -> ToolRegistry:
                     45,
                     32 * 1024,
                     standard_limit,
+                    "thread",
+                ),
+                ToolDefinition(
+                    "get_weather",
+                    "返回指定地点的当前天气和当日预报。",
+                    "agent.tools.weather:get_weather",
+                    "read",
+                    True,
+                    True,
+                    30,
+                    8 * 1024,
+                    32 * 1024,
                     "thread",
                 ),
                 ToolDefinition(

@@ -2,9 +2,9 @@
   "schema_version": 2,
   "description": "Prompt hashes for the single Agent Application after runtime migration.",
   "prompts": {
-    "agent/prompts/generate_default_system.txt": "f8f99c81f3068529986965c938074124f8774e8450ba66c2b63cbbd491284f5b",
+    "agent/prompts/generate_default_system.txt": "a4bce5d3781cdf7294a73e7bf2fdc4b0dc6c4beb019bfb6da478f258866ddc51",
     "agent/prompts/generate_fortune_system.txt": "736af2639774d7e4dec32f84bf2c7e353f5a1cab25d7bcad835a5a351d06dcec",
-    "agent/prompts/research_plan_structured.txt": "84345d0de50ea0e2107d7fa125399f3ea17f2f50dd04b0b34c0f5c3b96e6c400",
+    "agent/prompts/research_plan_structured.txt": "ec62c2c274a327ac3ddbdb748a2a0c174cc5cba8821a56900dcdd2c265dfdb59",
     "agent/prompts/research_grade_evidence.txt": "9c96ab5d2b9ed29290db1303db2783f07476ac71a7086a2d4edcc197612e197a",
     "agent/prompts/research_synthesize_with_citations.txt": "e3e7b5ae2fc52a702e41ddf6bcaf3d43484667b1f3296d94ad767dd9ded21238",
     "agent/prompts/fortune_extract_birth_profile.txt": "0d8a320010f8458f7bd5a7bf010202a381447bebfa73bcef2906dd0bcc2732a4"

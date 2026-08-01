@@ -21,6 +21,7 @@ from agent.models import (
     ModelStreamEventType,
     ModelUsage,
 )
+from agent.root import SkillRouteProposal
 from agent.workflows.fortune_v1 import BirthProfile
 from agent.workflows.research_v1 import EvidenceGrade, ResearchPlan
 from agent.specs import get_agent_catalog
@@ -35,6 +36,7 @@ class FakeGateway:
         birth_profile: BirthProfile | None = None,
         research_plan: ResearchPlan | None = None,
         evidence_grades: list[EvidenceGrade] | None = None,
+        route_proposal: SkillRouteProposal | None = None,
     ):
         self.birth_profile = birth_profile
         self.research_plan = research_plan or ResearchPlan(
@@ -42,10 +44,17 @@ class FakeGateway:
             search_queries=["启点 现状", "启点 风险"],
         )
         self.evidence_grades = list(evidence_grades or [])
+        self.route_proposal = route_proposal or SkillRouteProposal(
+            route="direct",
+            confidence=0.99,
+            reason_code="general_conversation",
+        )
         self.calls: list[tuple[str, str]] = []
 
     async def structured(self, profile_name, request, output_type):
         self.calls.append(("structured", output_type.__name__))
+        if output_type is SkillRouteProposal:
+            return self.route_proposal
         if output_type is ResearchPlan:
             return self.research_plan
         if output_type is EvidenceGrade:
@@ -136,7 +145,7 @@ class FakeCapabilities:
                     )
                 ]
             )
-            if name == "tavily_search"
+            if name in {"tavily_search", "web_search"}
             else TextCapabilityOutput(
                 content=f"evidence for {arguments}"
             )
@@ -214,6 +223,108 @@ async def test_chat_uses_root_graph_stream_and_never_calls_capability():
 
 
 @pytest.mark.asyncio
+async def test_chat_executes_one_routed_weather_capability_before_answer():
+    gateway = FakeGateway(
+        route_proposal=SkillRouteProposal(
+            route="direct",
+            confidence=0.99,
+            reason_code="needs_current_sources",
+            direct_capability="get_weather",
+            direct_capability_arguments={"location": "杭州"},
+        )
+    )
+    capabilities = FakeCapabilities()
+
+    events = await collect_events(
+        requested_workflow="default_llm_agent",
+        gateway=gateway,
+        capabilities=capabilities,
+    )
+
+    assert [call[0] for call in capabilities.calls] == ["get_weather"]
+    assert capabilities.allowed_sets == [
+        {"get_current_date", "get_weather", "web_search"}
+    ]
+    assert sum(event.type == "tool.completed" for event in events) == 1
+    route = next(event for event in events if event.type == "route.selected")
+    assert route.data["direct_capability"] == "get_weather"
+
+
+@pytest.mark.asyncio
+async def test_chat_web_search_creates_traceable_citations():
+    gateway = FakeGateway(
+        route_proposal=SkillRouteProposal(
+            route="direct",
+            confidence=0.99,
+            reason_code="needs_current_sources",
+            direct_capability="web_search",
+            direct_capability_arguments={"query": "最新事实", "max_results": 3},
+        )
+    )
+    capabilities = FakeCapabilities()
+
+    events = await collect_events(
+        requested_workflow="default_llm_agent",
+        gateway=gateway,
+        capabilities=capabilities,
+    )
+
+    artifact = next(
+        event
+        for event in events
+        if event.type == "artifact.created"
+        and event.data["artifact_type"] == "web_search_evidence"
+    )
+    citation = next(event for event in events if event.type == "citation.created")
+    assert artifact.data["citation_count"] == 1
+    assert citation.data["artifact_id"] == artifact.data["artifact_id"]
+
+
+@pytest.mark.asyncio
+async def test_chat_current_info_failure_degrades_without_failing_the_run():
+    class FailedCapabilities(FakeCapabilities):
+        async def execute(
+            self,
+            name,
+            arguments,
+            *,
+            context,
+            allowed_capabilities,
+            **kwargs,
+        ):
+            self.calls.append(
+                (name, arguments, context.execution_id, context.shadow)
+            )
+            raise RuntimeError("provider unavailable")
+
+    gateway = FakeGateway(
+        route_proposal=SkillRouteProposal(
+            route="direct",
+            confidence=0.99,
+            reason_code="needs_current_sources",
+            direct_capability="get_weather",
+            direct_capability_arguments={"location": "杭州"},
+        )
+    )
+    capabilities = FailedCapabilities()
+
+    events = await collect_events(
+        requested_workflow="default_llm_agent",
+        gateway=gateway,
+        capabilities=capabilities,
+    )
+
+    degraded = next(
+        event
+        for event in events
+        if event.type == "progress"
+        and event.data.get("stage") == "chat.current_info"
+    )
+    assert degraded.data["degraded"] is True
+    assert any(event.type == "workflow.completed" for event in events)
+
+
+@pytest.mark.asyncio
 async def test_research_uses_structured_plan_and_bounded_search_fanout():
     gateway = FakeGateway()
     capabilities = FakeCapabilities()
@@ -226,11 +337,11 @@ async def test_research_uses_structured_plan_and_bounded_search_fanout():
 
     assert gateway.calls[0] == ("structured", "ResearchPlan")
     assert [call[0] for call in capabilities.calls] == [
-        "tavily_search",
-        "tavily_search",
+        "web_search",
+        "web_search",
     ]
     assert all(call[2] == "exec-test" for call in capabilities.calls)
-    assert capabilities.allowed_sets == [{"tavily_search"}, {"tavily_search"}]
+    assert capabilities.allowed_sets == [{"web_search"}, {"web_search"}]
     assert any(event.type == "workflow.completed" for event in events)
     assert sum(event.type == "tool.completed" for event in events) == 2
     artifact_event = next(
@@ -267,6 +378,61 @@ async def test_research_uses_structured_plan_and_bounded_search_fanout():
     )
     assert grade.data["sufficient"] is True
     assert grade.data["will_supplement"] is False
+
+
+@pytest.mark.asyncio
+async def test_research_zero_budget_skips_search_and_evidence_grader():
+    gateway = FakeGateway(
+        research_plan=ResearchPlan(
+            questions=["如何整理用户已经提供的材料？"],
+            search_queries=[],
+            search_budget=0,
+        )
+    )
+    capabilities = FakeCapabilities()
+
+    events = await collect_events(
+        requested_workflow="research_agent",
+        gateway=gateway,
+        capabilities=capabilities,
+    )
+
+    assert capabilities.calls == []
+    assert gateway.calls == [
+        ("structured", "ResearchPlan"),
+        ("stream", "default_reasoning"),
+    ]
+    grade = next(
+        event
+        for event in events
+        if event.type == "progress"
+        and event.data.get("stage") == "research.grade"
+    )
+    assert grade.data["sufficient"] is True
+    assert grade.data["minimum_sources"] == 0
+    assert grade.data["will_supplement"] is False
+
+
+@pytest.mark.asyncio
+async def test_research_single_budget_clamps_synonymous_initial_queries():
+    gateway = FakeGateway(
+        research_plan=ResearchPlan(
+            questions=["当前状态是什么？"],
+            search_queries=["启点 当前状态", "启点 最新状态", "启点 现状"],
+            search_budget=1,
+        )
+    )
+    capabilities = FakeCapabilities()
+
+    await collect_events(
+        requested_workflow="research_agent",
+        gateway=gateway,
+        capabilities=capabilities,
+    )
+
+    assert [call[1]["query"] for call in capabilities.calls] == [
+        "启点 当前状态"
+    ]
 
 
 @pytest.mark.asyncio

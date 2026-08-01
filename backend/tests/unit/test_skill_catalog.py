@@ -38,6 +38,9 @@ def test_public_catalog_contains_only_explicit_browser_fields():
     catalog = public_skill_catalog(get_skill_registry())
 
     assert [item.id for item in catalog] == ["fortune", "research"]
+    research = next(item for item in catalog if item.id == "research")
+    assert research.title == "联网调研"
+    assert research.version == 2
     encoded = [item.model_dump(mode="json") for item in catalog]
     assert set(encoded[0]) == {
         "id",

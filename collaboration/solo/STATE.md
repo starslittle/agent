@@ -7,8 +7,8 @@ active_round: ROUND-03
 round_status: blocked
 round_base_commit: c285fef00de10eccd042cb94313727fa5ba2c3bb
 round_accepted_commit: pending
-round_branch: codex/round-03-solo
-round_worktree: C:/Users/10245/Desktop/qidianAgent-round-03-solo
+round_branch: main
+round_worktree: C:/Users/10245/Desktop/qidianAgent
 
 completed:
   - TASK-014
@@ -19,6 +19,7 @@ completed:
   - TASK-019
   - TASK-020
   - TASK-029
+  - TASK-030
 
 current_task: round_acceptance
 next_task: corrective_capability_control_decision
@@ -27,6 +28,11 @@ start_gate: explicit_user_instruction_to_start_or_continue_solo
 production_authorized: false
 destructive_operations_authorized: false
 ```
+
+2026-08-01 用户确认执行 TASK-030：普通助手内置按需日期、天气和联网搜索 Capability，
+Research 改为 0/1/N 自适应检索并对外称“联网调研”；模型推理由服务端策略管理，不新增
+“深度思考”Skill。用户此前已授权 ROUND-03 后续纠偏直接在 `main` 修改，本次不包含
+push、部署或生产操作。
 
 2026-08-01 用户明确授权启动 ROUND-02，Solo 状态已切换为 running，从 TASK-001
 开始按依赖顺序连续执行；本轮不包含生产操作或破坏性数据操作授权。

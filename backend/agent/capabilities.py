@@ -27,6 +27,12 @@ class TavilySearchInput(BaseModel):
     max_results: int = Field(default=5, ge=1, le=10)
 
 
+class WeatherInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    location: str = Field(min_length=2, max_length=128)
+
+
 class BirthChartInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -108,6 +114,24 @@ TARGET_CAPABILITY_SPECS: dict[str, CapabilitySpec] = {
             "tavily_search",
             TavilySearchInput,
             SearchCapabilityOutput,
+            "1",
+            "read",
+            True,
+            True,
+        ),
+        CapabilitySpec(
+            "web_search",
+            TavilySearchInput,
+            SearchCapabilityOutput,
+            "1",
+            "read",
+            True,
+            True,
+        ),
+        CapabilitySpec(
+            "get_weather",
+            WeatherInput,
+            TextCapabilityOutput,
             "1",
             "read",
             True,

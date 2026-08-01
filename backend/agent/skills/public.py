@@ -40,6 +40,10 @@ _CAPABILITY_COPY = {
         label="联网检索",
         description="查找公开网页信息，并保留可追溯来源。",
     ),
+    "web_search": PublicCapability(
+        label="联网检索",
+        description="查找公开网页信息，并保留可追溯来源。",
+    ),
     "get_current_date": PublicCapability(
         label="当前日期",
         description="读取当前日期，校准排盘所需的时间背景。",

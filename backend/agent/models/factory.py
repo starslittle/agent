@@ -26,6 +26,7 @@ def default_model_profiles() -> list[ModelProfile]:
             temperature=0.2,
             timeout_seconds=settings.MODEL_REQUEST_TIMEOUT_SECONDS,
             capabilities=capabilities,
+            extra_body={"enable_thinking": False},
         ),
         ModelProfile(
             name="default_reasoning",
@@ -34,6 +35,7 @@ def default_model_profiles() -> list[ModelProfile]:
             temperature=0.1,
             timeout_seconds=settings.MODEL_REQUEST_TIMEOUT_SECONDS,
             capabilities=capabilities,
+            extra_body={"enable_thinking": True},
         ),
     ]
 

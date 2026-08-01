@@ -13,6 +13,8 @@ from agent.skills import get_skill_registry, load_skill_registry
 WORKFLOWS = {"research_v1", "fortune_v1"}
 CAPABILITIES = {
     "tavily_search",
+    "web_search",
+    "get_weather",
     "get_current_date",
     "get_lunar_chart",
     "get_ziwei_chart",

@@ -16,6 +16,7 @@ tasks:
   - TASK-019
   - TASK-020
   - TASK-029
+  - TASK-030
 codex_round_e2e: required
 user_gate: required
 ---
@@ -88,6 +89,7 @@ Agent 只使用符合状态和授权的最小个人上下文。AI 从文档提�
 - 关闭 Context 注入后普通 Agent 仍能回答；
 - Fortune narrative 不会自动写成 confirmed fact；
 - Skills 目录与 `/` 菜单引用同一真实 Skill 可用性，不出现前端静态漂移；
+- 普通问答默认零工具调用；单一时效问题使用一次受控能力，多来源问题才进入“联网调研”；
 - 375、768、1024、1440px 无页面横向溢出，键盘焦点与深链接可用。
 
 ## 能力控制与回滚

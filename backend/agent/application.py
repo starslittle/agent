@@ -227,6 +227,14 @@ class LangGraphAgentApplication:
             "suggested_skill": (
                 resolution.suggested_skill if resolution is not None else None
             ),
+            "direct_capability": (
+                resolution.direct_capability if resolution is not None else None
+            ),
+            "direct_capability_arguments": (
+                resolution.direct_capability_arguments
+                if resolution is not None
+                else {}
+            ),
             "route_prompt": {
                 "path": "agent/prompts/skill_route_v1.txt",
                 "sha256": prompt_sha256("agent/prompts/skill_route_v1.txt"),

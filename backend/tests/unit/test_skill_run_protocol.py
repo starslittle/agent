@@ -104,7 +104,7 @@ async def test_provenance_seals_model_and_skill_snapshots():
     assert provenance["resolved_skills"] == ["research"]
     assert provenance["primary_skill"] == "research"
     assert provenance["selection_source"] == "user"
-    assert provenance["skill_snapshot"]["version"] == 1
+    assert provenance["skill_snapshot"]["version"] == 2
     assert provenance["model_snapshot"]["fingerprint"]
     assert provenance["workflow_name"] == "research_v1"
 

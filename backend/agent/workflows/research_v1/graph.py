@@ -26,6 +26,7 @@ from agent.workflows.common import (
 class ResearchPlan(BaseModel):
     questions: list[str] = Field(min_length=1, max_length=5)
     search_queries: list[str] = Field(default_factory=list, max_length=5)
+    search_budget: int | None = Field(default=None, ge=0, le=5)
 
 
 class EvidenceGrade(BaseModel):
@@ -101,15 +102,27 @@ def build_research_workflow(
             ResearchPlan,
             stage="research.plan",
         )
-        initial_queries = _unique_queries(plan_result.search_queries)
+        candidate_queries = _unique_queries(plan_result.search_queries)
+        search_budget = (
+            plan_result.search_budget
+            if plan_result.search_budget is not None
+            else len(candidate_queries)
+        )
+        initial_queries = candidate_queries[:search_budget]
+        normalized_plan = {
+            **plan_result.model_dump(),
+            "search_queries": initial_queries,
+            "search_budget": search_budget,
+        }
         emit_runtime_event(
             "progress",
             stage="research.plan",
             questions=len(plan_result.questions),
             search_queries=len(initial_queries),
+            search_budget=search_budget,
         )
         return {
-            "research_plan": plan_result.model_dump(),
+            "research_plan": normalized_plan,
             "pending_search_queries": initial_queries,
             "model_calls": model_calls,
             "metadata": metadata,
@@ -155,7 +168,7 @@ def build_research_workflow(
         research_round = state["research_round"]
         try:
             result = await capability_executor.execute(
-                "tavily_search",
+                "web_search",
                 {"query": query, "max_results": 5},
                 context=run_context,
                 allowed_capabilities=state["allowed_capabilities"],
@@ -261,6 +274,39 @@ def build_research_workflow(
         }
         source_count = len(unique_citations)
         model_calls_used = state.get("model_calls", 0)
+
+        if (
+            state.get("research_plan", {}).get("search_budget") == 0
+            and not state.get("attempted_search_queries")
+        ):
+            grade = {
+                "sufficient": True,
+                "model_assessment_sufficient": True,
+                "covered_question_indexes": list(range(question_count)),
+                "gaps": [],
+                "supplemental_search_queries": [],
+                "assessment": "该目标无需外部检索。",
+                "source_count": 0,
+                "minimum_sources": 0,
+                "coverage_complete": True,
+                "exhausted_reason": None,
+            }
+            emit_runtime_event(
+                "progress",
+                stage="research.grade",
+                round=state.get("research_round", 0),
+                sufficient=True,
+                covered_questions=question_count,
+                total_questions=question_count,
+                unique_sources=0,
+                minimum_sources=0,
+                will_supplement=False,
+                exhausted_reason=None,
+            )
+            return {
+                "evidence_grade": grade,
+                "pending_search_queries": [],
+            }
 
         # The final synthesis must always retain one model call.
         if model_calls_used >= state["max_model_calls"] - 1:
@@ -468,7 +514,14 @@ def build_research_workflow(
                 context_parts.append(
                     f"检索词：{item['query']}\n{item['content']}"
                 )
-        if not has_evidence:
+        if (
+            not has_evidence
+            and plan_value.get("search_budget") == 0
+        ):
+            context_parts.append(
+                "研究计划判断本题无需外部检索；不要声称已经联网或提供外部引用。"
+            )
+        elif not has_evidence:
             context_parts.append("没有获得外部检索结果，请明确说明不确定性。")
         grade = state.get("evidence_grade", {})
         if not grade.get("sufficient"):

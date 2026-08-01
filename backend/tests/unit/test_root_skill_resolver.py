@@ -151,6 +151,45 @@ async def test_direct_and_route_failure_never_select_a_tool_skill():
 
 
 @pytest.mark.asyncio
+async def test_direct_route_can_select_one_schema_validated_current_info_tool():
+    resolution = await _resolver(
+        RouteGateway(
+            SkillRouteProposal(
+                route="direct",
+                confidence=0.98,
+                reason_code="needs_current_sources",
+                direct_capability="get_weather",
+                direct_capability_arguments={"location": "杭州"},
+            )
+        )
+    ).resolve(query="杭州今天天气", model_id="auto", selection=_selection())
+
+    assert resolution.workflow == "chat_v1"
+    assert resolution.resolved_skills == []
+    assert resolution.direct_capability == "get_weather"
+    assert resolution.direct_capability_arguments == {"location": "杭州"}
+
+
+@pytest.mark.asyncio
+async def test_invalid_direct_tool_arguments_fail_closed_to_tool_free_chat():
+    resolution = await _resolver(
+        RouteGateway(
+            SkillRouteProposal(
+                route="direct",
+                confidence=0.98,
+                reason_code="needs_current_sources",
+                direct_capability="get_weather",
+                direct_capability_arguments={},
+            )
+        )
+    ).resolve(query="今天天气", model_id="auto", selection=_selection())
+
+    assert resolution.direct_capability is None
+    assert resolution.selection_source == "fallback"
+    assert resolution.reason_code == "invalid_direct_capability"
+
+
+@pytest.mark.asyncio
 async def test_confirmation_result_completes_without_skill_or_capability():
     gateway = RouteGateway(
         SkillRouteProposal(
