@@ -317,7 +317,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         className={
           isUser
             ? "max-w-[82%] rounded-[1.25rem] rounded-br-md bg-primary px-4 py-3 text-primary-foreground"
-            : "max-w-full rounded-[1.25rem] rounded-tl-md border border-border bg-card px-5 py-4 text-card-foreground"
+            : `${activities.length > 0 ? "w-full " : ""}max-w-full rounded-[1.25rem] rounded-tl-md border border-border bg-card px-5 py-4 text-card-foreground`
         }
       >
         {!isUser && (

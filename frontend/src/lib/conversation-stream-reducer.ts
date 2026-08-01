@@ -180,34 +180,3 @@ function upsertCitation(
       left.citation_id.localeCompare(right.citation_id),
   );
 }
-
-export function runtimeActivitySummary(
-  activities: RuntimeActivity[],
-  messageStatus?: RuntimeMessageStatus,
-): string {
-  const completedTools = activities.filter(
-    (activity) =>
-      activity.kind === "tool" && activity.status === "completed",
-  ).length;
-  const failures = activities.filter(
-    (activity) => activity.status === "failed",
-  ).length;
-  if (messageStatus === "streaming") {
-    return `正在运行 · ${activities.length} 项活动`;
-  }
-  if (messageStatus === "stopped") {
-    return `运行已停止 · ${activities.length} 项活动`;
-  }
-  if (messageStatus === "failed") {
-    return failures > 0
-      ? `运行失败 · ${failures} 项失败`
-      : `运行失败 · ${activities.length} 项活动`;
-  }
-  if (failures > 0) {
-    return `运行过程 · ${failures} 项失败`;
-  }
-  if (completedTools > 0) {
-    return `运行过程 · 已完成 ${completedTools} 次工具调用`;
-  }
-  return `运行过程 · ${activities.length} 项活动`;
-}

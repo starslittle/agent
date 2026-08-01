@@ -284,3 +284,22 @@
 - validation：`tsc --noEmit`、针对性 ESLint、全量 lint（0 errors，保留既有 8 warnings）、Markdown 5 tests、Vite 实时转译检查通过；本地页面控制因旧连接失败页触发 URL 安全策略，未执行该次真实视觉复验；按用户要求未执行 build；
 - skills：`frontend-design` 保持启点低噪声文档视觉和浅绿色选中态；`ui-ux-pro-max` 采用懒加载树与当前路径自动展开降低返回成本；`web-design-guidelines` 约束语义 Link/Button、`aria-expanded`、44px 触控、焦点、动效降级、长名称截断和加载/错误/空状态；
 - risk：ROUND-03 服务端能力控制验收阻塞仍然存在；本修复不 push、不部署，也不改变 Space API 或数据模型。
+
+### TASK-015 E2E Fix · 紧凑侧边栏
+
+- commits：`ca49fc2`、`7e38cfa`；
+- result：completed；
+- summary：Vite 开发代理默认指向 Docker Go Gateway `8002`；桌面一级导航与新建对话压缩至 36px、移动端保持 44px，最近对话由 64px 双行卡片改为 44px 单行列表，摘要继续保留在搜索弹窗；
+- validation：`tsc --noEmit`、针对性 ESLint、`git diff --check` 通过；5173 代理后的 `/api/v1/session` 与 `/healthz` 均返回 200；按用户要求未执行 build；
+- skills：保持启点品牌，仅提高侧栏纵向信息密度；桌面与触屏采用响应式高度，保留语义按钮、焦点、截断、虚拟列表和可访问的更多操作；
+- risk：ROUND-03 服务端能力控制验收阻塞仍然存在；未 push、部署或修改生产环境。
+
+### TASK-015 E2E Fix · 对话运行过程降噪
+
+- authorization：用户明确要求参考 GPT、豆包和 DeepSeek 优化对话内运行过程，继续按 ROUND-03 修正直接提交到 `main`，小改动不执行 build；
+- commit：本提交；
+- result：completed；
+- summary：对话默认只展示当前状态与完成摘要，不再暴露原始事件总数或自动展开；同类工具调用合并为一次关键里程碑，历史进度阶段收敛为最多 6 项，当前未完成调用、失败和停止状态仍明确保留；完整原始步骤继续由 Agent Runs 承载；
+- validation：展示投影 4 tests、`tsc --noEmit`、针对性 ESLint 与 `git diff --check` 通过；按用户要求未执行 build，也未重复 Round 产品级 Browser E2E；
+- skills：`frontend-design` 将嵌套日志卡收敛为启点低噪声状态条；`ui-ux-pro-max` 采用“当前状态 → 按需关键步骤 → Agent Runs 完整记录”的渐进披露；`web-design-guidelines` 保留 44px 控件、语义展开状态、键盘焦点、`aria-live`、动效降级和移动端截断；
+- risk：本修复只改变前端展示投影，不修改 Runtime 事件协议或 Agent Runs 数据；ROUND-03 服务端能力控制验收阻塞仍然存在。
