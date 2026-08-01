@@ -210,3 +210,11 @@
 - validation：Python 全量 104 passed/2 skipped；Go 全包 passed；隔离 PostgreSQL 15 的 Migration、状态过滤、跨用户隔离、历史 Revision 冻结和永久删除脱敏 integration passed；前端 `tsc --noEmit`、lint（仅既有 8 条 Fast Refresh warning）与 build passed；
 - skills：`frontend-design` 保持启点文档式层级，`ui-ux-pro-max` 将上下文依据作为次级可追溯信息，`web-design-guidelines` 约束语义链接、焦点、长 ID 与空状态；
 - risk：Context 第一版采用确定性类型/领域/时间排序，不引入向量检索；路由调用 15 秒超时并失败关闭，产品级真实 Provider 与 Browser 场景进入 Round 唯一 E2E。
+
+### TASK-017 · completed
+
+- commit：`da4700e`；
+- result：交付 Markdown 单文件与递归文件夹导入，保留安全相对层级，提供服务端冲突/重复预检、受控 multipart、幂等事务、逐项摘要、根目录目标选择与可取消上传；
+- validation：Go 全包 passed；隔离 PostgreSQL 15 的 Migration、嵌套层级、根目录导入、重复/冲突、幂等、失败回滚、跨用户和 Personal Space HTTP integration passed；前端 lint（仅既有 8 条 Fast Refresh warning）与 build passed；
+- skills：`frontend-design` 保持启点文件桌面与品牌视觉，`ui-ux-pro-max` 将流程拆成选择、预检、确认和结果，`web-design-guidelines` 约束键盘入口、44px 控件、焦点、aria-live/progressbar、长路径与移动端非拖放入口；
+- risk：文件夹浏览器 API 不承诺空目录和仅含不支持文件的目录；真实浏览器递归选择、取消上传与移动端场景进入 Round 唯一 E2E，保留既有 bundle 与 browserslist 警告。
