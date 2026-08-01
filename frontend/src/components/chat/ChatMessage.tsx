@@ -27,6 +27,7 @@ import {
   type SkillID,
   type SkillSelectionSource,
 } from "@/features/skills/skills";
+import { useSkillCatalog } from "@/features/skills/skill-catalog-context";
 import { RunProposalList } from "@/features/proposals/RunProposalList";
 
 export type ChatRole = "user" | "assistant";
@@ -213,6 +214,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   runID,
   contextUsage,
 }) => {
+  const { skills } = useSkillCatalog();
   const isUser = role === "user";
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null);
   const [copiedMessage, setCopiedMessage] = React.useState(false);
@@ -238,8 +240,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     [stableMarkdown, normalizedAnswer]
   );
   const tableRenderIndexRef = React.useRef(0);
-  const resolvedSkill = getVisibleSkill(skillID);
-  const suggestedSkill = getVisibleSkill(confirmation?.skillID);
+  const resolvedSkill = getVisibleSkill(skills, skillID);
+  const suggestedSkill = getVisibleSkill(skills, confirmation?.skillID);
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -301,7 +303,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           {(resolvedSkill || skillSource) && (
             <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">
               <Sparkles className="h-3 w-3" aria-hidden="true" />
-              {resolvedSkill?.label ?? "直接回答"} · {skillSourceLabel(skillSource)}
+              {resolvedSkill?.title ?? skillID ?? "直接回答"} · {skillSourceLabel(skillSource)}
             </span>
           )}
           {runID && (
@@ -341,14 +343,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </section>
         )}
         {!isUser && runID && status !== "pending" && status !== "streaming" && <RunProposalList runID={runID} />}
-        {!isUser && confirmation && suggestedSkill && (
+        {!isUser && confirmation && (
           <section className="mb-4 rounded-xl border border-primary/25 bg-primary/5 p-4" aria-label="需要确认 Skill">
             <div className="flex items-start gap-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
                 <Sparkles className="h-4 w-4" aria-hidden="true" />
               </span>
               <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-semibold text-foreground">是否使用{suggestedSkill.label}？</h3>
+                <h3 className="text-sm font-semibold text-foreground">是否使用{suggestedSkill?.title ?? "这个 Skill"}？</h3>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   启点识别到这个方向，但不会自动启用。确认后会创建一条新的显式 Skill 消息。
                 </p>
@@ -358,7 +360,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                   onClick={() => onConfirmSkill?.(confirmation.skillID, confirmation.prompt)}
                   className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-xs font-medium text-primary-foreground transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none"
                 >
-                  使用{suggestedSkill.label}继续
+                  使用{suggestedSkill?.title ?? "这个 Skill"}继续
                   <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </div>

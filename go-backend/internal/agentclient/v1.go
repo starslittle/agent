@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/starslittle/agent/go-backend/internal/agent"
+	"github.com/starslittle/agent/go-backend/internal/skills"
 )
 
 type V1Client struct {
@@ -85,6 +86,35 @@ func (c *V1Client) Resolve(ctx context.Context, route agent.RouteRequest) (agent
 		return agent.RouteResult{}, err
 	}
 	return result, nil
+}
+
+func (c *V1Client) Skills(ctx context.Context, userID, requestID string) (skills.Catalog, error) {
+	const executionID = "skill-catalog"
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.resolve("/internal/v1/skills"), nil)
+	if err != nil {
+		return skills.Catalog{}, err
+	}
+	request.Header.Set("Accept", "application/json")
+	c.sign(request, userID, requestID, executionID, nil)
+	response, err := c.client.Do(request)
+	if err != nil {
+		return skills.Catalog{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+		return skills.Catalog{}, errors.New("Python Skill catalog unavailable")
+	}
+	var catalog skills.Catalog
+	decoder := json.NewDecoder(io.LimitReader(response.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&catalog); err != nil {
+		return skills.Catalog{}, fmt.Errorf("decode public Skill catalog: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return skills.Catalog{}, errors.New("decode public Skill catalog: trailing data")
+	}
+	return catalog, nil
 }
 
 func mustJSON(value any) json.RawMessage {

@@ -1,29 +1,6 @@
-export type SkillID = "research" | "fortune";
+import type { PublicSkill } from "@/lib/skill-api";
 
-export interface VisibleSkill {
-  id: SkillID;
-  command: `/${SkillID}`;
-  label: string;
-  shortLabel: string;
-  description: string;
-}
-
-export const VISIBLE_SKILLS: readonly VisibleSkill[] = [
-  {
-    id: "research",
-    command: "/research",
-    label: "深度研究",
-    shortLabel: "研究",
-    description: "检索、核验并综合外部信息",
-  },
-  {
-    id: "fortune",
-    command: "/fortune",
-    label: "命理分析",
-    shortLabel: "命理",
-    description: "从命理叙事角度提供辅助分析",
-  },
-] as const;
+export type SkillID = string;
 
 export type SkillSelectionSource =
   | "direct"
@@ -32,15 +9,15 @@ export type SkillSelectionSource =
   | "automatic"
   | "fallback";
 
-export function getVisibleSkill(skillID?: string | null): VisibleSkill | null {
-  return VISIBLE_SKILLS.find((skill) => skill.id === skillID) ?? null;
+export function getVisibleSkill(skills: readonly PublicSkill[], skillID?: string | null): PublicSkill | null {
+  return skills.find((skill) => skill.id === skillID) ?? null;
 }
 
-export function filterVisibleSkills(query: string): readonly VisibleSkill[] {
+export function filterVisibleSkills(skills: readonly PublicSkill[], query: string): readonly PublicSkill[] {
   const normalized = query.trim().replace(/^\//, "").toLocaleLowerCase();
-  if (!normalized) return VISIBLE_SKILLS;
-  return VISIBLE_SKILLS.filter((skill) =>
-    [skill.id, skill.label, skill.shortLabel, skill.description].some((value) =>
+  if (!normalized) return skills;
+  return skills.filter((skill) =>
+    [skill.id, skill.title, skill.command, skill.description, skill.public_purpose].some((value) =>
       value.toLocaleLowerCase().includes(normalized),
     ),
   );
@@ -67,23 +44,14 @@ export interface SkillComposerState {
   value: string;
 }
 
-export function selectComposerSkill(
-  state: SkillComposerState,
-  skillID: SkillID,
-): SkillComposerState {
-  return {
-    selectedSkill: skillID,
-    value: state.value.replace(/^\/[^\s]*\s*/, ""),
-  };
+export function selectComposerSkill(state: SkillComposerState, skillID: SkillID): SkillComposerState {
+  return { selectedSkill: skillID, value: state.value.replace(/^\/[^\s]*\s*/, "") };
 }
 
 export function clearComposerSkill(state: SkillComposerState): SkillComposerState {
   return { ...state, selectedSkill: null };
 }
 
-export function explicitConfirmationTurn(
-  prompt: string,
-  skillID: SkillID,
-): { text: string; requestedSkill: SkillID } {
+export function explicitConfirmationTurn(prompt: string, skillID: SkillID): { text: string; requestedSkill: SkillID } {
   return { text: prompt, requestedSkill: skillID };
 }

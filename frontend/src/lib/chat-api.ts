@@ -96,7 +96,7 @@ export type ConversationStreamEvent =
   | {
       type: "confirmation_required";
       sequence?: number;
-      suggested_skill: "research" | "fortune";
+      suggested_skill: string;
       confidence: number;
       reason_code: "automatic_confirmation_required";
     }
@@ -275,8 +275,8 @@ export function parseConversationStreamEvent(
       return value as ConversationStreamEvent;
     case "confirmation_required":
       if (
-        (value.suggested_skill !== "research" &&
-          value.suggested_skill !== "fortune") ||
+        typeof value.suggested_skill !== "string" ||
+        !/^[a-z][a-z0-9_]{0,63}$/.test(value.suggested_skill) ||
         typeof value.confidence !== "number" ||
         value.confidence < 0 ||
         value.confidence > 1 ||

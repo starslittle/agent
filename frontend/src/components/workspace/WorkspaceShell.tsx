@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Moon,
   ShieldCheck,
+  Sparkles,
   Sun,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -74,6 +75,7 @@ function WorkspaceNav() {
   const chatActive = location.pathname === "/" || location.pathname.startsWith("/chat/");
   const runsActive = location.pathname.startsWith("/agent-runs");
   const spaceActive = location.pathname.startsWith("/space");
+  const skillsActive = location.pathname.startsWith("/skills");
   const internalActive = location.pathname.startsWith("/internal/agent-runs");
 
   return (
@@ -116,6 +118,19 @@ function WorkspaceNav() {
       >
         <FolderClosed className="h-4 w-4" aria-hidden="true" />
         我的空间
+      </Link>
+      <Link
+        to="/skills"
+        aria-current={skillsActive ? "page" : undefined}
+        className={cn(
+          navigationLinkClass,
+          skillsActive
+            ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+            : "text-muted-foreground",
+        )}
+      >
+        <Sparkles className="h-4 w-4" aria-hidden="true" />
+        Skills
       </Link>
       {user?.role === "observability_admin" && (
         <Link

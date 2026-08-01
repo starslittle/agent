@@ -25,6 +25,13 @@ skills:
     ui:
       command: /research
       visible: true
+    public:
+      purpose: 面向需要外部资料的问题，先拆分研究步骤，再检索、核验并综合可追溯来源。
+      context_scope:
+        - confirmed_fact
+        - current_state
+        - personal_rule
+      confirmation_summary: 可由你明确选择或由启点自动识别；不会替你确认个人信息更新。
     available: true
 
   - id: fortune
@@ -55,4 +62,11 @@ skills:
     ui:
       command: /fortune
       visible: true
+    public:
+      purpose: 根据你主动提供的出生信息完成确定性排盘，并以受控叙事提供辅助分析视角。
+      context_scope:
+        - confirmed_fact
+        - current_state
+        - personal_rule
+      confirmation_summary: 明确选择时直接进入；自动识别时需要你确认，命理叙事不会自动写入长期上下文。
     available: true

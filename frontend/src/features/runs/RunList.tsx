@@ -4,6 +4,7 @@ import { ChevronRight, LoaderCircle, RefreshCw } from "lucide-react";
 import type { RunStatus, RunSummary } from "@/lib/run-api";
 import { cn } from "@/lib/utils";
 import { getVisibleSkill } from "@/features/skills/skills";
+import { useSkillCatalog } from "@/features/skills/skill-catalog-context";
 import { RunStatusBadge } from "./RunStatusBadge";
 import { formatDuration, formatRunTime, RUN_FILTERS } from "./run-presentation";
 
@@ -42,6 +43,7 @@ export function RunList({
   emptyDescription = "从对话发起一次任务后，运行过程会出现在这里。",
   showEmptyAction = true,
 }: RunListProps) {
+  const { skills } = useSkillCatalog();
   return (
     <section className="flex h-full min-h-0 flex-col border-r border-border bg-card" aria-label="运行列表">
       <div className="border-b border-border p-4">
@@ -80,7 +82,7 @@ export function RunList({
         ) : (
           <div className="space-y-1">
             {items.map((run) => {
-              const skill = getVisibleSkill(run.primary_skill);
+              const skill = getVisibleSkill(skills, run.primary_skill);
               const selected = run.id === selectedRunID;
               return (
                 <Link
@@ -98,7 +100,7 @@ export function RunList({
                   <p className="mt-3 truncate font-mono text-[11px] text-foreground">{run.id}</p>
                   {showOwner && <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">用户 {run.user_id || "—"}</p>}
                   <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
-                    <span className="truncate">{skill?.label ?? (run.primary_skill || "直接回答")}</span>
+                    <span className="truncate">{skill?.title ?? (run.primary_skill || "直接回答")}</span>
                     <span className="shrink-0">{formatDuration(run.total_duration_ms)}</span>
                   </div>
                   <p className="mt-1 text-[10px] text-muted-foreground">{formatRunTime(run.started_at)}</p>

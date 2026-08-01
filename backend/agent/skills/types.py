@@ -51,6 +51,23 @@ class SkillUI(BaseModel):
     visible: bool
 
 
+class SkillPublicDescription(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    purpose: str = Field(min_length=1, max_length=1_000)
+    context_scope: list[
+        Literal["confirmed_fact", "current_state", "personal_rule", "ai_analysis"]
+    ] = Field(max_length=8)
+    confirmation_summary: str = Field(min_length=1, max_length=1_000)
+
+    @field_validator("context_scope")
+    @classmethod
+    def validate_context_scope(cls, values: list[str]) -> list[str]:
+        if len(set(values)) != len(values):
+            raise ValueError("public context scope must be unique")
+        return values
+
+
 class SkillManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -67,6 +84,7 @@ class SkillManifest(BaseModel):
     risk: SkillRiskPolicy
     memory: SkillMemoryPolicy
     ui: SkillUI
+    public: SkillPublicDescription
     available: bool
 
     @field_validator("allowed_capabilities")

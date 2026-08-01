@@ -52,8 +52,8 @@ function parseStoredConfirmation(metadata?: Record<string, unknown>) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const confirmation = value as Record<string, unknown>;
   if (
-    (confirmation.suggested_skill !== "research" &&
-      confirmation.suggested_skill !== "fortune") ||
+    typeof confirmation.suggested_skill !== "string" ||
+    !/^[a-z][a-z0-9_]{0,63}$/.test(confirmation.suggested_skill) ||
     typeof confirmation.confidence !== "number" ||
     confirmation.confidence < 0 ||
     confirmation.confidence > 1 ||

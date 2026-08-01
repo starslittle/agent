@@ -91,6 +91,43 @@ func TestV1ClientStreamsTypedEvents(t *testing.T) {
 	}
 }
 
+func TestV1ClientLoadsStrictSignedSkillCatalog(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/internal/v1/skills" {
+			t.Fatalf("request=%s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("X-Qidian-Execution-ID") != "skill-catalog" || r.Header.Get("X-Qidian-User-ID") != "user-1" || r.Header.Get("X-Qidian-Signature") == "" {
+			t.Fatalf("signed headers=%v", r.Header)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"items":[{"id":"research","version":1,"title":"深度研究","description":"description","command":"/research","public_purpose":"purpose","public_capabilities":[],"context_scope":[],"confirmation_summary":"confirmation","may_propose_updates":false,"available":true,"effective":true}]}`)
+	}))
+	defer upstream.Close()
+	client, err := NewV1(upstream.URL, upstream.Client(), "test-secret-that-is-at-least-32-characters")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := client.Skills(context.Background(), "user-1", "request-1")
+	if err != nil || len(catalog.Items) != 1 || catalog.Items[0].ID != "research" {
+		t.Fatalf("catalog=%#v error=%v", catalog, err)
+	}
+}
+
+func TestV1ClientRejectsUnknownSkillProjectionFields(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"items":[],"system_prompt":"do not expose"}`)
+	}))
+	defer upstream.Close()
+	client, err := NewV1(upstream.URL, upstream.Client(), "test-secret-that-is-at-least-32-characters")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Skills(context.Background(), "user-1", "request-1"); err == nil {
+		t.Fatal("unknown projection field must fail closed")
+	}
+}
+
 func TestV1ClientResumeStartsAfterConfirmedSequence(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(
 		w http.ResponseWriter,

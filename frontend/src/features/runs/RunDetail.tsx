@@ -15,6 +15,7 @@ import {
 
 import type { RunDetail as RunDetailData, RunEvent, RunSpan } from "@/lib/run-api";
 import { getVisibleSkill, skillSourceLabel, type SkillSelectionSource } from "@/features/skills/skills";
+import { useSkillCatalog } from "@/features/skills/skill-catalog-context";
 import { RunStatusBadge } from "./RunStatusBadge";
 import {
   eventLabel,
@@ -69,6 +70,7 @@ export function RunDetail({
   showConversationLink = true,
   showOwner = false,
 }: RunDetailProps) {
+  const { skills } = useSkillCatalog();
   if (loading) {
     return (
       <section className="flex min-h-0 flex-1 items-center justify-center gap-2 bg-background text-xs text-muted-foreground" aria-label="运行详情加载中">
@@ -109,7 +111,7 @@ export function RunDetail({
   }
 
   const { run } = detail;
-  const skill = getVisibleSkill(run.primary_skill);
+  const skill = getVisibleSkill(skills, run.primary_skill);
   const events = stableRunEvents(detail.events);
   const citations = events.map(safeCitation).filter((item): item is NonNullable<typeof item> => item !== null);
   const artifacts = events.map(safeArtifact).filter((item): item is NonNullable<typeof item> => item !== null);
@@ -151,7 +153,7 @@ export function RunDetail({
           <h2 id="run-overview-title" className="text-sm font-semibold">运行概览</h2>
           <dl className="mt-3 grid gap-3 rounded-2xl border border-border bg-card p-5 sm:grid-cols-2 xl:grid-cols-4">
             {showOwner && <Definition term="用户 ID"><span className="font-mono">{run.user_id || "—"}</span></Definition>}
-            <Definition term="实际 Skill">{skill?.label ?? run.primary_skill ?? "直接回答"}</Definition>
+            <Definition term="实际 Skill">{skill?.title ?? run.primary_skill ?? "直接回答"}</Definition>
             <Definition term="选择来源">{skillSourceLabel(run.selection_source as SkillSelectionSource | null)}</Definition>
             <Definition term="Requested">{run.requested_skill || "自动"}</Definition>
             <Definition term="Resolved">{resolvedSkills.length > 0 ? resolvedSkills.join(", ") : "无 Skill"}</Definition>

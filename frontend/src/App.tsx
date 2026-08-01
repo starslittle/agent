@@ -15,6 +15,8 @@ import { ObservabilityRoute } from "./auth/ObservabilityRoute";
 import SpacePage from "./pages/SpacePage";
 import DocumentPage from "./pages/DocumentPage";
 import ContextItemPage from "./pages/ContextItemPage";
+import SkillsPage from "./pages/SkillsPage";
+import { SkillCatalogProvider } from "./features/skills/SkillCatalogProvider";
 
 const queryClient = new QueryClient();
 
@@ -26,7 +28,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-            <Routes>
+            <SkillCatalogProvider><Routes>
               <Route path="/login" element={<AuthPage />} />
               <Route path="/register" element={<AuthPage />} />
               <Route path="/" element={<Index />} />
@@ -70,6 +72,8 @@ const App = () => (
                 path="/space/context/:itemId"
                 element={<ProtectedRoute><ContextItemPage /></ProtectedRoute>}
               />
+              <Route path="/skills" element={<ProtectedRoute><SkillsPage /></ProtectedRoute>} />
+              <Route path="/skills/:skillId" element={<ProtectedRoute><SkillsPage /></ProtectedRoute>} />
               <Route
                 path="/internal/agent-runs"
                 element={<ObservabilityRoute><AgentObservabilityPage /></ObservabilityRoute>}
@@ -79,7 +83,7 @@ const App = () => (
                 element={<ObservabilityRoute><AgentObservabilityPage /></ObservabilityRoute>}
               />
               <Route path="*" element={<NotFound />} />
-            </Routes>
+            </Routes></SkillCatalogProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

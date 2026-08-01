@@ -21,7 +21,12 @@ from app.runtime.registry import (
     IdempotencyConflictError,
 )
 from agent.models import UnknownModelIDError
-from agent.skills import ConflictingSkillRequestError, UnknownRequestedSkillError
+from agent.skills import (
+    ConflictingSkillRequestError,
+    UnknownRequestedSkillError,
+    get_skill_registry,
+    public_skill_catalog,
+)
 
 
 router = APIRouter()
@@ -137,6 +142,32 @@ async def capabilities():
         "target_capabilities": target_capability_schemas(),
         "runtime_store": registry.store_kind,
         "execution_engine": settings.AGENT_EXECUTION_ENGINE,
+    }
+
+
+@router.get("/internal/v1/skills")
+async def skills(request: Request):
+    _verify(request, b"", "skill-catalog")
+    effective_skill_ids: set[str] = set()
+    try:
+        from agent.readiness import validate_target_runtime
+
+        validate_target_runtime()
+        if settings.DASHSCOPE_API_KEY:
+            effective_skill_ids.add("fortune")
+            if settings.TAVILY_API_KEY:
+                effective_skill_ids.add("research")
+    except Exception:
+        # The caller only receives an understandable effective flag. Internal
+        # readiness reasons stay on the service side.
+        effective_skill_ids.clear()
+    return {
+        "items": [
+            item.model_dump(mode="json")
+            for item in public_skill_catalog(
+                get_skill_registry(), effective_skill_ids=effective_skill_ids
+            )
+        ]
     }
 
 

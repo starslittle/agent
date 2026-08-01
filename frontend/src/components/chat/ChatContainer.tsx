@@ -19,6 +19,7 @@ import {
   explicitConfirmationTurn,
   type SkillID,
 } from "@/features/skills/skills";
+import { useSkillCatalog } from "@/features/skills/skill-catalog-context";
 import {
   mergeStoredMessage,
   toViewMessages,
@@ -99,6 +100,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   loadingEarlierMessages = false,
   onLoadEarlierMessages,
 }) => {
+  const { skills } = useSkillCatalog();
   const { csrfToken } = useAuth();
   const [messages, setMessages] = useState<ChatViewMessage[]>(() =>
     toViewMessages(initialMessages),
@@ -379,10 +381,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
               message.id === assistantMessageID
                 ? {
                     ...message,
-                    skillID:
-                      primarySkill === "research" || primarySkill === "fortune"
-                        ? primarySkill
-                        : null,
+                    skillID: typeof primarySkill === "string" && primarySkill ? primarySkill : null,
                     skillSource: detail.run.selection_source ?? null,
                   }
                 : message,
@@ -552,10 +551,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                   activities: [],
                   artifacts: [],
                   citations: [],
-                  skillID:
-                    activeRun.primary_skill === "research" || activeRun.primary_skill === "fortune"
-                      ? activeRun.primary_skill
-                      : null,
+                  skillID: typeof activeRun.primary_skill === "string" && activeRun.primary_skill ? activeRun.primary_skill : null,
                   skillSource: activeRun.selection_source ?? null,
                   runID: activeRun.id,
                   status: "streaming",
@@ -738,22 +734,17 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
   const isCancelling = runState.phase === "cancelling";
   const canStop = canCancelRun(runState);
 
-  const suggestions = [
+  const suggestions: Array<{ label: string; prompt: string; skillID: SkillID | null }> = [
     {
       label: "梳理一个复杂问题",
       prompt: "帮我把一个复杂问题拆解成清晰、可执行的步骤",
       skillID: null,
     },
-    {
-      label: "研究一个新方向",
-      prompt: "我想研究一个新方向，请帮我搭建分析框架",
-      skillID: "research" as const,
-    },
-    {
-      label: "进行命理分析",
-      prompt: "我想从命理视角分析一个问题。",
-      skillID: "fortune" as const,
-    },
+    ...skills.slice(0, 2).map((skill) => ({
+      label: skill.title,
+      prompt: `请使用${skill.title}帮我推进这个问题。`,
+      skillID: skill.id,
+    })),
   ];
 
   return (

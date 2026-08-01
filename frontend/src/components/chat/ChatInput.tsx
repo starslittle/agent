@@ -7,7 +7,9 @@ import {
   selectComposerSkill,
   type SkillID,
 } from "@/features/skills/skills";
+import { useSkillCatalog } from "@/features/skills/skill-catalog-context";
 import { ChevronRight, LoaderCircle, Send, Sparkles, Square, X } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 
 interface ChatInputProps {
   onSend: (text: string, requestedSkill: SkillID | null) => void;
@@ -29,15 +31,25 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [sending, setSending] = useState(false);
+  const [searchParams] = useSearchParams();
+  const { skills, loading: skillsLoading, error: skillsError, reload: reloadSkills } = useSkillCatalog();
   const taRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const preselectedRef = useRef<string | null>(null);
 
   const slashQuery = value.startsWith("/") ? value.slice(1).split(/\s/, 1)[0] : "";
   const filteredSkills = useMemo(
-    () => filterVisibleSkills(slashQuery),
-    [slashQuery],
+    () => filterVisibleSkills(skills, slashQuery),
+    [skills, slashQuery],
   );
-  const skill = getVisibleSkill(selectedSkill);
+  const skill = getVisibleSkill(skills, selectedSkill);
+
+  useEffect(() => {
+    const requested = searchParams.get("skill")?.trim() || null;
+    if (!requested || skillsLoading || preselectedRef.current === requested) return;
+    preselectedRef.current = requested;
+    if (getVisibleSkill(skills, requested)) setSelectedSkill(requested);
+  }, [searchParams, skills, skillsLoading]);
 
   const autosize = () => {
     const element = taRef.current;
@@ -127,7 +139,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               仅对这一条消息生效
             </p>
           </div>
-          {filteredSkills.length > 0 ? (
+          {skillsLoading ? (
+            <p className="flex min-h-14 items-center gap-2 px-3 text-xs text-muted-foreground" role="status"><LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />正在读取可用 Skills…</p>
+          ) : skillsError ? (
+            <div className="px-3 py-3" role="alert"><p className="text-xs leading-5 text-destructive">{skillsError}</p><button type="button" onClick={reloadSkills} className="mt-2 min-h-11 text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">重试</button></div>
+          ) : filteredSkills.length > 0 ? (
             filteredSkills.map((item, index) => (
               <button
                 key={item.id}
@@ -146,7 +162,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-2">
-                    <span className="text-sm font-medium text-foreground">{item.label}</span>
+                    <span className="text-sm font-medium text-foreground">{item.title}</span>
                     <code className="text-[11px] text-muted-foreground">{item.command}</code>
                   </span>
                   <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
@@ -167,12 +183,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <div className="mb-1.5 flex items-center px-1">
             <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-primary/10 pl-3 pr-1.5 text-xs font-medium text-primary">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              {skill.label}
+              {skill.title}
               <button
                 type="button"
                 onClick={() => setSelectedSkill(null)}
                 className="relative grid h-8 w-8 place-items-center rounded-full before:absolute before:-inset-1.5 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={`移除${skill.label}`}
+                aria-label={`移除${skill.title}`}
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>

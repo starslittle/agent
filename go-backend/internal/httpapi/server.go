@@ -79,6 +79,7 @@ func newServer(
 	}
 	mux := http.NewServeMux()
 	authAPI := newAuthHTTP(cfg, authService)
+	skillAPI := newSkillHTTP(v1Client)
 	var runSupervisor *runsupervisor.Supervisor
 	if len(conversationServices) > 0 && conversationServices[0] != nil {
 		runSupervisor = runsupervisor.New(
@@ -131,6 +132,8 @@ func newServer(
 	mux.Handle("POST /api/v1/auth/login", authAPI.protectMutation(http.HandlerFunc(authAPI.login)))
 	mux.HandleFunc("GET /api/v1/session", authAPI.session)
 	mux.Handle("GET /api/v1/me", authAPI.requireSession(http.HandlerFunc(authAPI.me)))
+	mux.Handle("GET /api/v1/skills", authAPI.requireSession(http.HandlerFunc(skillAPI.list)))
+	mux.Handle("GET /api/v1/skills/{skillID}", authAPI.requireSession(http.HandlerFunc(skillAPI.detail)))
 	mux.Handle(
 		"POST /api/v1/auth/logout",
 		authAPI.protectMutation(
