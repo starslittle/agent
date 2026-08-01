@@ -249,3 +249,19 @@
 - validation：Python 111 passed/2 skipped；Go 全包 passed；前端 62 tests、`tsc --noEmit`、lint 0 errors（保留既有 8 warnings）与 production build passed；契约测试覆盖隐藏 Prompt/Secret、unknown 字段、hidden/unavailable、未映射 Capability、签名、产品白名单和安全错误；
 - skills：`frontend-design` 延续启点品牌而拒绝通用 AI 紫色模板；`ui-ux-pro-max` 采用目录发现、路由化详情理解、统一对话执行；`web-design-guidelines` 约束 URL 搜索、语义控件、焦点恢复、44px 触控、live/error 状态和移动端 overscroll；
 - risk：真实浏览器深链接/刷新/后退/键盘/响应式、网络失败和 Run 服务端复校验进入 Round 唯一 E2E；新增 Skill 需要 Python 公开文案与 Go 产品白名单双重评审。
+
+### ROUND-03 E2E Fix
+
+- commit：`b3fdcbd`；
+- result：completed；
+- summary：保留文档提取冻结 Context Package，已处理 Proposal 的确定性重放不再令 Run 失败；同一文档 Revision 的重复提取复用幂等 Run，失败重试使用显式新键；冷启动 `?skill=` 等待服务端目录后再预选 Skill；
+- validation：Python 文档提取 4 passed；Go 全包 passed，真实 PostgreSQL 文档提取 integration passed；前端 63 tests、`tsc --noEmit`、lint 0 errors（8 条既有 warning）passed；Browser 复验重放、幂等提取和冷启动 Skill 深链接 passed；
+- skills：保持启点既有视觉与信息架构，只修复状态恢复；服务端目录仍是唯一可见性事实源，键盘焦点、深链接和 44px 控件语义保持不变；
+- risk：无新增产品语义；未执行 build，遵循用户对小改动不重复 build 的要求。
+
+### ROUND-03 Acceptance Blocker
+
+- result：blocked；
+- summary：主验收旅程、跨用户隔离、ROUND-02 Direct/Research/Fortune、会话搜索、Agent Runs、普通用户内部观测拒绝、空/过期 Context、Fortune 不自动写事实和 Skills 服务端一致性均通过；
+- validation：375、768、1024、1440px 下对话、空间、文档、Skills、Runs 共 20 个页面检查均无横向溢出，移动端导航抽屉和深链接可用；仓库检索确认 `personal_space_enabled`、`document_import_enabled`、`wiki_context_injection_enabled`、`wiki_proposal_write_enabled`、`skill_catalog_enabled` 没有 Runtime 实现；
+- risk：Round 文档要求分别执行能力关闭、数据保留与重新启用演练，但现有 Task 未定义这些跨服务服务端控制及授权路径；在用户决定新增纠偏 Task 或调整 Round 验收边界前，ROUND-03 不能标记为 accepted。

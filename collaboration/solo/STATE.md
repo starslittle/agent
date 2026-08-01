@@ -4,7 +4,7 @@
 mode: solo
 executor: codex
 active_round: ROUND-03
-round_status: running
+round_status: blocked
 round_base_commit: c285fef00de10eccd042cb94313727fa5ba2c3bb
 round_accepted_commit: pending
 round_branch: codex/round-03-solo
@@ -20,8 +20,8 @@ completed:
   - TASK-020
   - TASK-029
 
-current_task: round_e2e
-next_task: round_acceptance
+current_task: round_acceptance
+next_task: corrective_capability_control_decision
 
 start_gate: explicit_user_instruction_to_start_or_continue_solo
 production_authorized: false
