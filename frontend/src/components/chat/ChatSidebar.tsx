@@ -130,14 +130,8 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
                         <button
                           type="button"
                           onClick={() => onSelect(item)}
-                          className="relative flex h-full min-w-0 flex-1 flex-col justify-center rounded-lg px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                          className="flex h-full min-w-0 flex-1 flex-col justify-center rounded-lg px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
                         >
-                          {active && (
-                            <span
-                              className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary"
-                              aria-hidden="true"
-                            />
-                          )}
                           <span className="w-full truncate text-sm font-medium leading-4 text-sidebar-foreground/90">
                             {item.title}
                           </span>
