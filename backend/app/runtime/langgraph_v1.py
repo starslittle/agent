@@ -124,7 +124,9 @@ class LangGraphV1Runtime:
         request: AgentRunRequest,
     ) -> dict:
         if self._document_envelope(request) is not None:
-            return self._document_extractor.provenance()
+            provenance = self._document_extractor.provenance()
+            provenance["context_package_id"] = request.context_package_id
+            return provenance
         selection = self._selection(request)
         resolution = self._resolution(request, selection)
         command = await self._application.resolve_command(

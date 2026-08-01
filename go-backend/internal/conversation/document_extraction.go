@@ -172,6 +172,13 @@ func (s *Service) projectDocumentExtraction(ctx context.Context, userID, runID s
 			SourceDetail: pointer(string(sourceDetailBytes)), DocumentID: &documentID,
 			DocumentRevisionID: &revisionID, CreatedBy: wiki.ActorAgent,
 		}); err != nil {
+			// The proposal ID is derived from the immutable source revision and
+			// candidate identity. A retry after the user has handled the proposal
+			// can legitimately calculate different conflict metadata, but it must
+			// not overwrite the audited proposal or fail the whole extraction Run.
+			if errors.Is(err, proposals.ErrAlreadyExists) {
+				continue
+			}
 			return err
 		}
 	}

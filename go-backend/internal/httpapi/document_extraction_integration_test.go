@@ -193,6 +193,27 @@ func TestDocumentExtractionCreatesTraceableProposalsOnlyIntegration(t *testing.T
 	if len(proposalPayload.Items) != 2 {
 		t.Fatalf("retry duplicated proposals: %d", len(proposalPayload.Items))
 	}
+	modified := "用户确认后的不同最终内容。"
+	if _, err := proposals.NewService(store).Resolve(
+		ctx,
+		extractionUserID(t, server, cookie),
+		proposalPayload.Items[0].ID,
+		proposals.ActionAccept,
+		&modified,
+		"accept-before-retry",
+	); err != nil {
+		t.Fatalf("accept proposal before retry: %v", err)
+	}
+	resolvedRetryRunID := triggerExtractionHTTP(t, server, cookie, csrf, document.ID, "extract-after-resolution")
+	waitForExtractionRun(t, server, cookie, resolvedRetryRunID)
+	allProposals := authenticatedRequest(http.MethodGet, "/api/v1/wiki-proposals?document_id="+document.ID, "", cookie, "")
+	allProposalsResponse := httptest.NewRecorder()
+	server.Handler().ServeHTTP(allProposalsResponse, allProposals)
+	proposalPayload.Items = nil
+	decodeHTTPJSON(t, allProposalsResponse, &proposalPayload)
+	if len(proposalPayload.Items) != 2 {
+		t.Fatalf("retry after resolution duplicated proposals: %d", len(proposalPayload.Items))
+	}
 
 	updateBody, _ := json.Marshal(map[string]any{
 		"content":          document.Content + "\n\n新版本补充。",
@@ -216,7 +237,7 @@ func TestDocumentExtractionCreatesTraceableProposalsOnlyIntegration(t *testing.T
 	server.Handler().ServeHTTP(listResponse, list)
 	proposalPayload.Items = nil
 	decodeHTTPJSON(t, listResponse, &proposalPayload)
-	if len(proposalPayload.Items) != 4 {
+	if len(proposalPayload.Items) != 3 {
 		t.Fatalf("new revision proposal count = %d", len(proposalPayload.Items))
 	}
 	oldCount, newCount := 0, 0
@@ -231,7 +252,7 @@ func TestDocumentExtractionCreatesTraceableProposalsOnlyIntegration(t *testing.T
 			newCount++
 		}
 	}
-	if oldCount != 2 || newCount != 2 {
+	if oldCount != 1 || newCount != 2 {
 		t.Fatalf("revision provenance old=%d new=%d", oldCount, newCount)
 	}
 }

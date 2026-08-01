@@ -35,6 +35,16 @@ export interface DocumentProposal {
   created_at: string;
 }
 
+const DOCUMENT_EXTRACTION_VERSION = "document-extraction-v1";
+
+export function documentExtractionIdempotencyKey(
+  documentRevisionID: string,
+  retryNonce?: string,
+): string {
+  const base = `document-extraction:${documentRevisionID}:${DOCUMENT_EXTRACTION_VERSION}`;
+  return retryNonce ? `${base}:retry:${retryNonce}` : base;
+}
+
 function baseURL(): string {
   const env = (import.meta as unknown as { env?: Record<string, unknown> }).env || {};
   const base = env.VITE_API_BASE as string | undefined;

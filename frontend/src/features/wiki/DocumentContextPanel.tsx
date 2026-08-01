@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createWikiItem, listWikiItems, type WikiItem, type WikiType } from "@/lib/wiki-api";
-import { startDocumentExtraction, type ExtractionRunStatus } from "@/lib/document-api";
+import { documentExtractionIdempotencyKey, startDocumentExtraction, type ExtractionRunStatus } from "@/lib/document-api";
 import { getRunDetail } from "@/lib/run-api";
 import { listProposals, type ProposalResolution, type WikiProposal } from "@/lib/proposal-api";
 import { ProposalReviewCard } from "@/features/proposals/ProposalReviewCard";
@@ -96,7 +96,15 @@ export function DocumentContextPanel({ documentID, documentRevisionID, className
     setExtractionError("");
     setShowPending(false);
     try {
-      const run = await startDocumentExtraction(csrfToken, documentID, crypto.randomUUID());
+      const retryingFailure = extractionRun !== null && ["cancelled", "failed", "timed_out"].includes(extractionRun.status);
+      const run = await startDocumentExtraction(
+        csrfToken,
+        documentID,
+        documentExtractionIdempotencyKey(
+          documentRevisionID,
+          retryingFailure ? crypto.randomUUID() : undefined,
+        ),
+      );
       setExtractionRun({ id: run.run_id, status: run.status });
     } catch (reason) {
       setExtractionError(reason instanceof Error ? reason.message : "文档提取没有启动");

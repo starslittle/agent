@@ -47,8 +47,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   useEffect(() => {
     const requested = searchParams.get("skill")?.trim() || null;
     if (!requested || skillsLoading || preselectedRef.current === requested) return;
-    preselectedRef.current = requested;
-    if (getVisibleSkill(skills, requested)) setSelectedSkill(requested);
+    if (getVisibleSkill(skills, requested)) {
+      preselectedRef.current = requested;
+      setSelectedSkill(requested);
+    }
   }, [searchParams, skills, skillsLoading]);
 
   const autosize = () => {

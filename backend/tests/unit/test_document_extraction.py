@@ -134,7 +134,10 @@ async def test_runtime_freezes_document_route_and_emits_extraction_timeline():
         query=query,
         selection_source="direct",
         route_reason_code="document_extraction",
+        context_package_id="context-package-document",
     )
+    provenance = await runtime.describe_provenance(request)
+    assert provenance["context_package_id"] == "context-package-document"
     events = [item async for item in runtime.stream(request, asyncio.Event())]
     assert [event_type for event_type, _ in events] == [
         "document.extraction.started",
