@@ -179,3 +179,10 @@
 - validation：沿用本轮已通过的 Python 103 unit、Go 全包、前端 46 tests/lint/build、隔离 PostgreSQL Go/Python integration 与既有 Browser 主旅程；新增确认投影/刷新/显式 Turn、取消刷新后继续、无终态事件失败恢复、旧 `agent_name` 与未知 Skill 验收均通过；
 - risk：按产品决定不提供 `unified_agent_enabled` 和 `agent_observability_enabled`；生产灰度与紧急停止留待发布准备，保留既有 8 条 Fast Refresh warning、bundle 体积和 browserslist 陈旧提示；
 - cleanup：本轮隔离 PostgreSQL/Redis/Python/Go/Vite 容器、测试账号与对话、临时网络/卷/镜像已删除；未 push、merge、部署或修改生产环境。
+
+## ROUND-03 Start
+
+- authorization：2026-08-01 用户明确授权启动 ROUND-03；
+- base：`c285fef00de10eccd042cb94313727fa5ba2c3bb`；
+- execution：`codex/round-03-solo` 单一 Round worktree，连续执行 TASK-014～020、TASK-029；
+- boundary：不包含 push、部署、生产操作、破坏性数据操作或 ROUND-04 授权。

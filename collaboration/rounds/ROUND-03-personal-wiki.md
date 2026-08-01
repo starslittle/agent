@@ -1,9 +1,9 @@
 ---
 id: ROUND-03
 title: 我的空间、Skills 与确认写入
-status: draft
+status: in_progress
 runtime_state: not_deployed
-base_commit: pending
+base_commit: c285fef00de10eccd042cb94313727fa5ba2c3bb
 accepted_commit: pending
 depends_on_rounds:
   - ROUND-02
@@ -120,5 +120,6 @@ ContextUsage 数据，不执行破坏性 Schema 降级。上一轮统一 Agent �
 
 ## 当前门禁
 
-本文件保持 `draft`。整理完成不等于启动：只有用户后续明确授权执行 ROUND-03 后，才
-根据当时 `main` 冻结 `base_commit`、迁移序号、协议细节和 Task 状态。
+用户已于 2026-08-01 明确授权启动 ROUND-03。Solo 执行基线冻结为
+`c285fef00de10eccd042cb94313727fa5ba2c3bb`，按 Task 依赖顺序连续实现；本授权不包含
+push、部署、生产操作、破坏性 Migration 或进入 ROUND-04。

@@ -89,3 +89,33 @@ func TestSkillRunProtocolMigrationIsExpandOnlyAndBackfillsLegacyRuns(t *testing.
 		t.Fatal("skill protocol migration must be expand-only")
 	}
 }
+
+func TestPersonalSpaceMigrationIsExpandOnlyAndPreservesOwnership(t *testing.T) {
+	t.Parallel()
+	content, err := migrationFiles.ReadFile("migrations/008_personal_space_foundation.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(content)
+	required := []string{
+		"app_core.space_entries",
+		"FOREIGN KEY (parent_id, user_id)",
+		"app_core.markdown_document_revisions",
+		"current_revision_id",
+		"app_core.wiki_item_revisions",
+		"app_core.wiki_item_sources",
+		"app_core.wiki_item_tombstones",
+		"folder move would create a cycle",
+		"ON DELETE SET NULL (document_revision_id, document_id)",
+		"Expand-only migration",
+	}
+	for _, fragment := range required {
+		if !strings.Contains(sql, fragment) {
+			t.Fatalf("personal-space migration is missing %q", fragment)
+		}
+	}
+	upper := strings.ToUpper(sql)
+	if strings.Contains(upper, "DROP TABLE") || strings.Contains(upper, "DROP COLUMN") {
+		t.Fatal("personal-space migration must not remove existing data")
+	}
+}
