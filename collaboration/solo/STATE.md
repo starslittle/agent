@@ -12,9 +12,10 @@ round_worktree: C:/Users/10245/Desktop/qidianAgent-round-03-solo
 
 completed:
   - TASK-014
+  - TASK-015
 
-current_task: TASK-015
-next_task: TASK-016
+current_task: TASK-016
+next_task: TASK-017
 
 start_gate: explicit_user_instruction_to_start_or_continue_solo
 production_authorized: false

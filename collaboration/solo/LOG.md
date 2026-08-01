@@ -193,3 +193,12 @@
 - result：建立递归 Space Folder、Markdown Document/Revision 与 Wiki Item/Revision/Source/Tombstone 的 Go/PostgreSQL 事实源，强制 user ID、稳定 ID、乐观锁、路径和删除不变量；
 - validation：`go test ./...` 通过；隔离 PostgreSQL 15 中验证干净/重复 Migration、目录环/冲突、跨用户隔离、Revision、遗忘/恢复/永久删除，以及文档删除与已确认 Wiki 生命周期独立；
 - risk：本 Task 尚无 HTTP/UI 入口；永久删除二次确认由后续 API/UI Task 强制。
+
+### TASK-015 · accepted
+
+- commit：`08fafdb`；
+- result：交付 `/space` 递归文件桌面、Folder/Document/Context 深链接、排序分页、Markdown 阅读编辑与 Revision、移动/重命名/确认删除，以及认证/CSRF/幂等/乐观锁 API；
+- skills：`frontend-design` 保留启点绿/珊瑚与文档式阅读视觉，拒绝通用蓝色模板；`ui-ux-pro-max` 促成逐层披露、48 项分页、移动端 Sheet、44px 操作区和完整空/错/加载状态；`web-design-guidelines` 约束语义 Link/Button、焦点、面包屑 URL 状态、危险操作确认、Intl 日期和 Markdown URL/HTML 清理；
+- validation：隔离 PostgreSQL 15 下 `go test ./...` 通过；前端 54 tests、`tsc --noEmit`、lint（仅保留既有 8 条 Fast Refresh warning）和 build 通过；
+- deviation：Task 契约漏列真实服务接线所需的 `go-backend/cmd/server/main.go`，已提前说明并仅扩展这一文件，未修改其他禁止范围；
+- risk：产品级 Browser E2E 按 Solo Protocol 延后到 Round 完成后统一执行，bundle 体积与 browserslist 为既有警告。
