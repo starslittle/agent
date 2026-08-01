@@ -112,8 +112,8 @@ export default function DocumentPage() {
   return (
     <WorkspaceShell title={document?.name ?? "文档"} subtitle="阅读、编辑并管理关联上下文" mainId="document-main" headerActions={<>
       <Sheet open={directoryOpen} onOpenChange={setDirectoryOpen}>
-        <SheetTrigger asChild><Button variant="outline" size="icon" className="h-11 w-11 xl:hidden" aria-label="打开当前文件夹"><FolderTree className="h-4 w-4" aria-hidden="true" /></Button></SheetTrigger>
-        <SheetContent side="left" className="w-[min(92vw,20rem)] p-0"><SheetHeader className="sr-only"><SheetTitle>当前文件夹</SheetTitle></SheetHeader>{document && parentFolder && <DocumentDirectoryPanel folderID={parentFolder.id} folderName={parentFolder.name} currentDocumentID={document.id} currentDocumentName={document.name} onNavigate={() => setDirectoryOpen(false)} />}</SheetContent>
+        <SheetTrigger asChild><Button variant="outline" size="icon" className="h-11 w-11 xl:hidden" aria-label="打开空间目录"><FolderTree className="h-4 w-4" aria-hidden="true" /></Button></SheetTrigger>
+        <SheetContent side="left" className="w-[min(92vw,20rem)] p-0"><SheetHeader className="sr-only"><SheetTitle>空间目录</SheetTitle></SheetHeader>{document && <DocumentDirectoryPanel breadcrumbs={breadcrumbs} currentDocumentID={document.id} currentDocumentName={document.name} onNavigate={() => setDirectoryOpen(false)} />}</SheetContent>
       </Sheet>
       <Sheet>
         <SheetTrigger asChild><Button variant="outline" size="icon" className="h-11 w-11" aria-label="打开关联上下文"><BrainCircuit className="h-4 w-4" aria-hidden="true" /></Button></SheetTrigger>
@@ -121,7 +121,7 @@ export default function DocumentPage() {
       </Sheet>
     </>}>
       <div className="grid h-full min-h-0 xl:grid-cols-[18rem_minmax(0,1fr)]">
-        {document && parentFolder && <DocumentDirectoryPanel className="hidden border-r xl:flex" folderID={parentFolder.id} folderName={parentFolder.name} currentDocumentID={document.id} currentDocumentName={document.name} />}
+        {document && <DocumentDirectoryPanel className="hidden border-r xl:flex" breadcrumbs={breadcrumbs} currentDocumentID={document.id} currentDocumentName={document.name} />}
         <section className="min-h-0 overflow-y-auto">
           {loading && <div role="status" className="grid min-h-full place-items-center text-sm text-muted-foreground">正在打开文档…</div>}
           {!loading && error && <div role="alert" className="grid min-h-full place-items-center px-5 text-center"><div><p className="text-sm text-destructive">{error}</p><Button variant="outline" className="mt-4" onClick={() => setRetry((value) => value + 1)}>重新加载</Button></div></div>}
