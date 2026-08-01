@@ -21,16 +21,6 @@ interface ChatSidebarProps {
   loading?: boolean;
 }
 
-function formatConversationDate(value?: string): string {
-  if (!value) return "刚刚";
-  const date = new Date(value);
-  const now = new Date();
-  if (date.toDateString() === now.toDateString()) {
-    return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-  }
-  return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
-}
-
 export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
   onNewChat,
   conversations,
@@ -45,17 +35,17 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
   const rowVirtualizer = useVirtualizer({
     count: conversations.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 64,
+    estimateSize: () => 44,
     overscan: 8,
   });
 
   return (
     <div className="flex h-full min-h-0 flex-col px-4 pb-3">
-      <div className="shrink-0 pb-4">
+      <div className="shrink-0 pb-3">
         <button
           type="button"
           onClick={onNewChat}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sidebar-ring/25 motion-reduce:transform-none"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sidebar-ring/25 motion-reduce:transform-none sm:min-h-9"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           新建对话
@@ -72,9 +62,9 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
             className="-mr-4 min-h-0 w-auto flex-1 overflow-y-auto overflow-x-hidden pr-4"
           >
             {loading ? (
-              <div className="space-y-2 px-2 pt-2">
+              <div className="space-y-1 px-0.5 pt-1">
                 {Array.from({ length: 4 }).map((_, index) => (
-                  <div key={index} className="h-14 animate-pulse rounded-xl bg-sidebar-accent" />
+                  <div key={index} className="h-10 animate-pulse rounded-lg bg-sidebar-accent motion-reduce:animate-none" />
                 ))}
               </div>
             ) : conversations.length === 0 ? (
@@ -111,7 +101,7 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
                       className="px-0.5 py-0.5"
                     >
                       <div
-                        className={`group relative flex h-full w-full items-center rounded-xl transition-colors ${
+                        className={`group relative flex h-full w-full items-center rounded-lg transition-colors ${
                           active
                             ? "bg-sidebar-accent text-sidebar-accent-foreground"
                             : "hover:bg-sidebar-accent/70"
@@ -120,23 +110,18 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
                         <button
                           type="button"
                           onClick={() => onSelect(item)}
-                          className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-xl px-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                          className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
                         >
-                          <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", active ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground")}>
+                          <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-lg", active ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground")}>
                             <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
                           </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-xs font-medium">{item.title}</span>
-                            <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                              {item.last_message_preview || formatConversationDate(item.last_message_at || item.created_at)}
-                            </span>
-                          </span>
+                          <span className="min-w-0 flex-1 truncate text-xs font-medium">{item.title}</span>
                         </button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              className="mr-1 grid h-11 w-11 shrink-0 place-items-center rounded-xl text-muted-foreground opacity-100 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                              className="mr-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-lg text-muted-foreground opacity-100 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                               aria-label={`${item.title}的更多操作`}
                             >
                               <MoreHorizontal className="h-4 w-4" aria-hidden="true" />

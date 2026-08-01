@@ -81,7 +81,7 @@ export function ConversationSearchDialog() {
           <DialogTrigger asChild>
             <button
               type="button"
-              className="grid h-11 w-11 shrink-0 touch-manipulation place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+              className="grid h-11 w-11 shrink-0 touch-manipulation place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring sm:h-9 sm:w-9"
               aria-label="搜索对话"
             >
               <Search className="h-4 w-4" aria-hidden="true" />

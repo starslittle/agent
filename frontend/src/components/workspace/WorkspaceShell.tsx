@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 import { ConversationSearchDialog } from "@/components/workspace/ConversationSearchDialog";
 
 const navigationLinkClass =
-  "flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring";
+  "flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-xs transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring sm:min-h-9";
 
 export function WorkspaceLoadingScreen({ label = "正在准备工作区…" }: { label?: string }) {
   return (
@@ -79,7 +79,7 @@ function WorkspaceNav() {
   const internalActive = location.pathname.startsWith("/internal/agent-runs");
 
   return (
-    <nav className="space-y-1" aria-label="工作区导航">
+    <nav className="space-y-0.5" aria-label="工作区导航">
       <Link
         to="/"
         aria-current={chatActive ? "page" : undefined}
@@ -163,10 +163,10 @@ function WorkspaceAccountMenu() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-border bg-background/60 px-3 text-left transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          className="flex min-h-12 w-full items-center gap-2.5 rounded-xl border border-border bg-background/60 px-3 text-left transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring sm:min-h-11"
           aria-label="打开账户菜单"
         >
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
             {initial}
           </span>
           <span className="min-w-0 flex-1">
@@ -196,7 +196,7 @@ function WorkspaceSidebar({ content }: { content?: ReactNode }) {
 
   return (
     <Sidebar variant="sidebar" className="border-r border-sidebar-border bg-sidebar">
-      <SidebarHeader className="gap-5 px-4 pb-3 pt-5">
+      <SidebarHeader className="gap-3 px-4 pb-2 pt-4">
         <div className="flex min-w-0 items-center justify-between gap-2">
           <Link
             to="/"
@@ -211,7 +211,7 @@ function WorkspaceSidebar({ content }: { content?: ReactNode }) {
       </SidebarHeader>
       <SidebarContent className="overflow-hidden">{content}</SidebarContent>
       {user && (
-        <SidebarFooter className="px-4 pb-5 pt-2">
+        <SidebarFooter className="px-4 pb-3 pt-2">
           <WorkspaceAccountMenu />
         </SidebarFooter>
       )}
