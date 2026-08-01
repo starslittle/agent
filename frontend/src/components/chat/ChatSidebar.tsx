@@ -69,7 +69,7 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
 
           <div
             ref={parentRef}
-            className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden"
+            className="-mr-4 min-h-0 w-auto flex-1 overflow-y-auto overflow-x-hidden pr-4"
           >
             {loading ? (
               <div className="space-y-2 px-2 pt-2">

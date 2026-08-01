@@ -157,9 +157,9 @@ export function ConversationSearchDialog() {
                     key={conversation.id}
                     value={conversation.id}
                     onSelect={() => handleSelect(conversation)}
-                    className="min-h-14 cursor-pointer touch-manipulation gap-3 rounded-xl px-3 py-2"
+                    className="group min-h-14 cursor-pointer touch-manipulation gap-3 rounded-xl px-3 py-2 data-[selected=true]:!bg-muted data-[selected=true]:!text-foreground"
                   >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground group-data-[selected=true]:bg-background group-data-[selected=true]:text-primary">
                       <MessageSquare className="h-4 w-4" aria-hidden="true" />
                     </span>
                     <span className="min-w-0 flex-1">
