@@ -186,3 +186,10 @@
 - base：`c285fef00de10eccd042cb94313727fa5ba2c3bb`；
 - execution：`codex/round-03-solo` 单一 Round worktree，连续执行 TASK-014～020、TASK-029；
 - boundary：不包含 push、部署、生产操作、破坏性数据操作或 ROUND-04 授权。
+
+### TASK-014 · accepted
+
+- commit：`5c9b0f6`；
+- result：建立递归 Space Folder、Markdown Document/Revision 与 Wiki Item/Revision/Source/Tombstone 的 Go/PostgreSQL 事实源，强制 user ID、稳定 ID、乐观锁、路径和删除不变量；
+- validation：`go test ./...` 通过；隔离 PostgreSQL 15 中验证干净/重复 Migration、目录环/冲突、跨用户隔离、Revision、遗忘/恢复/永久删除，以及文档删除与已确认 Wiki 生命周期独立；
+- risk：本 Task 尚无 HTTP/UI 入口；永久删除二次确认由后续 API/UI Task 强制。
