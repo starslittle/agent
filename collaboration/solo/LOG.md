@@ -233,3 +233,11 @@
 - validation：Python 全量 108 passed/2 skipped；Go 全包 passed；隔离 PostgreSQL 15 的真实 HTTP → Route → Supervisor → Event → Proposal integration passed，覆盖 Prompt injection fixture、失败不写、重试去重、新旧 Revision 追溯与隐藏 Conversation；前端 lint 0 errors（保留既有 8 warnings）和 build passed；
 - skills：`frontend-design` 保持启点文档式视觉，`ui-ux-pro-max` 将提取作为当前 Revision 的渐进次级操作，`web-design-guidelines` 约束语义控件、焦点、运行/失败 live 状态及只读候选展示；
 - risk：单次提取明确限制为 16,000 字符；冲突第一版按同 type/domain 已确认或过时条目提示，最终确认和编辑由 TASK-020 完成；真实 Provider 与 Browser 产品旅程进入 Round 唯一 E2E。
+
+### TASK-020 · completed
+
+- commit：`b15d8b3`；
+- result：在文档关联上下文与带 Run 的对话结果中复用同一 Proposal 审阅卡，提供接受、修改后接受、暂缓和拒绝，显示原建议/最终内容、当前 Wiki 原内容、来源片段、Document Revision、置信度与冲突，并保持刷新恢复、幂等和旧版本冲突保护；
+- validation：Go 全包 passed；隔离 PostgreSQL 15 的真实 HTTP integration passed，覆盖原样/修改接受、暂缓、拒绝、重复提交、Run 筛选、详情原内容、Revision 冲突、认证/CSRF 和跨用户隔离；前端 61 tests passed、lint 0 errors（保留既有 8 warnings）与 production build passed；
+- skills：`frontend-design` 保持启点文档式低噪声视觉；`ui-ux-pro-max` 采用渐进披露与四个显式决定；`web-design-guidelines` 约束语义按钮、焦点、44px 触控、live 状态、危险操作确认和失败恢复；
+- risk：当前产品只有文档提取实际创建 Proposal；对话结果已支持带 Run provenance 的候选但未新增另一条创建链路，真实键盘/移动端与刷新场景进入 Round 唯一 E2E。
