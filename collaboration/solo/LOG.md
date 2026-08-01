@@ -218,3 +218,10 @@
 - validation：Go 全包 passed；隔离 PostgreSQL 15 的 Migration、嵌套层级、根目录导入、重复/冲突、幂等、失败回滚、跨用户和 Personal Space HTTP integration passed；前端 lint（仅既有 8 条 Fast Refresh warning）与 build passed；
 - skills：`frontend-design` 保持启点文件桌面与品牌视觉，`ui-ux-pro-max` 将流程拆成选择、预检、确认和结果，`web-design-guidelines` 约束键盘入口、44px 控件、焦点、aria-live/progressbar、长路径与移动端非拖放入口；
 - risk：文件夹浏览器 API 不承诺空目录和仅含不支持文件的目录；真实浏览器递归选择、取消上传与移动端场景进入 Round 唯一 E2E，保留既有 bundle 与 browserslist 警告。
+
+### TASK-018 · completed
+
+- commit：`e929602`；
+- result：建立 Go/PostgreSQL 拥有的 Wiki Update Proposal、pending/deferred 可处理状态机、接受/修改接受/暂缓/拒绝 API、同目标 superseded、双来源 Wiki Revision 事务与动作幂等审计；
+- validation：Go 全包 passed；隔离 PostgreSQL 15 的干净 Migration、原样/修改接受、Revision 冲突、失败回滚、重复和同键/异键并发、暂缓/拒绝、superseded、Fortune narrative 阻断、跨用户与 HTTP auth/CSRF integration passed；
+- risk：本 Task 不暴露 Proposal 创建 HTTP，Agent/提取只能经 Go 内部服务产生待确认项；Browser 确认 UI 与产品 E2E 留到 TASK-020 和 Round 唯一验收。

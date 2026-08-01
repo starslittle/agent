@@ -15,9 +15,10 @@ completed:
   - TASK-015
   - TASK-016
   - TASK-017
+  - TASK-018
 
-current_task: TASK-018
-next_task: TASK-019
+current_task: TASK-019
+next_task: TASK-020
 
 start_gate: explicit_user_instruction_to_start_or_continue_solo
 production_authorized: false
