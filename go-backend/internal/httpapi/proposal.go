@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -42,7 +43,16 @@ func (h *proposalHTTP) list(w http.ResponseWriter, r *http.Request) {
 	if value := strings.TrimSpace(r.URL.Query().Get("document_id")); value != "" {
 		documentID = &value
 	}
+	runID := strings.TrimSpace(r.URL.Query().Get("run_id"))
+	if len(runID) > 128 {
+		writeJSONError(w, http.StatusBadRequest, "invalid_proposal_query")
+		return
+	}
 	params := proposals.ListParams{UserID: session.User.ID, DocumentID: documentID, Limit: limit, Offset: offset}
+	if runID != "" {
+		params.Limit = 200
+		params.Offset = 0
+	}
 	if value := strings.TrimSpace(r.URL.Query().Get("status")); value != "" {
 		params.Statuses = strings.Split(value, ",")
 	}
@@ -51,7 +61,43 @@ func (h *proposalHTTP) list(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
-	writePrivateJSON(w, http.StatusOK, map[string]any{"items": items, "limit": limit, "offset": offset, "has_more": len(items) == limit})
+	hasMore := len(items) == limit
+	if runID != "" {
+		filtered := make([]proposals.Proposal, 0, len(items))
+		for _, item := range items {
+			if proposalRunID(item) == runID {
+				filtered = append(filtered, item)
+			}
+		}
+		start := offset
+		if start > len(filtered) {
+			start = len(filtered)
+		}
+		end := start + limit
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		hasMore = end < len(filtered)
+		items = filtered[start:end]
+	}
+	writePrivateJSON(w, http.StatusOK, map[string]any{"items": items, "limit": limit, "offset": offset, "has_more": hasMore})
+}
+
+func proposalRunID(proposal proposals.Proposal) string {
+	if proposal.SourceDetail == nil {
+		return ""
+	}
+	var detail struct {
+		RunID       string `json:"run_id"`
+		OriginRunID string `json:"origin_run_id"`
+	}
+	if json.Unmarshal([]byte(*proposal.SourceDetail), &detail) != nil {
+		return ""
+	}
+	if strings.TrimSpace(detail.RunID) != "" {
+		return strings.TrimSpace(detail.RunID)
+	}
+	return strings.TrimSpace(detail.OriginRunID)
 }
 
 func (h *proposalHTTP) detail(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +111,19 @@ func (h *proposalHTTP) detail(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, err)
 		return
 	}
-	writePrivateJSON(w, http.StatusOK, proposal)
+	var target any
+	if proposal.TargetItemID != nil {
+		detail, targetErr := h.service.Get(r.Context(), session.User.ID, *proposal.TargetItemID)
+		if targetErr != nil {
+			if !errors.Is(targetErr, wiki.ErrNotFound) && !errors.Is(targetErr, wiki.ErrDeleted) {
+				h.writeError(w, targetErr)
+				return
+			}
+		} else {
+			target = detail
+		}
+	}
+	writePrivateJSON(w, http.StatusOK, map[string]any{"proposal": proposal, "target": target})
 }
 
 func (h *proposalHTTP) resolve(w http.ResponseWriter, r *http.Request) {

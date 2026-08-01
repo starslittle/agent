@@ -11,8 +11,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createWikiItem, listWikiItems, type WikiItem, type WikiType } from "@/lib/wiki-api";
-import { listDocumentProposals, startDocumentExtraction, type DocumentProposal, type ExtractionRunStatus } from "@/lib/document-api";
+import { startDocumentExtraction, type ExtractionRunStatus } from "@/lib/document-api";
 import { getRunDetail } from "@/lib/run-api";
+import { listProposals, type ProposalResolution, type WikiProposal } from "@/lib/proposal-api";
+import { ProposalReviewCard } from "@/features/proposals/ProposalReviewCard";
+import { parseProposalSourceDetail } from "@/features/proposals/proposal-presentation";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const typeCopy: Record<WikiType, { label: string; icon: typeof Brain }> = {
   confirmed_fact: { label: "确认事实", icon: FileCheck2 },
@@ -41,8 +45,10 @@ export function DocumentContextPanel({ documentID, documentRevisionID, className
   const [extractionRun, setExtractionRun] = useState<{ id: string; status: ExtractionRunStatus } | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState("");
-  const [proposals, setProposals] = useState<DocumentProposal[]>([]);
+  const [proposals, setProposals] = useState<WikiProposal[]>([]);
   const [showPending, setShowPending] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [proposalReload, setProposalReload] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -64,8 +70,8 @@ export function DocumentContextPanel({ documentID, documentRevisionID, className
         if (disposed) return;
         setExtractionRun({ id: detail.run.id, status: detail.run.status });
         if (detail.run.status === "completed") {
-          const response = await listDocumentProposals(documentID);
-          if (!disposed) setProposals(response.items.filter((item) => item.document_revision_id === documentRevisionID));
+          const response = await listProposals({ documentID, limit: 100 });
+          if (!disposed) setProposals(response.items);
         }
       } catch (reason) {
         if (!disposed) setExtractionError(reason instanceof Error ? reason.message : "无法读取提取进度");
@@ -78,11 +84,11 @@ export function DocumentContextPanel({ documentID, documentRevisionID, className
 
   useEffect(() => {
     const controller = new AbortController();
-    void listDocumentProposals(documentID, controller.signal)
-      .then((response) => setProposals(response.items.filter((item) => item.document_revision_id === documentRevisionID)))
+    void listProposals({ documentID, limit: 100 }, controller.signal)
+      .then((response) => setProposals(response.items))
       .catch((reason: unknown) => { if ((reason as Error).name !== "AbortError") setExtractionError(reason instanceof Error ? reason.message : "无法读取待确认候选"); });
     return () => controller.abort();
-  }, [documentID, documentRevisionID]);
+  }, [documentID, documentRevisionID, proposalReload]);
 
   const extract = async () => {
     if (extracting) return;
@@ -99,9 +105,11 @@ export function DocumentContextPanel({ documentID, documentRevisionID, className
     }
   };
 
-  const proposalFlags = proposals.reduce((summary, proposal) => {
+  const actionableProposals = proposals.filter((proposal) => proposal.status === "pending" || proposal.status === "deferred");
+  const proposalHistory = proposals.filter((proposal) => proposal.status !== "pending" && proposal.status !== "deferred");
+  const proposalFlags = actionableProposals.reduce((summary, proposal) => {
     try {
-      const detail = JSON.parse(proposal.source_detail || "{}") as { low_confidence?: boolean; conflict_item_ids?: string[] };
+      const detail = parseProposalSourceDetail(proposal);
       if (detail.low_confidence) summary.low += 1;
       if ((detail.conflict_item_ids?.length || 0) > 0 || proposal.operation === "update") summary.conflicts += 1;
     } catch { /* malformed legacy details remain visible without derived flags */ }
@@ -110,6 +118,11 @@ export function DocumentContextPanel({ documentID, documentRevisionID, className
 
   const terminalFailure = extractionRun && ["cancelled", "failed", "timed_out"].includes(extractionRun.status);
   const runActive = extractionRun && ["queued", "running", "cancel_requested"].includes(extractionRun.status);
+
+  const proposalResolved = (result: ProposalResolution) => {
+    setProposals((current) => current.map((proposal) => proposal.id === result.proposal.id ? result.proposal : proposal));
+    if (result.proposal.status === "accepted") setRetry((value) => value + 1);
+  };
 
   const create = async () => {
     if (!content.trim() || saving) return;
@@ -148,8 +161,9 @@ export function DocumentContextPanel({ documentID, documentRevisionID, className
           </div>
           {extractionError && <p role="alert" className="mt-3 text-xs leading-5 text-destructive">{extractionError}</p>}
           {terminalFailure && !extractionError && <p role="status" className="mt-3 text-xs leading-5 text-destructive">本次提取未完成，没有写入文档或长期上下文。</p>}
-          {proposals.length > 0 && <div className="mt-3 rounded-lg bg-muted/60 p-3 text-xs"><p className="font-medium">{proposals.length} 条待确认候选</p><p className="mt-1 text-muted-foreground">{proposalFlags.conflicts} 条可能冲突 · {proposalFlags.low} 条低置信度</p><Button type="button" variant="link" size="sm" className="mt-1 h-auto px-0" onClick={() => setShowPending((value) => !value)}>{showPending ? "收起候选" : "查看待确认"}</Button></div>}
-          {showPending && <div className="mt-2 space-y-2">{proposals.map((proposal) => <div key={proposal.id} className="rounded-lg border bg-background p-3"><div className="flex items-center gap-2 text-xs font-medium"><span>{typeCopy[proposal.item_type].label}</span><span className="ml-auto text-muted-foreground">{proposal.operation === "update" ? "可能更新" : "新候选"}</span></div><p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">{proposal.proposed_content}</p></div>)}</div>}
+          {actionableProposals.length > 0 && <div className="mt-3 rounded-lg bg-muted/60 p-3 text-xs"><p className="font-medium">{actionableProposals.length} 条待你决定</p><p className="mt-1 text-muted-foreground">{proposalFlags.conflicts} 条可能冲突 · {proposalFlags.low} 条低置信度</p><Button type="button" variant="link" size="sm" className="mt-1 min-h-11 px-0" onClick={() => setShowPending((value) => !value)}>{showPending ? "收起候选" : "逐条确认"}</Button></div>}
+          {showPending && <div className="mt-2 space-y-2">{actionableProposals.map((proposal) => <ProposalReviewCard key={proposal.id} proposal={proposal} csrfToken={csrfToken} compact onResolved={proposalResolved} onReload={() => setProposalReload((value) => value + 1)} />)}</div>}
+          {proposalHistory.length > 0 && <Collapsible open={showHistory} onOpenChange={setShowHistory} className="mt-3"><CollapsibleTrigger asChild><Button type="button" variant="ghost" size="sm" className="min-h-11 w-full justify-between">处理记录（{proposalHistory.length}）<span aria-hidden="true">{showHistory ? "−" : "+"}</span></Button></CollapsibleTrigger><CollapsibleContent className="mt-2 space-y-2">{proposalHistory.map((proposal) => <ProposalReviewCard key={proposal.id} proposal={proposal} csrfToken={csrfToken} compact onResolved={proposalResolved} onReload={() => setProposalReload((value) => value + 1)} />)}</CollapsibleContent></Collapsible>}
         </div>
       </section>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3">

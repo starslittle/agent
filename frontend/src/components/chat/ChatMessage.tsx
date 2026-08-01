@@ -27,6 +27,7 @@ import {
   type SkillID,
   type SkillSelectionSource,
 } from "@/features/skills/skills";
+import { RunProposalList } from "@/features/proposals/RunProposalList";
 
 export type ChatRole = "user" | "assistant";
 
@@ -339,6 +340,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             </div>
           </section>
         )}
+        {!isUser && runID && status !== "pending" && status !== "streaming" && <RunProposalList runID={runID} />}
         {!isUser && confirmation && suggestedSkill && (
           <section className="mb-4 rounded-xl border border-primary/25 bg-primary/5 p-4" aria-label="需要确认 Skill">
             <div className="flex items-start gap-3">
