@@ -138,7 +138,7 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
                               aria-hidden="true"
                             />
                           )}
-                          <span className="w-full truncate text-sm font-semibold leading-4 text-sidebar-foreground">
+                          <span className="w-full truncate text-sm font-medium leading-4 text-sidebar-foreground/90">
                             {item.title}
                           </span>
                           {dateLabel && (
