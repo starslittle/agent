@@ -274,3 +274,13 @@
 - validation：Markdown 5 tests、`tsc --noEmit`、lint 0 errors（8 条既有 warning）及 production build passed；Browser 验证 1440px 当前目录栏和唯一返回入口、375px 目录抽屉、标题/列表语义与样式、无横向溢出 passed；
 - skills：`frontend-design` 保持启点文档式阅读与低噪声品牌层级；`ui-ux-pro-max` 分离常驻目录和按需上下文，保留可预测返回；`web-design-guidelines` 约束真实 Link、44px 控件、焦点、标题层级、长内容与移动端 overscroll；
 - risk：ROUND-03 服务端能力控制验收阻塞仍然存在，本修复不改变该结论。
+
+### TASK-015 E2E Fix · 全空间目录树
+
+- authorization：用户明确授权后续 ROUND-03 修正直接提交到 `main`，且小改动不执行 build；
+- commit：`fdbcff8`；
+- result：completed；
+- summary：文档页左侧从“当前文件夹直接子项”升级为整个“我的空间”目录树；根目录常驻、文件夹原位展开、当前文档路径自动展开，支持跨目录直接切换文档与单层分页继续加载，不再要求逐级返回；移动端复用同一目录树抽屉；
+- validation：`tsc --noEmit`、针对性 ESLint、全量 lint（0 errors，保留既有 8 warnings）、Markdown 5 tests、Vite 实时转译检查通过；本地页面控制因旧连接失败页触发 URL 安全策略，未执行该次真实视觉复验；按用户要求未执行 build；
+- skills：`frontend-design` 保持启点低噪声文档视觉和浅绿色选中态；`ui-ux-pro-max` 采用懒加载树与当前路径自动展开降低返回成本；`web-design-guidelines` 约束语义 Link/Button、`aria-expanded`、44px 触控、焦点、动效降级、长名称截断和加载/错误/空状态；
+- risk：ROUND-03 服务端能力控制验收阻塞仍然存在；本修复不 push、不部署，也不改变 Space API 或数据模型。
