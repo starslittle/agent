@@ -324,3 +324,12 @@
 - result：`run.resolved` 与已冻结 Run metadata 统一携带直接 Capability 及参数，避免天气路由在事件投影时被误判为 Skill resolution 冲突；
 - validation：协议/Runtime 相关 12 tests passed；真实开发页面“杭州天气怎么样”Run 完成并执行 1 次天气工具，返回结构化实时天气；
 - risk：无；未修改前端、未 build、未 push 或部署。
+
+### TASK-015 E2E Fix · 侧栏字号与发送箭头
+
+- authorization：用户要求参考 GPT、豆包提高侧栏文字可读性，并将发送按钮改为向上箭头；继续按 ROUND-03 修正直接提交到 `main`，明确不执行 build；
+- commit：本提交；
+- result：一级导航、新建对话、历史对话标题与账户名统一为 14px，分组及辅助信息统一为 12px，现有桌面/移动端行高与虚拟列表密度不变；发送按钮改为品牌色圆形向上箭头，停止、加载和禁用状态保持原逻辑；
+- validation：`tsc --noEmit`、针对性 ESLint、`git diff --check` 通过；按用户要求未执行 build，也未重复产品级 Browser E2E；
+- skills：`frontend-design` 保留启点品牌色和简洁工作区视觉；`ui-ux-pro-max` 提高主次文字可读性且不牺牲信息密度；`web-design-guidelines` 保留语义按钮、可访问名称、装饰图标隐藏、键盘焦点与 44px 触控尺寸；
+- risk：仅调整前端字号和发送图标，不修改接口、路由、聊天发送或停止行为；未 push、部署。

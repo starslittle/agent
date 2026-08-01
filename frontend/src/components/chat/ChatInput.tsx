@@ -8,7 +8,7 @@ import {
   type SkillID,
 } from "@/features/skills/skills";
 import { useSkillCatalog } from "@/features/skills/skill-catalog-context";
-import { ChevronRight, LoaderCircle, Send, Sparkles, Square, X } from "lucide-react";
+import { ArrowUp, ChevronRight, LoaderCircle, Sparkles, Square, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 interface ChatInputProps {
@@ -228,7 +228,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             type="button"
             disabled={stopping || (loading && !canStop) || (!loading && (sending || !value.trim()))}
             onClick={loading && canStop ? onStop : handleSend}
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground transition-[background-color,transform,opacity] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transform-none"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-[background-color,transform,opacity] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transform-none"
             title={actionLabel}
             aria-label={actionLabel}
           >
@@ -239,7 +239,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             ) : loading ? (
               <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
             ) : (
-              <Send className="h-4 w-4" aria-hidden="true" />
+              <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.25} aria-hidden="true" />
             )}
           </button>
         </div>

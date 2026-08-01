@@ -45,7 +45,7 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
         <button
           type="button"
           onClick={onNewChat}
-          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sidebar-ring/25 motion-reduce:transform-none sm:min-h-9"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sidebar-ring/25 motion-reduce:transform-none sm:min-h-9"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           新建对话
@@ -53,7 +53,7 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
       </div>
 
       <SidebarGroup className="min-h-0 flex-1 px-0 py-0">
-          <SidebarGroupLabel className="mb-1 px-2 text-[11px] font-medium">
+          <SidebarGroupLabel className="mb-1 px-2 text-xs font-medium">
             最近对话
           </SidebarGroupLabel>
 
@@ -69,10 +69,10 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
               </div>
             ) : conversations.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <p className="text-xs font-medium text-foreground">
+                <p className="text-sm font-medium text-foreground">
                   还没有历史对话
                 </p>
-                <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+                <p className="mt-1 text-xs leading-4 text-muted-foreground">
                   发送第一条消息后会自动保存
                 </p>
               </div>
@@ -115,7 +115,7 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
                           <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-lg", active ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground")}>
                             <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
                           </span>
-                          <span className="min-w-0 flex-1 truncate text-xs font-medium">{item.title}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.title}</span>
                         </button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

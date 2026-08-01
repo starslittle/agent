@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 import { ConversationSearchDialog } from "@/components/workspace/ConversationSearchDialog";
 
 const navigationLinkClass =
-  "flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-xs transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring sm:min-h-9";
+  "flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring sm:min-h-9";
 
 export function WorkspaceLoadingScreen({ label = "正在准备工作区…" }: { label?: string }) {
   return (
@@ -170,16 +170,16 @@ function WorkspaceAccountMenu() {
             {initial}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs font-medium">{displayName}</span>
-            <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{user.email}</span>
+            <span className="block truncate text-sm font-medium">{displayName}</span>
+            <span className="mt-0.5 block truncate text-xs text-muted-foreground">{user.email}</span>
           </span>
           <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-56">
         <DropdownMenuLabel className="min-w-0">
-          <span className="block truncate text-xs font-medium">{displayName}</span>
-          <span className="mt-1 block truncate text-[10px] font-normal text-muted-foreground">{user.email}</span>
+          <span className="block truncate text-sm font-medium">{displayName}</span>
+          <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">{user.email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="min-h-11" onSelect={() => void logout()}>
