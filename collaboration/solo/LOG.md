@@ -123,3 +123,12 @@
 - validation：前端 41 tests passed、lint 0 errors（8 条既有 warning）、production build passed；未登录 `/agent-runs` Browser 门禁跳转登录且未请求 Agent Runs API；
 - skills：延续 TASK-012 的启点视觉和响应式外壳，以用户问题“这次任务发生了什么”组织信息；状态控件、分页、深链接、44px 触控和错误/空/加载状态遵循 Web Guidelines；
 - risk：前端明确忽略 Prompt 集合、Span attributes 和 Event 原始 data，仅对白名单 Citation/Artifact 字段投影；真实完成/取消/失败 Run 的页面验收进入 Round E2E。
+
+### TASK-028
+
+- commit：`aa52418`；
+- result：completed；
+- summary：新增独立 `/api/v1/internal/agent-runs` 只读权限边界、`observability_admin` 角色、跨用户筛选/详情、fail-closed 访问审计与服务端脱敏投影；前端复用 Agent Runs 状态、时间线、Usage、Capability、Citation、Artifact 和 provenance 组件，普通用户无入口且稳定拒绝；
+- validation：Go 全包 passed；隔离 PostgreSQL Migration、跨用户筛选/详情及审计 integration passed；前端 46 tests passed、lint 0 errors（8 条既有 warning）、production build passed；Browser 覆盖普通用户拒绝、管理员组合/时间筛选、空状态、完成/取消/失败详情、审计、375/1440 响应式、无写操作和敏感字段不出现；
+- skills：`frontend-design` 与 `ui-ux-pro-max` 延续启点文档式信息层级，`web-design-guidelines` 推动显式标签、44px 控件、空/错/加载状态、移动端详情隐藏筛选区和管理员移动端入口；
+- risk：权限仅支持 `user`/`observability_admin` 两级且无产品内提权入口；生产授权与账号授予不在本轮范围；保留既有 bundle、browserslist 与 React Router warning。

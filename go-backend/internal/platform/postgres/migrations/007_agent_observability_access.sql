@@ -22,4 +22,3 @@ CREATE TABLE IF NOT EXISTS app_core.observability_access_audit_logs (
 
 CREATE INDEX IF NOT EXISTS observability_access_audit_actor_time_idx
     ON app_core.observability_access_audit_logs (actor_user_id, created_at DESC);
-

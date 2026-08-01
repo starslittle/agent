@@ -18,9 +18,10 @@ completed:
   - TASK-011
   - TASK-012
   - TASK-013
+  - TASK-028
 
-current_task: TASK-028
-next_task: ROUND-02-E2E
+current_task: ROUND-02-E2E
+next_task: ROUND-02-ACCEPTANCE
 
 start_gate: explicit_user_instruction_to_start_or_continue_solo
 production_authorized: false
