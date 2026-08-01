@@ -81,6 +81,48 @@ def test_registry_streams_terminal_run_and_reuses_idempotent_execution():
     asyncio.run(scenario())
 
 
+def test_registry_resolution_event_preserves_direct_capability():
+    class FakeRuntime:
+        async def describe_provenance(self, request):
+            return {
+                "selection_source": "direct",
+                "route_reason_code": "needs_current_sources",
+                "direct_capability": "get_weather",
+                "direct_capability_arguments": {"location": "杭州"},
+            }
+
+        async def stream(self, request, cancel_event):
+            yield "answer.delta", {"text": "ok"}
+
+        async def cancel(self, execution_id):
+            return None
+
+    async def scenario():
+        registry = ExecutionRegistry(FakeRuntime(), service_version="test")
+        request = AgentRunRequest(
+            execution_id="exec_weather",
+            run_id="run_weather",
+            request_id="req_weather",
+            idempotency_key="idem_weather",
+            conversation_id="conv_weather",
+            selection_source="direct",
+            route_reason_code="needs_current_sources",
+            direct_capability="get_weather",
+            direct_capability_arguments={"location": "杭州"},
+            query="杭州天气怎么样",
+        )
+        execution = await registry.start(request)
+        events = [event async for event in registry.events(execution)]
+        resolved = next(event for event in events if event.type == "run.resolved")
+
+        assert resolved.data["direct_capability"] == "get_weather"
+        assert resolved.data["direct_capability_arguments"] == {
+            "location": "杭州"
+        }
+
+    asyncio.run(scenario())
+
+
 def test_registry_can_cancel_before_runtime_starts():
     class SlowRuntime:
         async def stream(self, request, cancel_event):

@@ -283,6 +283,12 @@ class ExecutionRegistry:
                 "reason_code": execution.provenance.get(
                     "route_reason_code", "pre_resolved"
                 ),
+                "direct_capability": execution.provenance.get(
+                    "direct_capability"
+                ),
+                "direct_capability_arguments": execution.provenance.get(
+                    "direct_capability_arguments", {}
+                ),
             }
             await self._publish(execution, "run.resolved", resolution)
             await self._publish(

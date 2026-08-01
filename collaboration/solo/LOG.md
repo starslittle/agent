@@ -317,3 +317,10 @@
 - result：补齐 Python 路由结果经 Go Supervisor 冻结后回传 Python Runtime 的 `direct_capability` 与参数，并在 Run metadata 中保留恢复所需字段；天气等单一时效问题不再退化为无工具的直接回答；
 - validation：Python 相关 34 tests passed；Go `internal/agent`、`internal/runs`、`internal/platform/postgres` passed；Python 容器已识别 `get_weather` 字段，Go Gateway 已重启并恢复 healthy；
 - risk：未执行 Round 产品级 Browser E2E；未修改前端、未 build、未 push 或部署。
+
+### TASK-030 Fix · Resolution 事件一致性
+
+- commit：本提交；
+- result：`run.resolved` 与已冻结 Run metadata 统一携带直接 Capability 及参数，避免天气路由在事件投影时被误判为 Skill resolution 冲突；
+- validation：协议/Runtime 相关 12 tests passed；真实开发页面“杭州天气怎么样”Run 完成并执行 1 次天气工具，返回结构化实时天气；
+- risk：无；未修改前端、未 build、未 push 或部署。
