@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
-  Bot,
   ChevronUp,
   FolderClosed,
+  GitBranch,
   LogIn,
   LogOut,
   LoaderCircle,
@@ -108,7 +108,7 @@ function WorkspaceNav() {
             : "text-muted-foreground",
         )}
       >
-        <Bot className="h-4 w-4" aria-hidden="true" />
+        <GitBranch className="h-4 w-4" aria-hidden="true" />
         Agent Runs
       </Link>
       <Link

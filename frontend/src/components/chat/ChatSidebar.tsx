@@ -1,8 +1,7 @@
 import React, { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { Conversation } from "@/lib/chat-api";
-import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +17,37 @@ interface ChatSidebarProps {
   onRename: (conversation: Conversation) => void;
   onDelete: (conversation: Conversation) => void;
   loading?: boolean;
+}
+
+const monthDayFormatter = new Intl.DateTimeFormat("zh-CN", {
+  month: "long",
+  day: "numeric",
+});
+
+const fullDateFormatter = new Intl.DateTimeFormat("zh-CN", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+
+function formatConversationDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayDifference = Math.round(
+    (today.getTime() - targetDay.getTime()) / 86_400_000,
+  );
+
+  if (dayDifference === 0) {
+    const elapsed = now.getTime() - date.getTime();
+    return elapsed >= 0 && elapsed < 60_000 ? "刚刚" : "今天";
+  }
+  if (dayDifference === 1) return "昨天";
+  if (date.getFullYear() === now.getFullYear()) return monthDayFormatter.format(date);
+  return fullDateFormatter.format(date);
 }
 
 export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
@@ -74,6 +104,9 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
                 {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                   const item = conversations[virtualRow.index];
                   const active = item.id === activeConversationId;
+                  const dateLabel = formatConversationDate(
+                    item.last_message_at || item.updated_at,
+                  );
                   return (
                     <div
                       key={item.id}
@@ -97,12 +130,22 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
                         <button
                           type="button"
                           onClick={() => onSelect(item)}
-                          className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                          className="relative flex h-full min-w-0 flex-1 flex-col justify-center rounded-lg px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
                         >
-                          <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-lg", active ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground")}>
-                            <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+                          {active && (
+                            <span
+                              className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary"
+                              aria-hidden="true"
+                            />
+                          )}
+                          <span className="w-full truncate text-sm font-medium leading-4">
+                            {item.title}
                           </span>
-                          <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.title}</span>
+                          {dateLabel && (
+                            <span className="mt-0.5 w-full truncate text-[11px] leading-3 text-muted-foreground">
+                              {dateLabel}
+                            </span>
+                          )}
                         </button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
