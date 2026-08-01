@@ -168,3 +168,8 @@ go-backend/bin/
 go-backend/.tmp/
 go-backend/*.exe
 go-backend/coverage.out
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
