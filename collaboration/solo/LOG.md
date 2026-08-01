@@ -265,3 +265,12 @@
 - summary：主验收旅程、跨用户隔离、ROUND-02 Direct/Research/Fortune、会话搜索、Agent Runs、普通用户内部观测拒绝、空/过期 Context、Fortune 不自动写事实和 Skills 服务端一致性均通过；
 - validation：375、768、1024、1440px 下对话、空间、文档、Skills、Runs 共 20 个页面检查均无横向溢出，移动端导航抽屉和深链接可用；仓库检索确认 `personal_space_enabled`、`document_import_enabled`、`wiki_context_injection_enabled`、`wiki_proposal_write_enabled`、`skill_catalog_enabled` 没有 Runtime 实现；
 - risk：Round 文档要求分别执行能力关闭、数据保留与重新启用演练，但现有 Task 未定义这些跨服务服务端控制及授权路径；在用户决定新增纠偏 Task 或调整 Round 验收边界前，ROUND-03 不能标记为 accepted。
+
+### TASK-015 E2E Fix · 文档阅读体验
+
+- commit：`5e739ba`；
+- result：completed；
+- summary：恢复当前文件夹直接子项栏与明确父目录返回入口，移动端改用目录抽屉；关联上下文改为按需右侧抽屉；新增独立 Markdown 阅读样式并使用首个 H1 作为阅读标题，避免标题重复；
+- validation：Markdown 5 tests、`tsc --noEmit`、lint 0 errors（8 条既有 warning）及 production build passed；Browser 验证 1440px 当前目录栏和唯一返回入口、375px 目录抽屉、标题/列表语义与样式、无横向溢出 passed；
+- skills：`frontend-design` 保持启点文档式阅读与低噪声品牌层级；`ui-ux-pro-max` 分离常驻目录和按需上下文，保留可预测返回；`web-design-guidelines` 约束真实 Link、44px 控件、焦点、标题层级、长内容与移动端 overscroll；
+- risk：ROUND-03 服务端能力控制验收阻塞仍然存在，本修复不改变该结论。
