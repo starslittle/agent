@@ -1,6 +1,6 @@
 import React, { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { MessageSquare, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { Conversation } from "@/lib/chat-api";
 import { cn } from "@/lib/utils";
 import {
@@ -12,7 +12,6 @@ import {
 import { SidebarGroup, SidebarGroupLabel } from "@/components/ui/sidebar";
 
 interface ChatSidebarProps {
-  onNewChat: () => void;
   conversations: Conversation[];
   activeConversationId?: string | null;
   onSelect: (conversation: Conversation) => void;
@@ -22,7 +21,6 @@ interface ChatSidebarProps {
 }
 
 export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
-  onNewChat,
   conversations,
   activeConversationId,
   onSelect,
@@ -40,18 +38,7 @@ export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-col px-4 pb-3">
-      <div className="shrink-0 pb-3">
-        <button
-          type="button"
-          onClick={onNewChat}
-          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sidebar-ring/25 motion-reduce:transform-none sm:min-h-9"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          新建对话
-        </button>
-      </div>
-
+    <div className="flex h-full min-h-0 flex-col px-4 pb-3 pt-3">
       <SidebarGroup className="min-h-0 flex-1 px-0 py-0">
           <SidebarGroupLabel className="mb-1 px-2 text-xs font-medium">
             最近对话

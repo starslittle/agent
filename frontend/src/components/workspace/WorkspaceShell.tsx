@@ -35,6 +35,8 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { ConversationSearchDialog } from "@/components/workspace/ConversationSearchDialog";
+import { ChatSidebarContent } from "@/components/chat/ChatSidebar";
+import { useWorkspaceConversations } from "@/components/workspace/workspace-conversations-context";
 
 const navigationLinkClass =
   "flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring sm:min-h-9";
@@ -71,8 +73,9 @@ export function WorkspaceThemeToggle() {
 
 function WorkspaceNav() {
   const { user } = useAuth();
+  const { startNewChat } = useWorkspaceConversations();
   const location = useLocation();
-  const chatActive = location.pathname === "/" || location.pathname.startsWith("/chat/");
+  const newChatActive = location.pathname === "/";
   const runsActive = location.pathname.startsWith("/agent-runs");
   const spaceActive = location.pathname.startsWith("/space");
   const skillsActive = location.pathname.startsWith("/skills");
@@ -80,19 +83,21 @@ function WorkspaceNav() {
 
   return (
     <nav className="space-y-0.5" aria-label="工作区导航">
-      <Link
-        to="/"
-        aria-current={chatActive ? "page" : undefined}
+      <button
+        type="button"
+        onClick={startNewChat}
+        aria-current={newChatActive ? "page" : undefined}
         className={cn(
+          "w-full text-left",
           navigationLinkClass,
-          chatActive
+          newChatActive
             ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
             : "text-muted-foreground",
         )}
       >
         <MessageSquare className="h-4 w-4" aria-hidden="true" />
-        对话
-      </Link>
+        新对话
+      </button>
       <Link
         to="/agent-runs"
         aria-current={runsActive ? "page" : undefined}
@@ -193,6 +198,25 @@ function WorkspaceAccountMenu() {
 
 function WorkspaceSidebar({ content }: { content?: ReactNode }) {
   const { user } = useAuth();
+  const {
+    conversations,
+    loading,
+    activeConversationId,
+    selectConversation,
+    renameConversation,
+    deleteConversation,
+  } = useWorkspaceConversations();
+
+  const conversationContent = user ? (
+    <ChatSidebarContent
+      conversations={conversations}
+      activeConversationId={activeConversationId}
+      onSelect={selectConversation}
+      onRename={(conversation) => void renameConversation(conversation)}
+      onDelete={(conversation) => void deleteConversation(conversation)}
+      loading={loading}
+    />
+  ) : null;
 
   return (
     <Sidebar variant="sidebar" className="border-r border-sidebar-border bg-sidebar">
@@ -209,7 +233,7 @@ function WorkspaceSidebar({ content }: { content?: ReactNode }) {
         </div>
         <WorkspaceNav />
       </SidebarHeader>
-      <SidebarContent className="overflow-hidden">{content}</SidebarContent>
+      <SidebarContent className="overflow-hidden">{content ?? conversationContent}</SidebarContent>
       {user && (
         <SidebarFooter className="px-4 pb-3 pt-2">
           <WorkspaceAccountMenu />

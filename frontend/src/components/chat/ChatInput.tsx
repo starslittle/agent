@@ -35,6 +35,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const { skills, loading: skillsLoading, error: skillsError, reload: reloadSkills } = useSkillCatalog();
   const taRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const preselectedRef = useRef<string | null>(null);
 
   const slashQuery = value.startsWith("/") ? value.slice(1).split(/\s/, 1)[0] : "";
@@ -69,6 +70,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (value.startsWith("/") && !selectedSkill) setMenuOpen(true);
   }, [selectedSkill, slashQuery, value]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (menuRef.current?.contains(target) || menuTriggerRef.current?.contains(target)) return;
+      setMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [menuOpen]);
+
   const chooseSkill = (skillID: SkillID) => {
     const next = selectComposerSkill({ selectedSkill, value }, skillID);
     setSelectedSkill(next.selectedSkill);
@@ -90,6 +105,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
+    if (menuOpen && event.key === "Escape") {
+      event.preventDefault();
+      setMenuOpen(false);
+      return;
+    }
+
     if (menuOpen && filteredSkills.length > 0) {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
@@ -97,11 +118,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         setActiveIndex((current) =>
           (current + direction + filteredSkills.length) % filteredSkills.length,
         );
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setMenuOpen(false);
         return;
       }
       if (event.key === "Enter" && !event.shiftKey) {
@@ -200,6 +216,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
         <div className="flex items-end gap-2">
           <button
+            ref={menuTriggerRef}
             type="button"
             onClick={() => setMenuOpen((current) => !current)}
             className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

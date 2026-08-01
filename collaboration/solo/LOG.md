@@ -333,3 +333,19 @@
 - validation：`tsc --noEmit`、针对性 ESLint、`git diff --check` 通过；按用户要求未执行 build，也未重复产品级 Browser E2E；
 - skills：`frontend-design` 保留启点品牌色和简洁工作区视觉；`ui-ux-pro-max` 提高主次文字可读性且不牺牲信息密度；`web-design-guidelines` 保留语义按钮、可访问名称、装饰图标隐藏、键盘焦点与 44px 触控尺寸；
 - risk：仅调整前端字号和发送图标，不修改接口、路由、聊天发送或停止行为；未 push、部署。
+
+### TASK-015 E2E Fix · Skill 菜单点击外部关闭
+
+- commit：本提交；
+- result：Skill 选择菜单打开后，点击菜单和 `/` 触发器之外的区域会立即关闭；弹层内部选择与按钮切换保持正常，Escape 在空结果状态下也可关闭；
+- validation：`tsc --noEmit`、针对性 ESLint、`git diff --check` 通过；按用户要求未执行 build，也未重复产品级 Browser E2E；
+- skills：保持轻量浮层视觉不变，按可预期的渐进披露交互补齐 outside-click，并保留语义按钮、焦点状态、键盘 Escape 与事件监听清理；
+- risk：无；未修改 Skill 选择语义、聊天发送逻辑、接口或服务端，未 push、部署。
+
+### TASK-015 E2E Fix · 全局对话侧栏
+
+- commit：本提交；
+- result：对话列表提升为认证工作区共享状态，切换 Agent Runs、我的空间、Skills 与内部观测时继续显示；一级“对话”入口改为“新对话”，替代重复的绿色按钮，并可在已处于根路由时重置当前草稿；当前会话只在历史列表中高亮；
+- validation：`tsc --noEmit`、相关前端文件 ESLint、`git diff --check` 通过；按用户要求未执行 build，也未重复产品级 Browser E2E；
+- skills：`frontend-design` 保持启点侧栏视觉连续；`ui-ux-pro-max` 将导航与历史对话拆为稳定全局层和独立内容层；`web-design-guidelines` 保留语义动作/导航、键盘焦点、44px 触控目标、虚拟列表和长标题截断；
+- risk：首次登录仍需正常请求一次对话列表；路由切换复用内存状态，不新增接口或服务端写入；未 push、部署。

@@ -17,6 +17,7 @@ import DocumentPage from "./pages/DocumentPage";
 import ContextItemPage from "./pages/ContextItemPage";
 import SkillsPage from "./pages/SkillsPage";
 import { SkillCatalogProvider } from "./features/skills/SkillCatalogProvider";
+import { WorkspaceConversationsProvider } from "./components/workspace/WorkspaceConversationsProvider";
 
 const queryClient = new QueryClient();
 
@@ -28,7 +29,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-            <SkillCatalogProvider><Routes>
+            <SkillCatalogProvider><WorkspaceConversationsProvider><Routes>
               <Route path="/login" element={<AuthPage />} />
               <Route path="/register" element={<AuthPage />} />
               <Route path="/" element={<Index />} />
@@ -83,7 +84,7 @@ const App = () => (
                 element={<ObservabilityRoute><AgentObservabilityPage /></ObservabilityRoute>}
               />
               <Route path="*" element={<NotFound />} />
-            </Routes></SkillCatalogProvider>
+            </Routes></WorkspaceConversationsProvider></SkillCatalogProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

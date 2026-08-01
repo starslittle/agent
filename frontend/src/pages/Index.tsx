@@ -1,14 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import ChatContainer from "@/components/chat/ChatContainer";
-import { ChatSidebarContent } from "@/components/chat/ChatSidebar";
 import { WorkspaceLoadingScreen, WorkspaceShell } from "@/components/workspace/WorkspaceShell";
+import { useWorkspaceConversations } from "@/components/workspace/workspace-conversations-context";
 import { useAuth } from "@/auth/AuthProvider";
 import {
-  deleteConversation,
   getConversation,
-  listConversations,
   listMessages,
-  renameConversation,
   type Conversation,
   type StoredMessage,
 } from "@/lib/chat-api";
@@ -63,39 +60,21 @@ function WorkspacePreview() {
 }
 
 const Index = () => {
-  const { user, csrfToken, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { conversationId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const {
+    conversations,
+    newChatVersion,
+    refreshConversations,
+    upsertConversation,
+  } = useWorkspaceConversations();
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
   const [initialMessages, setInitialMessages] = useState<StoredMessage[]>([]);
-  const [listLoading, setListLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(Boolean(conversationId));
   const [earlierCursor, setEarlierCursor] = useState<number | null>(null);
   const [earlierLoading, setEarlierLoading] = useState(false);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
-  const [draftKey, setDraftKey] = useState(0);
-
-  const refreshConversations = useCallback(async () => {
-    if (!user) return;
-    try {
-      const response = await listConversations();
-      setConversations(response.items);
-    } catch (error) {
-      toast.error((error as Error).message || "无法加载会话列表");
-    } finally {
-      setListLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) {
-      setListLoading(false);
-      return;
-    }
-    setListLoading(true);
-    void refreshConversations();
-  }, [refreshConversations, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,55 +160,10 @@ const Index = () => {
     }
   }, [conversationId, earlierCursor, earlierLoading]);
 
-  const handleNewChat = useCallback(() => {
-    setActiveConversation(null);
-    setInitialMessages([]);
-    setEarlierCursor(null);
-    setLoadedConversationId(null);
-    setMessagesLoading(false);
-    setDraftKey((current) => current + 1);
-    navigate("/");
-  }, [navigate]);
-
   const handleConversationCreated = useCallback((conversation: Conversation) => {
-    setConversations((current) => [
-      conversation,
-      ...current.filter((item) => item.id !== conversation.id),
-    ]);
+    upsertConversation(conversation);
     navigate(`/chat/${conversation.id}`, { replace: true });
-  }, [navigate]);
-
-  const handleRename = useCallback(async (conversation: Conversation) => {
-    const title = window.prompt("为这段对话输入新标题", conversation.title)?.trim();
-    if (!title || title === conversation.title) return;
-    try {
-      const updated = await renameConversation(conversation.id, title, csrfToken);
-      setConversations((current) =>
-        current.map((item) => item.id === updated.id ? { ...item, ...updated } : item),
-      );
-      if (activeConversation?.id === updated.id) {
-        setActiveConversation(updated);
-      }
-    } catch (error) {
-      toast.error((error as Error).message || "重命名失败");
-    }
-  }, [activeConversation?.id, csrfToken]);
-
-  const handleDelete = useCallback(async (conversation: Conversation) => {
-    if (!window.confirm(`确定删除“${conversation.title}”吗？`)) return;
-    try {
-      await deleteConversation(conversation.id, csrfToken);
-      setConversations((current) =>
-        current.filter((item) => item.id !== conversation.id),
-      );
-      if (conversation.id === conversationId) {
-        handleNewChat();
-      }
-      toast.success("会话已删除");
-    } catch (error) {
-      toast.error((error as Error).message || "删除失败");
-    }
-  }, [conversationId, csrfToken, handleNewChat]);
+  }, [navigate, upsertConversation]);
 
   if (authLoading) {
     return <WorkspaceLoadingScreen />;
@@ -237,9 +171,9 @@ const Index = () => {
 
   if (!user) return <WorkspacePreview />;
 
-  const displayedConversation = conversationId &&
-    activeConversation?.id === conversationId
-    ? activeConversation
+  const displayedConversation = conversationId
+    ? conversations.find((conversation) => conversation.id === conversationId) ??
+      (activeConversation?.id === conversationId ? activeConversation : null)
     : null;
   const isConversationLoading = Boolean(conversationId) &&
     (messagesLoading || loadedConversationId !== conversationId);
@@ -249,17 +183,6 @@ const Index = () => {
       title={displayedConversation?.title || "新的对话"}
       subtitle="与启点一起梳理问题、研究信息和执行任务"
       mainId="workspace-main"
-      sidebarContent={(
-        <ChatSidebarContent
-          onNewChat={handleNewChat}
-          conversations={conversations}
-          activeConversationId={conversationId}
-          onSelect={(conversation) => navigate(`/chat/${conversation.id}`)}
-          onRename={(conversation) => void handleRename(conversation)}
-          onDelete={(conversation) => void handleDelete(conversation)}
-          loading={listLoading}
-        />
-      )}
     >
       {isConversationLoading ? (
         <div className="relative z-10 flex h-full items-center justify-center text-muted-foreground">
@@ -268,7 +191,7 @@ const Index = () => {
         </div>
       ) : (
         <ChatContainer
-          key={conversationId || `new-conversation-${draftKey}`}
+          key={conversationId || `new-conversation-${newChatVersion}`}
           conversationId={conversationId}
           initialMessages={
             conversationId && loadedConversationId === conversationId
