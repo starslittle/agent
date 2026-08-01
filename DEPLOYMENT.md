@@ -36,11 +36,22 @@ Copy-Item .env.example .env
 ## 开发
 
 ```powershell
-docker compose -f docker-compose.dev.yml up --build
+.\start.bat
+```
+
+默认使用宿主机 Vite 连接 Docker Gateway：脚本会读取 `.env` 中的 `PORT`，停止可能
+占用 `5173` 的 Docker 前端，只在 Docker 中启动 Gateway 及其 Python、PostgreSQL、
+Redis 依赖，然后在宿主机启动前端。前端请求仍通过 Vite Proxy 进入 Go，浏览器不
+直连 Python。
+
+容器化前端保留为回退方式：
+
+```powershell
+docker compose -f docker-compose.dev.yml up -d --wait frontend
 ```
 
 - 前端：`http://localhost:5173`
-- Go：`http://localhost:8000`
+- Go：`http://localhost:<.env 中的 PORT>`，默认 `8000`
 - Adminer：`http://127.0.0.1:8082`
 
 Adminer 必须选择 `PostgreSQL`，服务器为 `postgres`。它只在开发 Compose 中存在，

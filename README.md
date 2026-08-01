@@ -42,13 +42,35 @@ Legacy 入口只负责协议兼容，不包含第二套 Graph、模型或工具�
 
 ```powershell
 Copy-Item .env.example .env
-docker compose -f docker-compose.dev.yml up --build
+.\start.bat
+```
+
+默认开发模式是“Docker 后端 + 宿主机 Vite”：Go、Python、PostgreSQL 和 Redis
+运行在 Docker 中，前端在宿主机运行并通过 `VITE_PROXY_TARGET` 代理到 Go Gateway。
+这样可以保留后端环境一致性，同时避免 Windows Docker bind mount 影响前端 HMR。
+
+手动启动等价命令：
+
+```powershell
+docker compose -f docker-compose.dev.yml stop frontend
+docker compose -f docker-compose.dev.yml up -d --wait gateway
+
+$gatewayPort = ((Get-Content .env | Select-String '^PORT=').Line -split '=', 2)[1]
+Set-Location frontend
+$env:VITE_PROXY_TARGET = "http://127.0.0.1:$gatewayPort"
+npm run dev -- --host 0.0.0.0
+```
+
+需要回退到容器化前端时，执行：
+
+```powershell
+docker compose -f docker-compose.dev.yml up -d --wait frontend
 ```
 
 服务地址：
 
 - 前端：`http://localhost:5173`
-- Go 网关：`http://localhost:8000`
+- Go 网关：`http://localhost:<.env 中的 PORT>`，默认 `8000`
 - Adminer：`http://127.0.0.1:8082`
 
 Adminer 登录时必须选择 `PostgreSQL`，服务器填写 `postgres`，其余字段使用
