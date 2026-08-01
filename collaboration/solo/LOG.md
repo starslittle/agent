@@ -310,3 +310,10 @@
 - result：统一助手默认仍为零工具调用，Root Resolver 可为单一时效问题选择一次当前日期、结构化天气或联网搜索；多来源问题进入 v2“联网调研”，首轮检索按 0/1/N 预算执行；`tavily_search` 保留历史兼容，聊天与调研的模型推理由服务端 Profile 分别关闭/启用；
 - validation：`uvx ruff check agent tests` passed；Python 全量 119 passed/2 skipped；覆盖零工具、日期 Schema、天气数据、单次搜索 Citation、失败降级、Research 0/1/N、旧工具名兼容、Prompt 哈希和 provenance；未修改前端/Go，未执行 build、Browser E2E、push 或部署；
 - risk：实时搜索仍依赖现有 Tavily 凭据，天气依赖 Open-Meteo 可用性；真实 Provider 路由质量与页面回归并入 Round 验收。ROUND-03 原有五项服务端能力控制验收阻塞仍未解除。
+
+### TASK-030 Fix · 直接 Capability 协议透传
+
+- commit：本提交；
+- result：补齐 Python 路由结果经 Go Supervisor 冻结后回传 Python Runtime 的 `direct_capability` 与参数，并在 Run metadata 中保留恢复所需字段；天气等单一时效问题不再退化为无工具的直接回答；
+- validation：Python 相关 34 tests passed；Go `internal/agent`、`internal/runs`、`internal/platform/postgres` passed；Python 容器已识别 `get_weather` 字段，Go Gateway 已重启并恢复 healthy；
+- risk：未执行 Round 产品级 Browser E2E；未修改前端、未 build、未 push 或部署。

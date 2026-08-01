@@ -11,6 +11,7 @@ from agent.skills.protocol import SelectionSource
 
 PROTOCOL_VERSION = 1
 TERMINAL_STATUSES = frozenset({"completed", "cancelled", "failed", "timed_out"})
+DirectCapability = Literal["get_current_date", "get_weather", "web_search"]
 
 
 class RunStatus(StrEnum):
@@ -156,6 +157,11 @@ class AgentRunRequest(BaseModel):
         default=None,
         pattern=r"^[a-z][a-z0-9_]{0,63}$",
     )
+    direct_capability: DirectCapability | None = None
+    direct_capability_arguments: dict[str, Any] = Field(
+        default_factory=dict,
+        max_length=16,
+    )
     context_package_id: str | None = Field(default=None, max_length=128)
     context_package: ContextPackage | None = None
     mode: str | None = Field(default=None, max_length=64)
@@ -229,6 +235,15 @@ class AgentRunRequest(BaseModel):
                 or self.suggested_skill is None
             ):
                 raise ValueError("invalid confirmation-only skill resolution")
+        if self.direct_capability is None:
+            if self.direct_capability_arguments:
+                raise ValueError("direct capability arguments require a capability")
+        elif (
+            self.selection_source != "direct"
+            or self.resolved_skills
+            or self.route_requires_confirmation
+        ):
+            raise ValueError("direct capability requires a direct route")
         if self.context_package is not None:
             if self.context_package_id != self.context_package.package_id:
                 raise ValueError("context package id mismatch")

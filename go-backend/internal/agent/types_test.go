@@ -170,6 +170,29 @@ func TestParseSkillResolutionRejectsInconsistentProjection(t *testing.T) {
 	}
 }
 
+func TestParseSkillResolutionPreservesDirectCapability(t *testing.T) {
+	resolution, err := ParseSkillResolution(json.RawMessage(`{
+		"model_id":"auto",
+		"requested_skill":null,
+		"resolved_skills":[],
+		"primary_skill":null,
+		"selection_source":"direct",
+		"skill_snapshot":null,
+		"model_snapshot":{"model_id":"auto"},
+		"context_package_id":null,
+		"direct_capability":"get_weather",
+		"direct_capability_arguments":{"location":"杭州"}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolution.DirectCapability == nil ||
+		*resolution.DirectCapability != "get_weather" ||
+		resolution.DirectCapabilityArgs["location"] != "杭州" {
+		t.Fatalf("resolution = %#v", resolution)
+	}
+}
+
 func TestParseSkillResolutionAcceptsConfirmationOnlyProjection(t *testing.T) {
 	resolution, err := ParseSkillResolution(json.RawMessage(`{
 		"model_id":"auto",

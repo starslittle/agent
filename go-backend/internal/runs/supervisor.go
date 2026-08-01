@@ -382,6 +382,8 @@ func (s *Supervisor) consume(
 		RouteConfidence:      resolution.Confidence,
 		RouteRequiresConfirm: resolution.RequiresConfirm,
 		RouteReasonCode:      resolution.ReasonCode,
+		DirectCapability:     resolution.DirectCapability,
+		DirectCapabilityArgs: resolution.DirectCapabilityArgs,
 		Query:                claim.UserMessage.Content,
 		Messages:             messages,
 		DeadlineMS:           s.options.RunDeadline.Milliseconds(),
@@ -587,7 +589,12 @@ func resolutionFromRun(run conversation.Run) agent.SkillResolution {
 		source = *run.SelectionSource
 	}
 	confidence := 1.0
-	return agent.SkillResolution{ModelID: run.ModelID, RequestedSkill: run.RequestedSkill, ResolvedSkills: resolved, PrimarySkill: run.PrimarySkill, SelectionSource: source, ContextPackageID: run.ContextPackageID, Confidence: &confidence, ReasonCode: "pre_resolved", ModelSnapshot: json.RawMessage(`{"model_id":"auto"}`)}
+	var frozen struct {
+		DirectCapability     *string        `json:"direct_capability"`
+		DirectCapabilityArgs map[string]any `json:"direct_capability_arguments"`
+	}
+	_ = json.Unmarshal(run.Metadata, &frozen)
+	return agent.SkillResolution{ModelID: run.ModelID, RequestedSkill: run.RequestedSkill, ResolvedSkills: resolved, PrimarySkill: run.PrimarySkill, SelectionSource: source, ContextPackageID: run.ContextPackageID, Confidence: &confidence, ReasonCode: "pre_resolved", ModelSnapshot: json.RawMessage(`{"model_id":"auto"}`), DirectCapability: frozen.DirectCapability, DirectCapabilityArgs: frozen.DirectCapabilityArgs}
 }
 
 func resolutionAgentName(resolution agent.SkillResolution) string {

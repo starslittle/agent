@@ -75,6 +75,8 @@ type RunRequest struct {
 	RouteConfidence      *float64                `json:"route_confidence,omitempty"`
 	RouteRequiresConfirm bool                    `json:"route_requires_confirmation"`
 	RouteReasonCode      string                  `json:"route_reason_code"`
+	DirectCapability     *string                 `json:"direct_capability,omitempty"`
+	DirectCapabilityArgs map[string]any          `json:"direct_capability_arguments,omitempty"`
 	Mode                 string                  `json:"mode,omitempty"`
 	Query                string                  `json:"query"`
 	Messages             []Message               `json:"messages"`
@@ -260,23 +262,34 @@ func (r RunRequest) Validate() error {
 			return errors.New("context package requires matching frozen resolution")
 		}
 	}
+	if err := validateDirectCapability(
+		r.DirectCapability,
+		r.DirectCapabilityArgs,
+		r.ResolvedSkills,
+		valueOrEmpty(r.SelectionSource),
+		r.RouteRequiresConfirm,
+	); err != nil {
+		return err
+	}
 	return nil
 }
 
 type SkillResolution struct {
-	ModelID          string           `json:"model_id"`
-	RequestedSkill   *string          `json:"requested_skill"`
-	ResolvedSkills   []string         `json:"resolved_skills"`
-	PrimarySkill     *string          `json:"primary_skill"`
-	SelectionSource  string           `json:"selection_source"`
-	SkillSnapshot    json.RawMessage  `json:"skill_snapshot"`
-	ModelSnapshot    json.RawMessage  `json:"model_snapshot"`
-	ContextPackageID *string          `json:"context_package_id"`
-	SuggestedSkill   *string          `json:"suggested_skill"`
-	Confidence       *float64         `json:"confidence"`
-	RequiresConfirm  bool             `json:"requires_confirmation"`
-	ReasonCode       string           `json:"reason_code"`
-	RouteUsage       map[string]int64 `json:"route_usage,omitempty"`
+	ModelID              string           `json:"model_id"`
+	RequestedSkill       *string          `json:"requested_skill"`
+	ResolvedSkills       []string         `json:"resolved_skills"`
+	PrimarySkill         *string          `json:"primary_skill"`
+	SelectionSource      string           `json:"selection_source"`
+	SkillSnapshot        json.RawMessage  `json:"skill_snapshot"`
+	ModelSnapshot        json.RawMessage  `json:"model_snapshot"`
+	ContextPackageID     *string          `json:"context_package_id"`
+	SuggestedSkill       *string          `json:"suggested_skill"`
+	Confidence           *float64         `json:"confidence"`
+	RequiresConfirm      bool             `json:"requires_confirmation"`
+	ReasonCode           string           `json:"reason_code"`
+	DirectCapability     *string          `json:"direct_capability,omitempty"`
+	DirectCapabilityArgs map[string]any   `json:"direct_capability_arguments,omitempty"`
+	RouteUsage           map[string]int64 `json:"route_usage,omitempty"`
 }
 
 func ParseSkillResolution(raw json.RawMessage) (SkillResolution, error) {
@@ -337,7 +350,55 @@ func ParseSkillResolution(raw json.RawMessage) (SkillResolution, error) {
 	if resolution.RequiresConfirm && resolution.ReasonCode == "" {
 		return SkillResolution{}, errors.New("confirmation reason is required")
 	}
+	if err := validateDirectCapability(
+		resolution.DirectCapability,
+		resolution.DirectCapabilityArgs,
+		resolution.ResolvedSkills,
+		resolution.SelectionSource,
+		resolution.RequiresConfirm,
+	); err != nil {
+		return SkillResolution{}, err
+	}
 	return resolution, nil
+}
+
+var allowedDirectCapabilities = map[string]bool{
+	"get_current_date": true,
+	"get_weather":      true,
+	"web_search":       true,
+}
+
+func validateDirectCapability(
+	capability *string,
+	arguments map[string]any,
+	resolvedSkills []string,
+	selectionSource string,
+	requiresConfirmation bool,
+) error {
+	if capability == nil {
+		if len(arguments) != 0 {
+			return errors.New("direct capability arguments require a capability")
+		}
+		return nil
+	}
+	if !allowedDirectCapabilities[*capability] {
+		return errors.New("unknown direct capability")
+	}
+	if len(resolvedSkills) != 0 || selectionSource != "direct" || requiresConfirmation {
+		return errors.New("direct capability requires a direct route")
+	}
+	encoded, err := json.Marshal(arguments)
+	if err != nil || len(encoded) > 8192 {
+		return errors.New("invalid direct capability arguments")
+	}
+	return nil
+}
+
+func valueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 type Event struct {

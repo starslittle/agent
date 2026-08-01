@@ -1029,6 +1029,13 @@ func sealSkillResolution(
 		skillSnapshot = "{}"
 	}
 	modelSnapshot := string(resolution.ModelSnapshot)
+	directCapabilityMetadata, err := json.Marshal(map[string]any{
+		"direct_capability":           resolution.DirectCapability,
+		"direct_capability_arguments": resolution.DirectCapabilityArgs,
+	})
+	if err != nil {
+		return err
+	}
 	command, err := transaction.Exec(ctx, `
 		UPDATE app_core.agent_runs
 		SET resolved_skills = CASE
@@ -1054,6 +1061,10 @@ func sealSkillResolution(
 			context_package_id = CASE
 				WHEN resolved_skills IS NULL THEN $9::uuid
 				ELSE context_package_id
+			END,
+			metadata = CASE
+				WHEN resolved_skills IS NULL THEN metadata || $10::jsonb
+				ELSE metadata
 			END
 		WHERE id = $1
 			AND model_id = $2
@@ -1066,6 +1077,7 @@ func sealSkillResolution(
 					AND skill_snapshot = $7::jsonb
 					AND model_snapshot = $8::jsonb
 					AND context_package_id::text IS NOT DISTINCT FROM $9::text
+					AND metadata @> $10::jsonb
 				)
 			)
 	`,
@@ -1078,6 +1090,7 @@ func sealSkillResolution(
 		skillSnapshot,
 		modelSnapshot,
 		resolution.ContextPackageID,
+		string(directCapabilityMetadata),
 	)
 	if err != nil {
 		return err

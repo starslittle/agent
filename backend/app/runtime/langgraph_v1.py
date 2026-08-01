@@ -272,6 +272,8 @@ class LangGraphV1Runtime:
             agent_name=selection.agent_name,
             workflow=selection.workflow,
             skill_version=selection.skill_version,
+            direct_capability=request.direct_capability,
+            direct_capability_arguments=request.direct_capability_arguments,
         )
 
     async def cancel(self, execution_id: str) -> None:

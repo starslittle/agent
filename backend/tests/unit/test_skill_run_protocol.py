@@ -135,3 +135,26 @@ async def test_runtime_emits_resolution_before_application_events():
         )
     ]
     assert events == [("answer.delta", {"text": "ok"})]
+
+
+@pytest.mark.asyncio
+async def test_runtime_preserves_frozen_direct_capability():
+    class FakeApplication:
+        async def stream(self, command):
+            assert command.resolution.direct_capability == "get_weather"
+            assert command.resolution.direct_capability_arguments == {
+                "location": "杭州"
+            }
+            yield type("Event", (), {"type": "answer.delta", "data": {"text": "ok"}})()
+
+    runtime = LangGraphV1Runtime(application=FakeApplication())
+    request = _request(
+        selection_source="direct",
+        route_reason_code="needs_current_sources",
+        direct_capability="get_weather",
+        direct_capability_arguments={"location": "杭州"},
+    )
+
+    events = [item async for item in runtime.stream(request, asyncio.Event())]
+
+    assert events == [("answer.delta", {"text": "ok"})]

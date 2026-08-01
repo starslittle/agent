@@ -669,6 +669,10 @@ class ExecutionRegistry:
                     "route_requires_confirmation", False
                 ),
                 "route_reason_code": provenance.get("route_reason_code"),
+                "direct_capability": provenance.get("direct_capability"),
+                "direct_capability_arguments": provenance.get(
+                    "direct_capability_arguments", {}
+                ),
                 "context_package_id": provenance.get("context_package_id"),
             }
         )
@@ -695,6 +699,10 @@ class ExecutionRegistry:
                 "route_requires_confirmation", False
             ),
             route_reason_code=record.provenance.get("route_reason_code"),
+            direct_capability=record.provenance.get("direct_capability"),
+            direct_capability_arguments=record.provenance.get(
+                "direct_capability_arguments", {}
+            ),
             context_package_id=record.provenance.get("context_package_id"),
             query="runtime replay",
             deadline_ms=max(

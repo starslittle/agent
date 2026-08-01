@@ -133,6 +133,7 @@ type Run struct {
 	PrimarySkill       *string
 	SelectionSource    *string
 	ContextPackageID   *string
+	Metadata           json.RawMessage
 	Status             string
 	ProtocolVersion    int
 	LastSequence       int64

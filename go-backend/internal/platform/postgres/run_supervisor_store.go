@@ -159,6 +159,7 @@ func loadClaimedRun(
 			r.primary_skill,
 			r.selection_source,
 			r.context_package_id::text,
+			r.metadata,
 			r.status,
 			r.protocol_version,
 			r.last_sequence
@@ -188,6 +189,7 @@ func loadClaimedRun(
 		&result.Run.PrimarySkill,
 		&result.Run.SelectionSource,
 		&result.Run.ContextPackageID,
+		&result.Run.Metadata,
 		&result.Run.Status,
 		&result.Run.ProtocolVersion,
 		&result.Run.LastSequence,
