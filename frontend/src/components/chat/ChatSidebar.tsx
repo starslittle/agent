@@ -1,9 +1,7 @@
 import React, { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Bot, MessageSquare, MoreHorizontal, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { MessageSquare, MoreHorizontal, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import type { Conversation } from "@/lib/chat-api";
-import { QidianWordmark } from "@/brand/QidianMark";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -11,14 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarGroup,
-  SidebarGroupLabel
-} from "@/components/ui/sidebar";
+import { SidebarGroup, SidebarGroupLabel } from "@/components/ui/sidebar";
 
 interface ChatSidebarProps {
   onNewChat: () => void;
@@ -42,7 +33,7 @@ function formatConversationDate(value?: string): string {
   return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
 }
 
-export const ChatSidebar: React.FC<ChatSidebarProps> = ({
+export const ChatSidebarContent: React.FC<ChatSidebarProps> = ({
   onNewChat,
   conversations,
   activeConversationId,
@@ -54,8 +45,6 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   loading = false,
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
-  const location = useLocation();
-  const runsActive = location.pathname.startsWith("/agent-runs");
 
   const rowVirtualizer = useVirtualizer({
     count: conversations.length,
@@ -65,43 +54,19 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   });
 
   return (
-    <Sidebar
-      variant="sidebar"
-      className="border-r border-sidebar-border bg-sidebar"
-    >
-      <SidebarHeader className="gap-5 px-4 pb-3 pt-5">
-        <QidianWordmark />
-
-        <nav className="space-y-1" aria-label="工作区导航">
-          <Link
-            to="/"
-            aria-current={!runsActive ? "page" : undefined}
-            className={cn("flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring", !runsActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")}
-          >
-            <MessageSquare className="h-4 w-4" aria-hidden="true" />
-            对话
-          </Link>
-          <Link
-            to="/agent-runs"
-            aria-current={runsActive ? "page" : undefined}
-            className={cn("flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring", runsActive ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")}
-          >
-            <Bot className="h-4 w-4" aria-hidden="true" />
-            Agent Runs
-          </Link>
-        </nav>
-
+    <div className="flex h-full min-h-0 flex-col px-4 pb-3">
+      <div className="shrink-0 pb-4">
         <button
           type="button"
           onClick={onNewChat}
           className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sidebar-ring/25 motion-reduce:transform-none"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4" aria-hidden="true" />
           新建对话
         </button>
-      </SidebarHeader>
-      <SidebarContent className="px-2">
-        <SidebarGroup className="min-h-0 flex-1 px-2">
+      </div>
+
+      <SidebarGroup className="min-h-0 flex-1 px-0 py-0">
           <SidebarGroupLabel className="mb-1 justify-between px-2 text-[11px] font-medium">
             <span>最近对话</span>
             <span>{conversations.length}</span>
@@ -109,8 +74,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
           <div
             ref={parentRef}
-            className="w-full flex-1 overflow-auto overflow-x-hidden"
-            style={{ height: "calc(100dvh - 350px)" }}
+            className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden"
           >
             {loading ? (
               <div className="space-y-2 px-2 pt-2">
@@ -199,21 +163,23 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               </div>
             )}
           </div>
-        </SidebarGroup>
-      </SidebarContent>
-      <SidebarFooter className="px-4 pb-5">
+      </SidebarGroup>
+
+      <div className="shrink-0 pt-3">
         <label className="flex min-h-11 items-center gap-2 rounded-xl border border-border bg-background/60 px-3 text-muted-foreground transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-sidebar-ring/20">
-          <Search className="h-4 w-4 flex-shrink-0" />
+          <Search className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
           <input
             type="search"
             name="conversation-search"
+            autoComplete="off"
             value={searchQuery}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="搜索历史对话"
+            placeholder="搜索历史对话…"
+            aria-label="搜索历史对话"
             className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
           />
         </label>
-      </SidebarFooter>
-    </Sidebar>
+      </div>
+    </div>
   );
 };

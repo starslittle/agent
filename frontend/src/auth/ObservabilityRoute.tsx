@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { ShieldX } from "lucide-react";
 
 import { QidianWordmark } from "@/brand/QidianMark";
+import { WorkspaceLoadingScreen } from "@/components/workspace/WorkspaceShell";
 import { useAuth } from "./AuthProvider";
 import { hasObservabilityAccess } from "./observability-access";
 
@@ -11,11 +12,7 @@ export function ObservabilityRoute({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   if (loading) {
-    return (
-      <div className="grid min-h-screen place-items-center bg-background text-foreground">
-        <p role="status" aria-live="polite" className="text-sm text-muted-foreground">正在确认内部访问权限</p>
-      </div>
-    );
+    return <WorkspaceLoadingScreen label="正在确认内部访问权限…" />;
   }
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;

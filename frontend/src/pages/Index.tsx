@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import ChatContainer from "@/components/chat/ChatContainer";
-import { ChatSidebar } from "@/components/chat/ChatSidebar";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { ChatSidebarContent } from "@/components/chat/ChatSidebar";
+import { WorkspaceLoadingScreen, WorkspaceShell } from "@/components/workspace/WorkspaceShell";
 import { useAuth } from "@/auth/AuthProvider";
 import {
   deleteConversation,
@@ -12,75 +12,25 @@ import {
   type Conversation,
   type StoredMessage,
 } from "@/lib/chat-api";
-import { ArrowRight, Bot, LoaderCircle, LogOut, MessageSquare, Moon, Sparkles, Sun } from "lucide-react";
+import { LoaderCircle, MessageSquare, Sparkles } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { QidianMark, QidianWordmark } from "@/brand/QidianMark";
-import { useTheme } from "next-themes";
-
-function WorkspaceThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
-  return (
-    <button
-      type="button"
-      onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="grid h-11 w-11 place-items-center rounded-xl border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label={isDark ? "切换到亮色模式" : "切换到暗色模式"}
-    >
-      {isDark ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
-    </button>
-  );
-}
+import { QidianMark } from "@/brand/QidianMark";
 
 function WorkspacePreview() {
   return (
-    <div className="flex min-h-dvh bg-background text-foreground">
-      <a href="#preview-main" className="skip-link">跳到主要内容</a>
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-sidebar p-5 lg:flex">
-        <QidianWordmark />
-        <nav className="mt-10 space-y-1" aria-label="工作区预览导航">
-          <div className="flex min-h-11 items-center gap-3 rounded-xl bg-sidebar-accent px-3 text-sm font-medium text-sidebar-accent-foreground">
-            <MessageSquare className="h-4 w-4" aria-hidden="true" />
-            对话
-          </div>
-          <div className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-muted-foreground">
-            <Bot className="h-4 w-4" aria-hidden="true" />
-            Agent Runs
-          </div>
-        </nav>
-        <div className="mt-auto rounded-xl border border-border bg-background/60 p-4">
-          <p className="text-xs font-medium">登录后开始使用</p>
-          <p className="mt-1 text-[11px] leading-5 text-muted-foreground">对话和运行记录只对你的账号可见。</p>
-        </div>
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex min-h-[4.5rem] items-center justify-between border-b border-border px-4 sm:px-6">
-          <div className="lg:hidden"><QidianWordmark /></div>
-          <div className="hidden lg:block">
-            <p className="text-sm font-semibold">工作区预览</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">一个助手，多种专业 Skill</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <WorkspaceThemeToggle />
-            <Link
-              to="/login"
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/25 motion-reduce:transform-none"
-            >
-              登录
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-          </div>
-        </header>
-
-        <main id="preview-main" className="flex flex-1 items-center justify-center px-5 py-12 sm:px-8">
-          <section className="w-full max-w-3xl">
+    <WorkspaceShell
+      title="工作区预览"
+      subtitle="一个助手，多种专业 Skill"
+      mainId="preview-main"
+      mainClassName="flex items-center justify-center overflow-y-auto px-5 py-12 sm:px-8"
+    >
+      <section className="w-full max-w-3xl">
             <QidianMark className="h-16 w-16" />
             <p className="mt-6 text-xs font-semibold tracking-[0.16em] text-primary">启点工作空间</p>
-            <h1 className="mt-3 max-w-2xl text-3xl font-semibold tracking-[-0.04em] sm:text-5xl sm:leading-[1.12]">
+            <h2 className="mt-3 max-w-2xl text-pretty text-3xl font-semibold tracking-[-0.04em] sm:text-5xl sm:leading-[1.12]">
               从一个问题开始，<br className="hidden sm:block" />把思考推进到下一步。
-            </h1>
+            </h2>
             <p className="mt-5 max-w-xl text-sm leading-7 text-muted-foreground sm:text-base">
               默认直接对话；需要时明确选择深度研究或命理分析。每次运行都保留真实的 Skill 来源和过程记录。
             </p>
@@ -95,7 +45,7 @@ function WorkspacePreview() {
                   <span className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 text-primary">
                     {index === 0 ? <MessageSquare className="h-4 w-4" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
                   </span>
-                  <h2 className="mt-5 text-sm font-semibold">{title}</h2>
+                  <h3 className="mt-5 text-sm font-semibold">{title}</h3>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
                 </div>
               ))}
@@ -107,15 +57,13 @@ function WorkspacePreview() {
               </Link>
               <span className="text-xs text-muted-foreground">预览页不会读取你的对话或 Run 数据</span>
             </div>
-          </section>
-        </main>
-      </div>
-    </div>
+      </section>
+    </WorkspaceShell>
   );
 }
 
 const Index = () => {
-  const { user, csrfToken, logout, loading: authLoading } = useAuth();
+  const { user, csrfToken, loading: authLoading } = useAuth();
   const { conversationId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -288,14 +236,7 @@ const Index = () => {
   }, [conversationId, csrfToken, handleNewChat]);
 
   if (authLoading) {
-    return (
-      <main className="grid min-h-dvh place-items-center bg-background text-muted-foreground">
-        <div className="flex items-center gap-2 text-xs">
-          <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-          正在准备工作区
-        </div>
-      </main>
-    );
+    return <WorkspaceLoadingScreen />;
   }
 
   if (!user) return <WorkspacePreview />;
@@ -308,10 +249,12 @@ const Index = () => {
     (messagesLoading || loadedConversationId !== conversationId);
 
   return (
-    <SidebarProvider>
-      <div className="flex h-dvh w-full overflow-hidden bg-background">
-        <a href="#workspace-main" className="skip-link">跳到主要内容</a>
-        <ChatSidebar
+    <WorkspaceShell
+      title={displayedConversation?.title || "新的对话"}
+      subtitle="与启点一起梳理问题、研究信息和执行任务"
+      mainId="workspace-main"
+      sidebarContent={(
+        <ChatSidebarContent
           onNewChat={handleNewChat}
           conversations={conversations}
           activeConversationId={conversationId}
@@ -322,74 +265,30 @@ const Index = () => {
           onDelete={(conversation) => void handleDelete(conversation)}
           loading={listLoading}
         />
-
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="z-20 flex min-h-[4.5rem] shrink-0 items-center border-b border-border bg-background px-4 sm:px-6">
-            <div className="flex w-full items-center justify-between gap-4">
-              <div className="flex min-w-0 items-center gap-3">
-                <SidebarTrigger className="h-9 w-9 rounded-xl border border-border/70 bg-background/80 text-muted-foreground hover:bg-muted" />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h1 className="truncate text-sm font-semibold sm:text-base">
-                      {displayedConversation?.title || "新的对话"}
-                    </h1>
-                  </div>
-                  <p className="mt-0.5 hidden truncate text-xs text-muted-foreground sm:block">
-                    与启点一起梳理问题、研究信息和执行任务
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="hidden items-center gap-2 rounded-full border border-border/70 bg-background/70 py-1.5 pl-2 pr-3 shadow-sm sm:flex">
-                  <div className="grid h-7 w-7 place-items-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
-                    {user.display_name?.trim().slice(0, 1) || "启"}
-                  </div>
-                  <div className="max-w-36 text-left">
-                    <p className="truncate text-xs font-medium">{user?.display_name}</p>
-                    <p className="truncate text-[10px] text-muted-foreground">{user?.email}</p>
-                  </div>
-                </div>
-                <WorkspaceThemeToggle />
-                <button
-                  type="button"
-                  onClick={() => void logout()}
-                  className="grid h-11 w-11 place-items-center rounded-xl border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label="退出登录"
-                  title="退出登录"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </header>
-
-          <main id="workspace-main" className="relative w-full flex-1 overflow-hidden">
-            {isConversationLoading ? (
-              <div className="relative z-10 flex h-full items-center justify-center text-muted-foreground">
-                <LoaderCircle className="h-5 w-5 animate-spin" />
-                <span className="ml-2 text-xs">正在恢复会话</span>
-              </div>
-            ) : (
-              <ChatContainer
-                key={conversationId || `new-conversation-${draftKey}`}
-                conversationId={conversationId}
-                initialMessages={
-                  conversationId && loadedConversationId === conversationId
-                    ? initialMessages
-                    : []
-                }
-                onConversationCreated={handleConversationCreated}
-                onConversationChanged={() => void refreshConversations()}
-                hasEarlierMessages={earlierCursor !== null}
-                loadingEarlierMessages={earlierLoading}
-                onLoadEarlierMessages={() => void handleLoadEarlier()}
-              />
-            )}
-          </main>
+      )}
+    >
+      {isConversationLoading ? (
+        <div className="relative z-10 flex h-full items-center justify-center text-muted-foreground">
+          <LoaderCircle className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+          <span className="ml-2 text-xs">正在恢复会话…</span>
         </div>
-      </div>
-    </SidebarProvider>
+      ) : (
+        <ChatContainer
+          key={conversationId || `new-conversation-${draftKey}`}
+          conversationId={conversationId}
+          initialMessages={
+            conversationId && loadedConversationId === conversationId
+              ? initialMessages
+              : []
+          }
+          onConversationCreated={handleConversationCreated}
+          onConversationChanged={() => void refreshConversations()}
+          hasEarlierMessages={earlierCursor !== null}
+          loadingEarlierMessages={earlierLoading}
+          onLoadEarlierMessages={() => void handleLoadEarlier()}
+        />
+      )}
+    </WorkspaceShell>
   );
 };
 

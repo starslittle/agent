@@ -123,7 +123,6 @@ export default function AgentRunsPage() {
   return (
     <RunWorkspaceShell>
       <div className="grid h-full min-h-0 lg:grid-cols-[19rem_minmax(0,1fr)]">
-        <h1 className="sr-only">Agent Runs</h1>
         <div className={runId ? "hidden h-full min-h-0 lg:block" : "h-full min-h-0"}>
           <RunList
             items={items}
