@@ -29,8 +29,8 @@ Agent 使用用户确认的 Wiki 和 Markdown 信息分析秋招决策，用户�
 
 完整执行产品文档的 12 步唯一链路：
 
-1. Wiki 保存“正在准备 Agent 岗位秋招”；
-2. 导入一篇面试复盘 Markdown；
+1. 我的空间中的确认信息保存“正在准备 Agent 岗位秋招”；
+2. 导入包含面试复盘 Markdown 的求职文件夹；
 3. Agent 提取候选信息，用户确认；
 4. 询问“下一轮优先准备系统设计还是算法”；
 5. 自动选择 Decision Skill；
@@ -49,7 +49,7 @@ Agent 使用用户确认的 Wiki 和 Markdown 信息分析秋招决策，用户�
 
 - ROUND-01 Run 可靠性；
 - ROUND-02 统一 Agent、Research/Fortune 和观测；
-- ROUND-03 Wiki、Markdown、Proposal 和 Context；
+- ROUND-03 我的空间、Markdown 文件夹、Skills、Proposal 和 Context；
 - Decision 不替用户自动保存最终选择；
 - 修改 Wiki 不改变历史 Decision 的 Context Revision。
 

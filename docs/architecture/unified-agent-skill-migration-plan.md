@@ -134,12 +134,12 @@ MVP 唯一验收链路为准。
 
 ### 2.5 按业务轮次交付
 
-28 个 Task 不作为一次长程执行。实施按五个业务轮次推进：
+29 个 Task 不作为一次长程执行。实施按五个业务轮次推进：
 
 ```text
 可信运行链路
 → 统一 Agent、Skill 与观测
-→ 个人 Wiki、Markdown 与确认写入
+→ 我的空间、Skills 与确认写入
 → Decision 秋招 MVP
 → Review 复盘
 ```
@@ -460,9 +460,10 @@ Agent Runs 同时作为内部观测能力的唯一产品投影：普通用户只
 
 实施顺序固定为：先完成统一 Agent 与现有 Skill 的服务端协议，再由 TASK-012 一次完成
 启点视觉基础和真实 Skill 交互，随后由 TASK-013/028 完成用户 Runs 与内部观测。
-ROUND-01 不夹带品牌迁移，ROUND-03～04 只在已经验收的启点外壳上增加 Wiki、
-Proposal 和 Decision。完整决策见
-[`ADR-013`](../decisions/ADR-013-qidian-frontend-migration-sequence.md)。
+ROUND-01 不夹带品牌迁移，ROUND-03～04 只在已经验收的启点外壳上增加我的空间、
+Skills 只读目录、Proposal 和 Decision。前端迁移顺序见
+[`ADR-013`](../decisions/ADR-013-qidian-frontend-migration-sequence.md)，ROUND-03 产品形态
+见 [`ADR-014`](../decisions/ADR-014-personal-space-and-skill-catalog.md)。
 
 ### M9：Wiki Item 与 Context Package
 
@@ -472,6 +473,8 @@ Proposal 和 Decision。完整决策见
 WikiItem
 WikiItemRevision
 WikiItemSource
+SpaceFolder
+MarkdownDocument
 ContextUsage
 ```
 
@@ -504,13 +507,14 @@ ContextPackage，最后由 Python 复用冻结结果执行。路由和执行不�
 
 首轮优先 PostgreSQL 过滤和简单全文检索，不因数据量很小而提前建设复杂向量系统。
 
-### M10：Markdown 与 Wiki Update Proposal
+### M10：递归个人空间、Markdown 与 Wiki Update Proposal
 
 流程：
 
 ```text
-上传一篇 Markdown
-→ 保存原文
+选择一篇 Markdown 或包含嵌套目录的文件夹
+→ 校验安全相对路径、冲突和导入上限
+→ 保留层级保存原文
 → Python 提取候选信息
 → Go 保存 Proposal
 → 用户接受、修改、暂缓或拒绝
@@ -519,6 +523,10 @@ ContextPackage，最后由 Python 复用冻结结果执行。路由和执行不�
 
 未确认、被拒绝、已过期或已遗忘的信息不能进入默认上下文。Python 不能直接提交
 长期事实。
+
+同一里程碑增加 Skills 安全公开投影和只读目录。Python Skill Registry 仍是 Manifest
+与执行可用性的事实源；Go 返回结合产品策略和用户权限后的有效公开字段；前端不复制
+第二份可用列表。本阶段不实现内置 Skill 编辑、启停、卸载或发布。
 
 ### M11：Decision 与唯一产品闭环
 

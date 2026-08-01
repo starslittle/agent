@@ -31,8 +31,8 @@ runtime_state: not_deployed | disabled | enabled | rolled_back
 |---|---|---|---|
 | [ROUND-01](ROUND-01-reliable-runtime.md) | 完成、刷新、断线、取消、失败和 Citation 均可信 | TASK-002～007 | 可靠 Agent |
 | [ROUND-02](ROUND-02-unified-agent.md) | 一个助手使用 Direct/Research/Fortune，并可查看 Runs | TASK-001、008～013、028 | 通用 Agent |
-| [ROUND-03](ROUND-03-personal-wiki.md) | 保存个人信息、导入 Markdown、确认 AI 建议 | TASK-014～020 | 了解用户的 Agent |
-| [ROUND-04](ROUND-04-decision-mvp.md) | 使用 Wiki 完成秋招 Decision 闭环 | TASK-021～024 | 能辅助决策的 Agent |
+| [ROUND-03](ROUND-03-personal-wiki.md) | 递归管理个人文档、查看 Skills、确认 AI 建议 | TASK-014～020、029 | 了解用户且能力透明的 Agent |
+| [ROUND-04](ROUND-04-decision-mvp.md) | 使用我的空间上下文完成秋招 Decision 闭环 | TASK-021～024 | 能辅助决策的 Agent |
 | [ROUND-05](ROUND-05-review-loop.md) | 根据实际结果复盘并确认新认识 | TASK-025～026 | 能持续复盘的 Agent |
 | [RELEASE-GATE](RELEASE-GATE.md) | 非生产发布准备、停止条件和回滚材料 | TASK-027 | 可申请生产切换 |
 
@@ -137,9 +137,11 @@ Codex 只能在以下条件全部满足后把轮次改为 `ready`：
 | 轮次 | 逻辑能力控制 | 关闭后的行为 |
 |---|---|---|
 | ROUND-01 | `runtime_protocol_mode=legacy|v1` | 返回上一稳定 Run 链路，不降级 Schema |
-| ROUND-03 | `personal_wiki_enabled` | 关闭 Wiki 新入口，保留已写入数据 |
+| ROUND-03 | `personal_space_enabled` | 关闭我的空间新入口，保留已写入数据 |
+| ROUND-03 | `document_import_enabled` | 停止新导入，已有 Folder/Document 仍可管理 |
 | ROUND-03 | `wiki_context_injection_enabled` | Agent 不注入个人 Wiki，Wiki 本身仍可读写 |
 | ROUND-03 | `wiki_proposal_write_enabled` | 停止接受新 Proposal，不删除既有 Revision |
+| ROUND-03 | `skill_catalog_enabled` | 隐藏只读 Skills 目录，不改变现有 Skill 执行事实 |
 | ROUND-04 | `decision_skill_enabled` | 停止新 Decision Run，保留 Wiki 和历史 Decision |
 | ROUND-04 | `decision_write_enabled` | 历史只读，新 Draft/选择保存被服务端拒绝 |
 | ROUND-05 | `review_skill_enabled` | 停止新 Review，Decision 与 Wiki 继续可用 |

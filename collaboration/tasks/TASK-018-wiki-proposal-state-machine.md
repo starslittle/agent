@@ -36,8 +36,9 @@ forbidden_paths:
 
 ## 目标
 
-建立由 Go 拥有的 Wiki Update Proposal、状态机和确认事务，使 Agent 只能提出长期
-信息变更，不能直接提交用户事实。
+建立由 Go 拥有的 Wiki Update Proposal、状态机和确认事务，使 Agent 只能提出“我的
+空间”背后的长期结构化信息变更，不能直接提交用户事实。Proposal 与来源 Document/
+DocumentRevision 可追溯，但不直接修改 Markdown 原文。
 
 ## 状态与操作
 
@@ -81,6 +82,7 @@ superseded
 - 不实现 AI Proposal 生成；
 - 不实现前端确认 UI；
 - 不实现 Skill 自更新 Proposal；
+- 不实现 Document 内容 Changeset 或 Agent 文档编辑；
 - 不实现外部副作用写 Capability。
 
 ## 验收标准

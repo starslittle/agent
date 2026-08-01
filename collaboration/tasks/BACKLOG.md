@@ -89,17 +89,20 @@ flowchart TD
     T028 --> A2
 
     A2 --> G3["用户授权 ROUND-03"]
-    G3 --> T014["TASK-014 Wiki 存储"]
-    T014 --> T015["TASK-015 Wiki API 与页面"]
+    G3 --> T014["TASK-014 个人空间存储"]
+    T014 --> T015["TASK-015 递归空间 API 与页面"]
     T011 --> T016["TASK-016 Context Package"]
     T014 --> T016
-    T015 --> T017["TASK-017 Markdown 导入"]
+    T015 --> T017["TASK-017 Markdown 文件夹导入"]
     T014 --> T018["TASK-018 Wiki Proposal 状态机"]
     T017 --> T019["TASK-019 Markdown 信息提取"]
     T018 --> T019
     T019 --> T020["TASK-020 Proposal 确认 UI"]
+    T011 --> T029["TASK-029 Skills 只读目录"]
+    T012 --> T029
     T016 --> A3["ROUND-03 完整验收 accepted"]
     T020 --> A3
+    T029 --> A3
 
     A3 --> G4["用户授权 ROUND-04"]
     G4 --> T021["TASK-021 Decision Skill"]
@@ -130,12 +133,12 @@ flowchart TD
 
 ## 4. Task 清单
 
-当前共 28 个 Task。TASK-028 是在最初 27 个 Task 冻结后新增的观测需求，因此保留
-追加编号以维持审计关系；它的逻辑执行位置是 TASK-013 之后、TASK-024 之前，不按
-编号大小决定执行顺序。
+当前共 29 个 Task。TASK-028 是在最初 27 个 Task 冻结后新增的观测需求，TASK-029 是
+用户确认 ROUND-03 产品形态后新增的 Skills 只读目录，因此保留追加编号以维持审计
+关系；它们按 `depends_on` 和 Round 门禁决定执行位置，不按编号大小决定执行顺序。
 
-秋招最小 MVP 的实现与验收范围现在是 TASK-001～TASK-024 加 TASK-028；TASK-025～
-TASK-026 仍是 P1，TASK-027 仍是发布准备而不是产品功能或生产切换。
+秋招最小 MVP 的实现与验收范围现在是 TASK-001～TASK-024 加 TASK-028～TASK-029；
+TASK-025～TASK-026 仍是 P1，TASK-027 仍是发布准备而不是产品功能或生产切换。
 
 | ID | 目标 | 里程碑 | 风险 | Codex E2E | 状态 |
 |---|---|---|---|---|---|
@@ -153,13 +156,14 @@ TASK-026 仍是 P1，TASK-027 仍是发布准备而不是产品功能或生产�
 | [TASK-012](TASK-012-unified-assistant-frontend.md) | 迁移启点前端并建立统一 Skill 交互 | M8 | high | required | draft |
 | [TASK-013](TASK-013-agent-runs-page.md) | 用户侧 Agent Runs 最小页面 | M8 | medium | required | draft |
 | [TASK-028](TASK-028-agent-observability-console.md) | Agent Runs 内部只读观测模式 | M8 | high | required | draft |
-| [TASK-014](TASK-014-wiki-storage.md) | Wiki Item、Revision、Source 存储 | M9 | high | N/A | draft |
-| [TASK-015](TASK-015-wiki-api-ui.md) | Wiki CRUD API 与页面 | M9 | high | required | draft |
+| [TASK-014](TASK-014-wiki-storage.md) | Folder、Document、Wiki 与 Revision 存储 | M9 | high | N/A | draft |
+| [TASK-015](TASK-015-wiki-api-ui.md) | 我的空间 API 与递归文档体验 | M9 | high | required | draft |
 | [TASK-016](TASK-016-context-package.md) | Context Package 与 ContextUsage | M9 | high | required | draft |
-| [TASK-017](TASK-017-markdown-import.md) | 单篇 Markdown 保存与导入 | M10 | medium | required | draft |
+| [TASK-017](TASK-017-markdown-import.md) | 单篇与递归 Markdown 文件夹导入 | M10 | high | required | draft |
 | [TASK-018](TASK-018-wiki-proposal-state-machine.md) | Wiki Proposal 状态机 | M10 | high | required | draft |
-| [TASK-019](TASK-019-markdown-extraction.md) | Markdown 候选信息提取 | M10 | high | required | draft |
-| [TASK-020](TASK-020-proposal-confirmation-ui.md) | Proposal 接受、修改、暂缓与拒绝 | M10 | high | required | draft |
+| [TASK-019](TASK-019-markdown-extraction.md) | 选定 Markdown 的候选信息提取 | M10 | high | required | draft |
+| [TASK-020](TASK-020-proposal-confirmation-ui.md) | 文档 Proposal 接受、修改、暂缓与拒绝 | M10 | high | required | draft |
+| [TASK-029](TASK-029-skill-catalog-preview.md) | Skills 安全目录与只读详情 | M10 | high | required | draft |
 | [TASK-021](TASK-021-decision-skill.md) | Decision Skill 与强类型结果 | M11 | high | required | draft |
 | [TASK-022](TASK-022-decision-persistence.md) | 最小决策卡与历史依据 | M11 | high | required | draft |
 | [TASK-023](TASK-023-decision-experience.md) | Decision 对话与保存体验 | M11 | high | required | draft |
@@ -192,13 +196,14 @@ TASK-001、TASK-008 ～ TASK-013、TASK-028
 页面和内部只读观测模式。奇点 AI → 启点的正式前端迁移在 TASK-012 一次完成；
 ROUND-01 不夹带品牌改造，ROUND-03～04 只在验收后的启点外壳上继续扩展。
 
-### ROUND-03：个人 Wiki、Markdown 与确认写入
+### ROUND-03：我的空间、Skills 与确认写入
 
 ```text
-TASK-014 ～ TASK-020
+TASK-014 ～ TASK-020、TASK-029
 ```
 
-实现用户拥有的长期信息、单篇 Markdown、上下文使用记录以及用户确认写入。
+实现递归个人空间、Markdown 文件夹导入、Skills 只读目录、上下文使用记录以及用户
+确认写入。
 
 ### ROUND-04：Decision 秋招 MVP 闭环
 

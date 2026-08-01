@@ -145,9 +145,9 @@ document_delete
 - Wiki 仍属于长期产品事实，Agent 对 Wiki 的推断性新增、修改或删除只能产生
   Proposal，不能借用 Document Capability 绕过确认。
 
-这是已确认的目标能力，但是否进入秋招 MVP 尚未决定。当前 TASK-017 只承接单篇
-Markdown 的手动保存与导入；Agent 文档 CRUD 进入实现前必须新增独立 Task、能力
-开关、删除确认和回滚验收。
+这是已确认的目标能力，但是否进入秋招 MVP 尚未决定。当前 TASK-017 承接用户手动
+导入单篇 Markdown 或包含嵌套目录的整个文件夹，不向 Agent 开放 Document CRUD；
+Agent 文档 CRUD 进入实现前必须新增独立 Task、能力开关、删除确认和回滚验收。
 
 ## 3. 系统上下文
 
@@ -283,6 +283,15 @@ Manifest 至少包含：
 - provenance 所需版本。
 
 未实现 Workflow 的 Skill 不得标记为 available。
+
+用户可见的 Skill Catalog 不直接返回完整 Manifest。Python 从 Registry 生成字段白名单
+明确的公开描述，Go 再结合产品策略、用户权限、依赖和 Runtime readiness 返回当前
+用户的有效 Skill 投影。公开投影最多包含稳定 ID、版本、标题、描述、命令、公开用途、
+公开 Capability、允许的个人上下文范围和确认/写入规则；不得包含系统 Prompt、隐藏
+Workflow 指令、Secret、内部禁用原因、原始工具输入输出或可逆推导出的敏感配置。
+
+内置 Skill 在当前阶段只读。Skill 编辑必须通过未来独立的 Draft、校验、隔离测试、
+发布、版本和回滚协议，不能直接修改运行中 Manifest 或 Prompt。
 
 ## 7. 首批 Skill
 
@@ -452,6 +461,7 @@ WikiItem
 WikiItemSource
 WikiItemRevision
 WikiUpdateProposal
+SpaceFolder
 MarkdownDocument
 DecisionRecord
 DecisionOption
@@ -495,6 +505,7 @@ review_derived
 | 用户、权限、授权 | Go / PostgreSQL |
 | 会话、消息、Product Run | Go / PostgreSQL |
 | Wiki、决策、复盘、Proposal | Go / PostgreSQL |
+| Space Folder、Markdown Document 与路径关系 | Go / PostgreSQL（大原文可外置） |
 | Skill Manifest、Workflow、Prompt | Python |
 | Runtime execution、event outbox、checkpoint | Python / `agent_runtime` |
 | Redis 通知和缓存 | 非事实源 |
@@ -623,10 +634,11 @@ Manifest/Registry 技术上可以与 Phase 0 并行，但默认仍等待 ROUND-0
 - Skill 标签与活动区；
 - 移除面向用户的永久 Agent 模式。
 
-### Phase 3：个人 Wiki MVP
+### Phase 3：我的空间与个人上下文 MVP
 
 - Wiki Item 与来源；
-- Markdown 导入；
+- 递归个人空间与 Markdown 文件夹导入；
+- Skills 安全公开投影、只读目录和详情；
 - Context Package；
 - Wiki Update Proposal；
 - 用户确认、修改、拒绝和遗忘；

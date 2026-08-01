@@ -40,6 +40,7 @@ allowed_paths:
   - backend/agent/state.py
   - backend/tests/**
   - frontend/src/components/chat/**
+  - frontend/src/features/space/**
   - frontend/src/features/wiki/**
   - frontend/src/lib/**
   - collaboration/handoffs/TASK-016-*.md
@@ -56,8 +57,9 @@ forbidden_paths:
 
 ## 目标
 
-由 Go 根据当前用户、请求用途、Skill、状态和授权组装最小 Context Package，Python
-只消费包内容；Run 记录实际使用的 Item/Revision 和用途。
+由 Go 根据当前用户、请求用途、Skill、状态和授权，从“我的空间”背后的已确认结构化
+信息组装最小 Context Package；Python 只消费包内容，Run 记录实际使用的 Item/Revision
+和用途。Markdown 原文或整个目录不因存在于空间中就默认进入模型上下文。
 
 ## Resolve → Context → Execute 协议
 
@@ -137,6 +139,7 @@ item/character budget
 - 不自动写 Wiki；
 - 不实现 Decision 专属排序；
 - 不把整个 Wiki 默认发送给模型。
+- 不把整个 Folder、Document 或完整空间默认发送给模型；
 - 不实现多 Skill、Skill 依赖 DAG、Research 支持能力或通用 ExecutionPlan；
 - 不让 Python 通过内部 API 回查 Wiki 正文。
 
@@ -149,7 +152,7 @@ item/character budget
 - [ ] outdated/rejected/forgotten 默认不进入；
 - [ ] Context 预算生效；
 - [ ] Run 冻结实际 Item/Revision；
-- [ ] 页面可查看本次使用的上下文；
+- [ ] 对话、Run 和“我的空间”上下文详情可查看本次使用的信息与来源；
 - [ ] 修改 Wiki 不改变历史 Run 依据；
 - [ ] 无上下文时安全退化；
 - [ ] 日志和事件不泄露完整敏感正文。

@@ -46,8 +46,8 @@ forbidden_paths:
 ## 唯一链路
 
 ```text
-1. Wiki 保存“正在准备 Agent 岗位秋招”
-2. 导入一篇面试复盘 Markdown
+1. 我的空间中的确认信息保存“正在准备 Agent 岗位秋招”
+2. 导入包含面试复盘 Markdown 的求职文件夹
 3. Agent 提取候选信息，用户确认
 4. 询问“下一轮优先准备系统设计还是算法”
 5. 自动选择 Decision Skill

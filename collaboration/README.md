@@ -63,11 +63,11 @@ collaboration/
 
 ## 当前任务草案
 
-- [完整迁移 Backlog：28 个 Task](tasks/BACKLOG.md)
+- [完整迁移 Backlog：29 个 Task](tasks/BACKLOG.md)
 - [2026-07-30 Backlog 全量审查](reviews/BACKLOG-REVIEW-2026-07-30.md)
 - [业务交付轮次与局部回滚](rounds/README.md)
 - [TASK-001：建立 Skill 契约基础](tasks/TASK-001-skill-contract.md)
 
-当前 ROUND-01 已启动，TASK-002、TASK-003 已完成；Solo 状态保持 `paused`，
-TASK-004 尚未开始。Solo 进度以 [Solo State](solo/STATE.md) 为准；原 Task/Review
-状态保留给历史和 Codex/Grok 模式。
+当前 ROUND-02 已验收；ROUND-03 已按最新产品决定完成文档准备，但仍等待用户明确
+授权开始。Solo 进度以 [Solo State](solo/STATE.md) 为准；原 Task/Review 状态保留给
+历史和 Codex/Grok 模式。

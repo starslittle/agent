@@ -241,9 +241,9 @@ Agent 创建、读取、修改和删除 Document 是已确认的产品目标，�
 - `document_hide/document_unhide` 不提供给 Agent，暂时隐藏和恢复只允许用户手动；
 - Document CRUD 不得绕过 Wiki Proposal、Context 授权或其他长期记忆规则。
 
-当前 TASK-017 仍只负责 Markdown 手动导入。正式实现上述能力前，需要新增独立 Task
-或业务轮次，并冻结 Capability Schema、Revision/Changeset、确认协议、失败恢复、
-权限审计和产品 E2E。
+当前 TASK-017 仍只负责用户手动导入单篇 Markdown 或包含嵌套目录的文件夹。正式实现
+Agent Document CRUD 前，需要新增独立 Task 或业务轮次，并冻结 Capability Schema、
+Revision/Changeset、确认协议、失败恢复、权限审计和产品 E2E。
 
 ## 10. 进入实施前的决策门禁
 
