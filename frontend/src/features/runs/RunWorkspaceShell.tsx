@@ -32,7 +32,7 @@ export function RunWorkspaceShell({
   return (
     <div className="flex h-dvh overflow-hidden bg-background text-foreground">
       <a href="#runs-main" className="skip-link">跳到运行内容</a>
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-5 lg:flex">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-5 lg:flex">
         <QidianWordmark />
         <nav className="mt-10 space-y-1" aria-label="工作区导航">
           <Link to="/" className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">
