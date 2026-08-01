@@ -99,10 +99,6 @@
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
 
-  html {
-    scrollbar-gutter: stable;
-  }
-
   button,
   a,
   input,

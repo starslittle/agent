@@ -357,3 +357,11 @@
 - validation：引用相关 4 tests、`tsc --noEmit`、针对性 ESLint、`git diff --check` 通过；按用户要求未执行 build，也未重复产品级 Browser E2E；
 - skills：保留启点轻量脚注视觉，以不占布局的渐进披露浮层替代跳页；保留语义按钮、可访问名称、44px 扩展点击区域、键盘焦点、外链安全属性与减少动效；
 - risk：无；未修改 Citation 协议、来源排序或复制格式，未 push、部署。
+
+### TASK-015 E2E Fix · 聊天滚动条贴边
+
+- commit：本提交；
+- result：移除根页面无条件保留的稳定滚动槽，聊天内部滚动容器可以铺到主内容区最右边；消息正文继续按原有最大宽度居中，不改变输入框或侧栏布局；
+- validation：`tsc --noEmit`、`git diff --check` 通过；按用户要求未执行 build，也未重复产品级 Browser E2E；
+- skills：保持内容与滚动层分离，只修正视口边缘槽位；遵循响应式无横向溢出要求，不改变交互控件与可访问性；
+- risk：页面级滚动出现时不再预留固定 gutter，但工作区使用独立内部滚动容器，因此不会影响当前聊天布局；未 push、部署。
