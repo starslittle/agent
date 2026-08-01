@@ -473,6 +473,17 @@ func (h *conversationHTTP) attachRunEvents(w http.ResponseWriter, r *http.Reques
 		}
 		if !terminalPending && runStatusTerminal(page.RunStatus) &&
 			cursor >= page.LastSequence {
+			// Supervisor-side failures can make the durable Run terminal without
+			// a Python terminal event. Emit one presentation-only terminal frame
+			// so browser clients do not reconnect forever. Its sequence follows
+			// the durable event cursor and is never persisted as a runtime event.
+			writeSSEJSON(w, browserDoneEvent{
+				Type:      "done",
+				Sequence:  page.LastSequence + 1,
+				Status:    page.RunStatus,
+				ErrorCode: page.ErrorCode,
+			})
+			flusher.Flush()
 			return
 		}
 
