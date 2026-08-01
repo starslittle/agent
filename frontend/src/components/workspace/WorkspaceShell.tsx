@@ -7,10 +7,10 @@ import {
   LogIn,
   LogOut,
   LoaderCircle,
-  MessageSquare,
   Moon,
   ShieldCheck,
   Sparkles,
+  SquarePen,
   Sun,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -95,7 +95,7 @@ function WorkspaceNav() {
             : "text-muted-foreground",
         )}
       >
-        <MessageSquare className="h-4 w-4" aria-hidden="true" />
+        <SquarePen className="h-4 w-4" aria-hidden="true" />
         新对话
       </button>
       <Link
