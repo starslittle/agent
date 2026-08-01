@@ -225,3 +225,11 @@
 - result：建立 Go/PostgreSQL 拥有的 Wiki Update Proposal、pending/deferred 可处理状态机、接受/修改接受/暂缓/拒绝 API、同目标 superseded、双来源 Wiki Revision 事务与动作幂等审计；
 - validation：Go 全包 passed；隔离 PostgreSQL 15 的干净 Migration、原样/修改接受、Revision 冲突、失败回滚、重复和同键/异键并发、暂缓/拒绝、superseded、Fortune narrative 阻断、跨用户与 HTTP auth/CSRF integration passed；
 - risk：本 Task 不暴露 Proposal 创建 HTTP，Agent/提取只能经 Go 内部服务产生待确认项；Browser 确认 UI 与产品 E2E 留到 TASK-020 和 Round 唯一验收。
+
+### TASK-019 · completed
+
+- commit：`bfc8302`；
+- result：对用户明确打开的一篇 Markdown Revision 启动受控 `document_extraction` Product Run，以无工具/无网络的强类型 Model Gateway 提取候选，并仅通过完成事件幂等投影 Proposal；失败不写 Wiki/Document，隐藏内部 Conversation 不污染聊天历史；
+- validation：Python 全量 108 passed/2 skipped；Go 全包 passed；隔离 PostgreSQL 15 的真实 HTTP → Route → Supervisor → Event → Proposal integration passed，覆盖 Prompt injection fixture、失败不写、重试去重、新旧 Revision 追溯与隐藏 Conversation；前端 lint 0 errors（保留既有 8 warnings）和 build passed；
+- skills：`frontend-design` 保持启点文档式视觉，`ui-ux-pro-max` 将提取作为当前 Revision 的渐进次级操作，`web-design-guidelines` 约束语义控件、焦点、运行/失败 live 状态及只读候选展示；
+- risk：单次提取明确限制为 16,000 字符；冲突第一版按同 type/domain 已确认或过时条目提示，最终确认和编辑由 TASK-020 完成；真实 Provider 与 Browser 产品旅程进入 Round 唯一 E2E。
