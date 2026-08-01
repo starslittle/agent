@@ -126,7 +126,8 @@ Codex 只能在以下条件全部满足后把轮次改为 `ready`：
 - 关闭底层时必须同时关闭仍依赖它的全部上层；
 - 只读历史展示可以在“新建能力关闭”后继续保留；
 - 每个写能力需要幂等、审计和明确的停用行为；
-- 观测后台可独立关闭，但不能在缺少等价诊断手段时继续扩大上线范围。
+- 观测后台保持独立服务端权限边界；若未来增加发布开关，关闭时不得影响普通用户
+  Agent Runs、聊天和 Runtime。
 
 ## 能力控制清单
 
@@ -136,14 +137,17 @@ Codex 只能在以下条件全部满足后把轮次改为 `ready`：
 | 轮次 | 逻辑能力控制 | 关闭后的行为 |
 |---|---|---|
 | ROUND-01 | `runtime_protocol_mode=legacy|v1` | 返回上一稳定 Run 链路，不降级 Schema |
-| ROUND-02 | `unified_agent_enabled` | 停止新统一路由，回到 ROUND-01 稳定入口 |
-| ROUND-02 | `agent_observability_enabled` | 关闭内部入口，用户 Agent Runs 不受影响 |
 | ROUND-03 | `personal_wiki_enabled` | 关闭 Wiki 新入口，保留已写入数据 |
 | ROUND-03 | `wiki_context_injection_enabled` | Agent 不注入个人 Wiki，Wiki 本身仍可读写 |
 | ROUND-03 | `wiki_proposal_write_enabled` | 停止接受新 Proposal，不删除既有 Revision |
 | ROUND-04 | `decision_skill_enabled` | 停止新 Decision Run，保留 Wiki 和历史 Decision |
 | ROUND-04 | `decision_write_enabled` | 历史只读，新 Draft/选择保存被服务端拒绝 |
 | ROUND-05 | `review_skill_enabled` | 停止新 Review，Decision 与 Wiki 继续可用 |
+
+ROUND-02 例外：2026-08-01 用户决定暂不实现 `unified_agent_enabled` 和
+`agent_observability_enabled`。统一助手保持唯一用户入口，内部观测由服务端
+`observability_admin` 角色隔离；生产级灰度与紧急停止机制留到发布准备阶段单独
+设计，不作为 ROUND-02 验收门禁。
 
 若具体实现无法提供上述粒度，进入 `ready` 前必须在 Round 文件中说明替代机制、扩大
 后的回滚范围和用户可接受的风险，不能由执行者静默简化。

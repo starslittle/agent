@@ -139,3 +139,10 @@
 - summary：Round 文档要求的 `unified_agent_enabled` 与 `agent_observability_enabled` 尚无代码实现，既有 Task 也未授权实现所需的跨服务路径，无法执行独立关闭、回滚与重新启用演练；
 - validation：仓库全文检索确认两个逻辑能力名仅存在于 `collaboration/rounds/README.md` 与 `ROUND-02-unified-agent.md`；TASK-028 产品场景及代码验证已通过；
 - risk：在新增纠偏 Task 并冻结统一 Agent 关闭后的 ROUND-01 回退语义前，ROUND-02 不能标记为 accepted。
+
+### ROUND-02 Acceptance Decision
+
+- result：resolved；
+- summary：用户决定本轮暂不实现两个能力开关，统一助手保持唯一用户入口，内部观测继续由服务端管理员角色隔离；Round 验收改为统一路由、兼容读取与权限边界验证；
+- validation：`ROUND-02-unified-agent.md` 与轮次 README 已同步，不再要求两个开关的关闭/重新启用演练；
+- risk：生产级灰度与紧急停止机制留到发布准备阶段单独设计，本轮不提供应用级能力熔断。
